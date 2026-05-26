@@ -1,6 +1,5 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
-import { BrowserQRCodeReader, IScannerControls } from '@zxing/browser'
 
 interface Props {
   onResult: (text: string) => void
@@ -8,35 +7,67 @@ interface Props {
 
 export default function QrScanner({ onResult }: Props) {
   const videoRef = useRef<HTMLVideoElement>(null)
-  const controlsRef = useRef<IScannerControls | null>(null)
   const [error, setError] = useState('')
+  const streamRef = useRef<MediaStream | null>(null)
+  const animRef = useRef<number>(0)
 
   useEffect(() => {
-    const reader = new BrowserQRCodeReader()
+    let active = true
 
-    reader.decodeFromVideoDevice(
-      undefined,
-      videoRef.current!,
-      (result, err, controls) => {
-        controlsRef.current = controls
-        if (result) {
-          controls.stop()
-          onResult(result.getText())
+    async function start() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        })
+        if (!active) { stream.getTracks().forEach(t => t.stop()); return }
+        streamRef.current = stream
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+          await videoRef.current.play()
         }
-        if (err && !err.message.includes('No MultiFormat')) {
-          setError('Error de cámara. Verifica los permisos.')
+
+        const { BrowserQRCodeReader } = await import('@zxing/browser')
+        const reader = new BrowserQRCodeReader()
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })!
+
+        function tick() {
+          if (!active) return
+          const v = videoRef.current
+          if (v && v.readyState >= 2 && v.videoWidth > 0) {
+            canvas.width = v.videoWidth
+            canvas.height = v.videoHeight
+            ctx.drawImage(v, 0, 0)
+            try {
+              const img = new Image()
+              img.src = canvas.toDataURL()
+              img.onload = () => {
+                reader.decodeFromImageElement(img)
+                  .then(r => { if (active && r) { active = false; onResult(r.getText()) } })
+                  .catch(() => {})
+              }
+            } catch {}
+          }
+          animRef.current = window.setTimeout(tick, 300)
         }
+        tick()
+      } catch (e: any) {
+        setError('No se pudo acceder a la cámara. Verifica los permisos.')
       }
-    ).catch(() => setError('No se pudo acceder a la cámara. Verifica los permisos del navegador.'))
+    }
+
+    start()
 
     return () => {
-      controlsRef.current?.stop()
+      active = false
+      clearTimeout(animRef.current)
+      streamRef.current?.getTracks().forEach(t => t.stop())
     }
   }, [onResult])
 
   if (error) {
     return (
-      <div className="text-red-400 text-sm bg-red-950/30 border border-red-800 rounded-xl px-4 py-6 text-center">
+      <div className="text-red-500 text-sm bg-red-50 border border-red-200 rounded-xl px-4 py-6 text-center">
         {error}
       </div>
     )
@@ -47,6 +78,9 @@ export default function QrScanner({ onResult }: Props) {
       ref={videoRef}
       className="w-full rounded-xl"
       style={{ maxHeight: '300px', objectFit: 'cover' }}
+      playsInline
+      muted
+      autoPlay
     />
   )
 }
