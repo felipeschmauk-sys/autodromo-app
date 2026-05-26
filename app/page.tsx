@@ -1,5 +1,13 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  registrarPiloto,
+  loginPiloto,
+  cerrarSesion,
+  getPiloto,
+  agregarVehiculo,
+  aprobarPrueba,
+} from "@/lib/auth";
 
 type Stage = "login" | "registro" | "prueba" | "app";
 type AppTab = "perfil" | "qr" | "saldo" | "reglamento";
@@ -37,8 +45,38 @@ export default function Home() {
   const [estadoPiloto, setEstadoPiloto] = useState<EstadoPiloto>("deshabilitado");
   const [checks, setChecks] = useState([false, false, false]);
 
+  // ── Datos reales ──
+  const [pilotoData, setPilotoData] = useState<any>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  // ── Login ──
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+
+  // ── Registro ──
+  const [regNombre, setRegNombre] = useState("");
+  const [regRut, setRegRut] = useState("");
+  const [regEmail, setRegEmail] = useState("");
+  const [regTelefono, setRegTelefono] = useState("");
+  const [regPassword, setRegPassword] = useState("");
+
+  // ── Verificar sesión al cargar ──
+  useEffect(() => {
+    getPiloto().then((data) => {
+      if (data) {
+        setPilotoData(data);
+        setEstadoPiloto(data.prueba_aprobada ? "habilitado" : "deshabilitado");
+        setStage("app");
+        setAppTab("perfil");
+      }
+    });
+  }, []);
+
   const agregarAuto = () => setAutos([...autos, { id: Date.now(), marca: "", modelo: "" }]);
   const eliminarAuto = (id: number) => setAutos(autos.filter(a => a.id !== id));
+  const updateAuto = (id: number, campo: "marca" | "modelo", valor: string) =>
+    setAutos(autos.map(a => a.id === id ? { ...a, [campo]: valor } : a));
 
   const selRespuesta = (qi: number, oi: number) => {
     if (evaluado) return;
@@ -48,12 +86,18 @@ export default function Home() {
     setEstadoPiloto("pendiente");
   };
 
-  const evaluar = () => {
+  const evaluar = async () => {
     setEvaluado(true);
     const ok = PREGUNTAS.every((p, i) => respuestas[i] === p.correcta);
     setAprobado(ok);
     if (ok) {
       setEstadoPiloto("habilitado");
+      // Guardar aprobación en Supabase
+      const piloto = await getPiloto();
+      if (piloto) {
+        await aprobarPrueba(piloto.id);
+        setPilotoData({ ...piloto, prueba_aprobada: true });
+      }
       setTimeout(() => { setStage("app"); setAppTab("perfil"); }, 1800);
     }
   };
@@ -71,13 +115,81 @@ export default function Home() {
     setChecks(c);
   };
 
+  // ── Login real ──
+  const handleLogin = async () => {
+    setError("");
+    setLoading(true);
+    const result = await loginPiloto(loginEmail, loginPassword);
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+    const data = await getPiloto();
+    setPilotoData(data);
+    setEstadoPiloto(data?.prueba_aprobada ? "habilitado" : "deshabilitado");
+    setStage("app");
+    setAppTab("perfil");
+    setLoading(false);
+  };
+
+  // ── Registro real ──
+  const handleRegistro = async () => {
+    if (!todosChecks) return;
+    setError("");
+    setLoading(true);
+    const result = await registrarPiloto({
+      email: regEmail,
+      password: regPassword,
+      nombre: regNombre,
+      rut: regRut,
+      telefono: regTelefono,
+    });
+    if (result.error) {
+      setError(result.error);
+      setLoading(false);
+      return;
+    }
+    // Guardar vehículos si se ingresaron
+    const piloto = await getPiloto();
+    if (piloto) {
+      setPilotoData(piloto);
+      for (const auto of autos) {
+        if (auto.marca && auto.modelo) {
+          await agregarVehiculo(piloto.id, auto.marca, auto.modelo);
+        }
+      }
+    }
+    setEstadoPiloto("deshabilitado");
+    setStage("prueba");
+    setSubTab("prueba");
+    setLoading(false);
+  };
+
+  // ── Cerrar sesión ──
+  const handleCerrarSesion = async () => {
+    await cerrarSesion();
+    setPilotoData(null);
+    setStage("login");
+    setLoginEmail("");
+    setLoginPassword("");
+    setEstadoPiloto("deshabilitado");
+  };
+
   const incorrectas = evaluado ? PREGUNTAS.filter((p, i) => respuestas[i] !== p.correcta).length : 0;
   const todosChecks = checks.every(Boolean);
 
+  // Datos para mostrar en la UI (real o placeholder)
+  const nombreMostrar = pilotoData?.nombre || "Usuario";
+  const iniciales = nombreMostrar.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
+  const vehiculoMostrar = pilotoData?.vehiculos?.[0]
+    ? `${pilotoData.vehiculos[0].marca} ${pilotoData.vehiculos[0].modelo}`
+    : "Sin vehículo registrado";
+
   const semaforo = {
-    deshabilitado: { label: "Deshabilitado", bg: "bg-red-500", text: "text-white", dot: "🔴" },
-    pendiente: { label: "Prueba pendiente", bg: "bg-amber-500", text: "text-white", dot: "🟠" },
-    habilitado: { label: "Habilitado", bg: "bg-green-500", text: "text-white", dot: "🟢" },
+    deshabilitado: { label: "Deshabilitado", bg: "bg-red-500", text: "text-gray-900", dot: "🔴" },
+    pendiente: { label: "Prueba pendiente", bg: "bg-amber-500", text: "text-gray-900", dot: "🟠" },
+    habilitado: { label: "Habilitado", bg: "bg-green-500", text: "text-gray-900", dot: "🟢" },
   }[estadoPiloto];
 
   return (
@@ -85,7 +197,7 @@ export default function Home() {
       <div className="w-full max-w-lg bg-white rounded-2xl shadow overflow-hidden">
 
         {/* HEADER */}
-        <div className="bg-indigo-700 text-white px-5 py-4 flex items-center gap-3">
+        <div className="bg-indigo-700 text-gray-900 px-5 py-4 flex items-center gap-3">
           <span className="text-2xl">🏎</span>
           <div>
             <div className="font-semibold text-sm">Autódromo Las Vizcachas</div>
@@ -122,19 +234,37 @@ export default function Home() {
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-gray-500 font-medium">Correo electrónico</label>
-                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="email" placeholder="tu@correo.cl" />
+                  <input
+                    className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    type="email"
+                    placeholder="tu@correo.cl"
+                    value={loginEmail}
+                    onChange={e => setLoginEmail(e.target.value)}
+                  />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 font-medium">Contraseña</label>
-                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="password" placeholder="••••••••" />
+                  <input
+                    className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    type="password"
+                    placeholder="••••••••"
+                    value={loginPassword}
+                    onChange={e => setLoginPassword(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && handleLogin()}
+                  />
                 </div>
-                <button onClick={() => { setStage("app"); setEstadoPiloto("pendiente"); }} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition">
-                  Ingresar
+                {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
+                <button
+                  onClick={handleLogin}
+                  disabled={loading}
+                  className="w-full bg-indigo-600 text-gray-900 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition disabled:opacity-60"
+                >
+                  {loading ? "Ingresando..." : "Ingresar"}
                 </button>
               </div>
               <div className="text-center text-sm text-gray-500">
                 ¿Sin cuenta?{" "}
-                <button onClick={() => { setStage("registro"); setRegPaso(1); setEstadoPiloto("deshabilitado"); }} className="text-indigo-600 font-semibold hover:underline">
+                <button onClick={() => { setStage("registro"); setRegPaso(1); setEstadoPiloto("deshabilitado"); setError(""); }} className="text-indigo-600 font-semibold hover:underline">
                   Regístrate aquí
                 </button>
               </div>
@@ -146,24 +276,27 @@ export default function Home() {
             <div className="space-y-4">
               <div className="text-sm font-semibold text-gray-700">Datos personales</div>
               <div className="grid grid-cols-2 gap-3">
-                {[["Nombre completo","Felipe Schmauk",false],["RUT","12.345.678-9",false],["Correo","tu@correo.cl",false],["Teléfono","+56 9 1234 5678",false]].map(([label,ph],i) => (
-                  <div key={i}>
-                    <label className="text-xs text-gray-500">{label} <span className="text-red-500">*</span></label>
-                    <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type={label==="Correo"?"email":"text"} placeholder={ph as string} />
-                  </div>
-                ))}
+                <div>
+                  <label className="text-xs text-gray-500">Nombre completo <span className="text-red-500">*</span></label>
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="Felipe Schmauk" value={regNombre} onChange={e => setRegNombre(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">RUT <span className="text-red-500">*</span></label>
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="12.345.678-9" value={regRut} onChange={e => setRegRut(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Correo <span className="text-red-500">*</span></label>
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="email" placeholder="tu@correo.cl" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500">Teléfono <span className="text-red-500">*</span></label>
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="+56 9 1234 5678" value={regTelefono} onChange={e => setRegTelefono(e.target.value)} />
+                </div>
               </div>
               <div>
                 <label className="text-xs text-gray-500">Contraseña <span className="text-red-500">*</span></label>
-                <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="password" placeholder="Mínimo 8 caracteres" />
+                <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="password" placeholder="Mínimo 8 caracteres" value={regPassword} onChange={e => setRegPassword(e.target.value)} />
               </div>
-              <div>
-                <label className="text-xs text-gray-500">Licencia de conducir <span className="text-red-500">*</span></label>
-                <div className="mt-1 border border-dashed rounded-xl p-4 text-center cursor-pointer bg-gray-50 hover:bg-indigo-50 transition text-sm text-gray-400">
-                  📎 Toca para adjuntar foto de tu licencia
-                </div>
-              </div>
-
               <div className="border-t pt-4">
                 <div className="flex items-center justify-between mb-3">
                   <div className="text-sm font-semibold text-gray-700">
@@ -181,8 +314,8 @@ export default function Home() {
                         {autos.length > 1 && <button onClick={() => eliminarAuto(auto.id)} className="text-xs text-red-500 hover:text-red-700">✕ Eliminar</button>}
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <input className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Marca" />
-                        <input className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Modelo" />
+                        <input className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Marca" value={auto.marca} onChange={e => updateAuto(auto.id, "marca", e.target.value)} />
+                        <input className="border rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" placeholder="Modelo" value={auto.modelo} onChange={e => updateAuto(auto.id, "modelo", e.target.value)} />
                       </div>
                     </div>
                   ))}
@@ -191,8 +324,8 @@ export default function Home() {
               </div>
 
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setStage("login")} className="border rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition">← Volver</button>
-                <button onClick={() => setRegPaso(2)} className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 transition">Continuar →</button>
+                <button onClick={() => { setStage("login"); setError(""); }} className="border rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition">← Volver</button>
+                <button onClick={() => setRegPaso(2)} className="flex-1 bg-indigo-600 text-gray-900 rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 transition">Continuar →</button>
               </div>
             </div>
           )}
@@ -224,14 +357,15 @@ export default function Home() {
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700">
                 📋 Una vez creada tu cuenta deberás aprobar la prueba de conocimientos para quedar habilitado. La prueba se renueva en cada jornada de pista.
               </div>
+              {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setRegPaso(1)} className="border rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition">← Volver</button>
                 <button
-                  onClick={() => { if (todosChecks) { setStage("prueba"); setSubTab("prueba"); } }}
-                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${todosChecks ? "bg-indigo-600 text-white hover:bg-indigo-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-                  disabled={!todosChecks}
+                  onClick={handleRegistro}
+                  disabled={!todosChecks || loading}
+                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${todosChecks && !loading ? "bg-indigo-600 text-gray-900 hover:bg-indigo-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
                 >
-                  Crear cuenta ✓
+                  {loading ? "Creando cuenta..." : "Crear cuenta ✓"}
                 </button>
               </div>
             </div>
@@ -259,7 +393,7 @@ export default function Home() {
                       { color: "bg-green-700", title: "Condiciones y Tarifas", desc: "Política de cobro por minuto, multas, rescates y cargos adicionales" },
                     ].map((doc, i) => (
                       <div key={i} className="flex items-center gap-3 border rounded-xl p-3">
-                        <div className={`${doc.color} rounded-lg w-10 h-12 flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>PDF</div>
+                        <div className={`${doc.color} rounded-lg w-10 h-12 flex items-center justify-center text-gray-900 text-xs font-bold flex-shrink-0`}>PDF</div>
                         <div className="flex-1"><div className="text-sm font-medium">{doc.title}</div><div className="text-xs text-gray-400">{doc.desc}</div></div>
                         <button className="text-xs border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition flex-shrink-0">⬇ Descargar</button>
                       </div>
@@ -281,7 +415,7 @@ export default function Home() {
                       <div>• Está prohibido adelantar bajo bandera amarilla o doble amarilla.</div>
                     </div>
                   </div>
-                  <button onClick={() => setSubTab("prueba")} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
+                  <button onClick={() => setSubTab("prueba")} className="w-full bg-indigo-600 text-gray-900 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                     Ir a la prueba →
                   </button>
                 </div>
@@ -338,7 +472,7 @@ export default function Home() {
 
                   <div className="flex gap-2">
                     {!evaluado && (
-                      <button onClick={evaluar} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
+                      <button onClick={evaluar} className="flex-1 bg-indigo-600 text-gray-900 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                         Enviar respuestas →
                       </button>
                     )}
@@ -389,27 +523,35 @@ export default function Home() {
               {appTab === "perfil" && (
                 <div className="space-y-4">
                   <div className="flex items-center gap-4 bg-indigo-50 rounded-xl p-4">
-                    <div className="w-12 h-12 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-base flex-shrink-0">FS</div>
+                    <div className="w-12 h-12 rounded-full bg-indigo-200 text-indigo-700 flex items-center justify-center font-bold text-base flex-shrink-0">{iniciales}</div>
                     <div>
-                      <div className="font-semibold">Felipe Schmauk</div>
-                      <div className="text-sm text-gray-500">Toyota GR86</div>
+                      <div className="font-semibold">{nombreMostrar}</div>
+                      <div className="text-sm text-gray-500">{vehiculoMostrar}</div>
                       <span className={`text-xs px-2 py-0.5 rounded-full mt-1 inline-block font-medium ${estadoPiloto === "habilitado" ? "bg-green-100 text-green-700" : estadoPiloto === "pendiente" ? "bg-amber-100 text-amber-700" : "bg-red-100 text-red-600"}`}>
                         {estadoPiloto === "habilitado" ? "🟢 Habilitado para pista" : estadoPiloto === "pendiente" ? "🟠 Prueba pendiente" : "🔴 No habilitado"}
                       </span>
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Saldo</div><div className="text-2xl font-semibold">142 min</div></div>
-                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Tandas este mes</div><div className="text-2xl font-semibold">9</div></div>
+                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Saldo</div><div className="text-2xl font-semibold">{pilotoData?.saldo_minutos ?? 0} min</div></div>
+                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Tandas este mes</div><div className="text-2xl font-semibold">—</div></div>
                   </div>
                   <div className="border rounded-xl divide-y text-sm">
-                    {[["RUT","12.345.678-9"],["Correo","felipe@correo.cl"],["Teléfono","+56 9 8765 4321"],["Licencia","✓ Verificada"],["Prueba jornada", estadoPiloto === "habilitado" ? "✓ Aprobada" : "⏳ Pendiente"]].map(([k,v]) => (
+                    {[
+                      ["RUT", pilotoData?.rut || "—"],
+                      ["Teléfono", pilotoData?.telefono || "—"],
+                      ["Licencia", "✓ Verificada"],
+                      ["Prueba jornada", estadoPiloto === "habilitado" ? "✓ Aprobada" : "⏳ Pendiente"],
+                    ].map(([k, v]) => (
                       <div key={k} className="flex justify-between px-4 py-3">
                         <span className="text-gray-500">{k}</span>
                         <span className={`font-medium ${k === "Prueba jornada" && estadoPiloto !== "habilitado" ? "text-amber-600" : ""}`}>{v}</span>
                       </div>
                     ))}
                   </div>
+                  <button onClick={handleCerrarSesion} className="w-full border border-red-200 text-red-500 py-2.5 rounded-xl text-sm font-medium hover:bg-red-50 transition">
+                    Cerrar sesión
+                  </button>
                 </div>
               )}
 
@@ -421,7 +563,7 @@ export default function Home() {
                       <div className="text-5xl">🔒</div>
                       <div className="text-base font-semibold text-gray-700">QR bloqueado</div>
                       <div className="text-sm text-gray-500 max-w-xs">Debes aprobar la prueba de conocimientos de la jornada para poder generar tu código QR de acceso.</div>
-                      <button onClick={() => setStage("prueba")} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
+                      <button onClick={() => setStage("prueba")} className="bg-indigo-600 text-gray-900 px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                         Ir a la prueba →
                       </button>
                     </div>
@@ -460,7 +602,7 @@ export default function Home() {
                 <div className="space-y-4">
                   <div className="bg-indigo-50 rounded-xl p-4">
                     <div className="text-xs text-gray-500">Saldo disponible</div>
-                    <div className="text-4xl font-semibold text-indigo-700">142 <span className="text-xl text-gray-400">min</span></div>
+                    <div className="text-4xl font-semibold text-indigo-700">{pilotoData?.saldo_minutos ?? 0} <span className="text-xl text-gray-400">min</span></div>
                   </div>
                   <div className="grid grid-cols-3 gap-3">
                     {[{min:30,precio:"$18.900"},{min:60,precio:"$34.900"},{min:120,precio:"$59.900"}].map((p,i) => (
@@ -479,14 +621,10 @@ export default function Home() {
                       </label>
                     ))}
                   </div>
-                  <button className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition">🔒 Pagar ahora</button>
+                  <button className="w-full bg-indigo-600 text-gray-900 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition">🔒 Pagar ahora</button>
                   <div className="border-t pt-4">
                     <div className="text-xs font-medium text-gray-500 mb-3">Historial de sesiones</div>
-                    {[["Hoy 09:00","87 min"],["Ayer 14:30","60 min"],["12 jul","45 min"]].map(([f,d],i) => (
-                      <div key={i} className="flex justify-between text-sm py-2 border-b last:border-0">
-                        <span className="text-gray-400">{f}</span><span>{d}</span><span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">cerrada</span>
-                      </div>
-                    ))}
+                    <div className="text-sm text-gray-400 text-center py-4">Sin sesiones registradas aún.</div>
                   </div>
                 </div>
               )}
@@ -502,7 +640,7 @@ export default function Home() {
                       { color: "bg-green-700", title: "Condiciones y Tarifas", desc: "Política de cobro por minuto, multas, rescates y cargos adicionales" },
                     ].map((doc, i) => (
                       <div key={i} className="flex items-center gap-3 border rounded-xl p-3">
-                        <div className={`${doc.color} rounded-lg w-10 h-12 flex items-center justify-center text-white text-xs font-bold flex-shrink-0`}>PDF</div>
+                        <div className={`${doc.color} rounded-lg w-10 h-12 flex items-center justify-center text-gray-900 text-xs font-bold flex-shrink-0`}>PDF</div>
                         <div className="flex-1"><div className="text-sm font-medium">{doc.title}</div><div className="text-xs text-gray-400">{doc.desc}</div></div>
                         <button className="text-xs border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition flex-shrink-0">⬇</button>
                       </div>
