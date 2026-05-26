@@ -1,0 +1,90 @@
+# CHANGELOG.md
+# Historial de Versiones — Autódromo App
+
+---
+
+## [0.4.0] — Mayo 2026
+### Agregado
+- Panel maestro administrador en `/admin` con login propio
+- Bandera roja funcional con log de timestamp
+- Barra de capacidad de pista (pilotos actuales / máximo)
+- Lista de pilotos en sesión con estados editables via dropdown
+- Pestaña Acceso QR con resultados dinámicos (verde/amarillo/rojo)
+- Pestaña Configuración con geocerca dibujable en mapa
+- Selector de autódromo (5 autódromos chilenos con coordenadas reales)
+- Configuración editable de máximo de pilotos y saldo mínimo
+- Log de acciones en tiempo real en panel admin
+- Botones de simulación ocultos en producción
+
+### Cambiado
+- Botones de test de estados QR movidos a `className="hidden"`
+
+### Pendiente en esta versión
+- Panel admin aún usa datos hardcodeados (no conectado a Supabase)
+- Escaneo QR es simulación (sin cámara real)
+
+---
+
+## [0.3.0] — Mayo 2026
+### Agregado
+- QR real generado con `react-qr-code` (reemplaza QR decorativo)
+- Tabla `qr_tokens` en Supabase
+- Función `generarQRToken()` — genera token único, invalida anteriores
+- Función `validarQRToken()` — valida contra Supabase con múltiples checks
+- Función `confirmarIngreso()` — marca QR usado y crea sesión
+- Función `getPilotosEnSesion()` y `getTodosLosPilotos()`
+- Botón "Generar QR de acceso" real en app del piloto
+- Token visible bajo el QR para debugging
+
+### Cambiado
+- Pestaña "Mi QR" ahora muestra QR real escaneable
+- QR bloqueado si prueba no aprobada
+
+---
+
+## [0.2.0] — Mayo 2026
+### Agregado
+- Autenticación real con Supabase Auth
+- Registro de pilotos con datos en tabla `pilotos`
+- Login/logout funcional
+- Perfil del piloto con datos reales (nombre, RUT, teléfono, vehículos)
+- Sistema de semáforo: 🔴 deshabilitado / 🟠 pendiente / 🟢 habilitado
+- Prueba de conocimientos (8 preguntas, 100% requerido)
+- Regla de prueba por jornada (`prueba_aprobada` + `prueba_fecha`)
+- Pestaña Reglamento permanente en app del piloto
+- Flujo secuencial: login → registro → prueba → app
+- Checkboxes de términos bloqueando botón "Crear cuenta"
+- QR bloqueado hasta aprobar prueba
+- 2 usuarios reales registrados en Supabase
+
+### Cambiado
+- App del piloto conectada a Supabase (reemplaza datos hardcodeados)
+
+### Corregido
+- Import path de `auth.ts` cambiado de `../lib/auth` a `@/lib/auth`
+
+---
+
+## [0.1.0] — Mayo 2026
+### Agregado
+- Proyecto Next.js inicializado con TypeScript y Tailwind
+- Proyecto Supabase creado (`etrzcvbvypivgraazonk`)
+- 5 tablas creadas: `pilotos`, `vehiculos`, `jornadas`, `pruebas_jornada`, `sesiones`
+- Row Level Security habilitado en todas las tablas
+- `lib/supabase.ts` — cliente Supabase
+- `lib/auth.ts` — funciones base de autenticación
+- Demo visual completo de app piloto (datos hardcodeados)
+- Demo visual completo de panel admin (datos hardcodeados)
+- Mapa GPS con vehículos en tiempo real (simulado)
+- Selector de autódromo con detección GPS (simulada)
+- Deployed en Vercel: `autodromo-app.vercel.app`
+- GitHub conectado: `felipeschmauk-sys/autodromo-app`
+
+---
+
+## [0.0.1] — Mayo 2026
+### Inicio del proyecto
+- Definición de arquitectura: dos mundos separados (piloto / admin)
+- Selección de stack: Next.js + Supabase + Vercel
+- Creación de cuentas: GitHub, Vercel, Supabase
+- Instalación de Node.js via nvm en Mac
