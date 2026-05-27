@@ -7,8 +7,9 @@ import {
   getPiloto,
   agregarVehiculo,
   aprobarPrueba,
+  generarQRToken,
 } from "@/lib/auth";
-
+import QRCode from "react-qr-code";
 type Stage = "login" | "registro" | "prueba" | "app";
 type AppTab = "perfil" | "qr" | "saldo" | "reglamento";
 type EstadoPiloto = "deshabilitado" | "pendiente" | "habilitado";
@@ -33,6 +34,40 @@ const BANDERAS = [
   { color: "bg-gray-900", emoji: "⬛", nombre: "Bandera negra", desc: "El piloto señalado debe ingresar a boxes inmediatamente. Puede indicar descalificación o problema técnico grave." },
 ];
 
+function QRGenerator({ pilotoId }: { pilotoId: string }) {
+  const [token, setToken] = useState<string | null>(null);
+  const [generando, setGenerando] = useState(false);
+
+  const generar = async () => {
+    setGenerando(true);
+    try {
+      const t = await generarQRToken(pilotoId);
+      setToken(t);
+    } catch {}
+    setGenerando(false);
+  };
+
+  useEffect(() => {
+    if (pilotoId) generar();
+  }, [pilotoId]);
+
+  if (!token) return (
+    <button onClick={generar} disabled={generando} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-60">
+      {generando ? "Generando..." : "📱 Generar QR de acceso"}
+    </button>
+  );
+
+  return (
+    <div className="flex flex-col items-center gap-3">
+      <div className="bg-white p-4 rounded-2xl border-2 border-indigo-100 shadow-sm">
+        <QRCode value={token} size={180} />
+      </div>
+      <button onClick={generar} disabled={generando} className="border text-sm px-4 py-2 rounded-xl hover:bg-gray-50 transition disabled:opacity-60">
+        {generando ? "Generando..." : "🔄 Nuevo QR"}
+      </button>
+    </div>
+  );
+}
 export default function Home() {
   const [stage, setStage] = useState<Stage>("login");
   const [subTab, setSubTab] = useState<"prueba" | "reglamento">("prueba");
@@ -533,32 +568,12 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Saldo</div><div className="text-2xl font-semibold">{pilotoData?.saldo_minutos ?? 0} min</div></div>
-                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Tandas este mes</div><div className="text-2xl font-semibold">—</div></div>
-                  </div>
-                  <div className="border rounded-xl divide-y text-sm">
-                    {[
-                      ["RUT", pilotoData?.rut || "—"],
-                      ["Teléfono", pilotoData?.telefono || "—"],
-                      ["Licencia", "✓ Verificada"],
-                      ["Prueba jornada", estadoPiloto === "habilitado" ? "✓ Aprobada" : "⏳ Pendiente"],
-                    ].map(([k, v]) => (
-                      <div key={k} className="flex justify-between px-4 py-3">
-                        <span className="text-gray-500">{k}</span>
-                        <span className={`font-medium ${k === "Prueba jornada" && estadoPiloto !== "habilitado" ? "text-amber-600" : ""}`}>{v}</span>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={handleCerrarSesion} className="w-full border border-red-200 text-red-500 py-2.5 rounded-xl text-sm font-medium hover:bg-red-50 transition">
-                    Cerrar sesión
-                  </button>
-                </div>
-              )}
-
-              {/* QR */}
-              {appTab === "qr" && (
-                <div className="space-y-4">
-                  {estadoPiloto !== "habilitado" ? (
+  <div className="flex flex-col items-center gap-4 py-4">
+  <QRGenerator pilotoId={pilotoData?.id} />
+  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700 text-center max-w-xs">
+    QR válido para <strong>un ingreso</strong>. Al salir de pista se invalida. Genera uno nuevo para reingresar.
+  </div>
+</div>
                     <div className="flex flex-col items-center gap-4 py-8 text-center">
                       <div className="text-5xl">🔒</div>
                       <div className="text-base font-semibold text-gray-700">QR bloqueado</div>
@@ -568,28 +583,7 @@ export default function Home() {
                       </button>
                     </div>
                   ) : (
-                    <div className="flex flex-col items-center gap-4 py-4">
-                      <svg width="160" height="160" viewBox="0 0 160 160" xmlns="http://www.w3.org/2000/svg">
-                        <rect width="160" height="160" fill="#fff" rx="8"/>
-                        <rect x="10" y="10" width="56" height="56" fill="none" stroke="#1a1a1a" strokeWidth="4" rx="4"/>
-                        <rect x="20" y="20" width="36" height="36" fill="#1a1a1a" rx="2"/>
-                        <rect x="94" y="10" width="56" height="56" fill="none" stroke="#1a1a1a" strokeWidth="4" rx="4"/>
-                        <rect x="104" y="20" width="36" height="36" fill="#1a1a1a" rx="2"/>
-                        <rect x="10" y="94" width="56" height="56" fill="none" stroke="#1a1a1a" strokeWidth="4" rx="4"/>
-                        <rect x="20" y="104" width="36" height="36" fill="#1a1a1a" rx="2"/>
-                        <rect x="94" y="94" width="10" height="10" fill="#1a1a1a"/><rect x="108" y="94" width="10" height="10" fill="#1a1a1a"/>
-                        <rect x="122" y="94" width="10" height="10" fill="#1a1a1a"/><rect x="136" y="94" width="10" height="10" fill="#1a1a1a"/>
-                        <rect x="94" y="108" width="10" height="10" fill="#1a1a1a"/><rect x="122" y="108" width="10" height="10" fill="#1a1a1a"/>
-                        <rect x="94" y="122" width="10" height="10" fill="#1a1a1a"/><rect x="108" y="122" width="10" height="10" fill="#1a1a1a"/>
-                        <rect x="136" y="122" width="10" height="10" fill="#1a1a1a"/>
-                        <rect x="94" y="136" width="10" height="10" fill="#1a1a1a"/><rect x="122" y="136" width="10" height="10" fill="#1a1a1a"/>
-                        <rect x="136" y="136" width="10" height="10" fill="#1a1a1a"/>
-                      </svg>
-                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700 text-center max-w-xs">
-                        QR válido para <strong>un ingreso</strong>. Al salir de pista se invalida. Genera uno nuevo para reingresar.
-                      </div>
-                      <div className="flex gap-2">
-                        <button className="border text-sm px-4 py-2 rounded-xl hover:bg-gray-50 transition">🔄 Nuevo QR</button>
+ 
                         <button className="border text-sm px-4 py-2 rounded-xl hover:bg-gray-50 transition">⬇ Descargar</button>
                       </div>
                     </div>
