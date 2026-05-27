@@ -532,7 +532,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-4 py-4">
-                      <QRGenerator pilotoId={pilotoData?.id} />
+                      {pilotoData?.id && <QRGenerator pilotoId={pilotoData.id} />}
                       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700 text-center max-w-xs">
                         QR válido para <strong>un ingreso</strong>. Al salir de pista se invalida. Genera uno nuevo para reingresar.
                       </div>
