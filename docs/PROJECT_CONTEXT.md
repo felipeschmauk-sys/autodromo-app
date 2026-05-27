@@ -1,3 +1,56 @@
+
+# Sesión de trabajo — 26 Mayo 2026
+
+## Lo que se hizo
+
+### 1. Configuración de variables de entorno
+- Se corrigió el nombre de la variable de Supabase de `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` a `NEXT_PUBLIC_SUPABASE_ANON_KEY` en `.env.local` y en Vercel
+- La key correcta es la **legacy anon key** (`eyJ...`), no la publishable key nueva (`sb_publishable_...`)
+
+### 2. Librería QR Scanner
+- Se desinstalé `html5-qrcode` (abandonada, incompatible con Next.js)
+- Se instaló `@zxing/browser` + `@zxing/library`
+- Se creó `components/QrScanner.tsx` con acceso a cámara via `getUserMedia` y loop de escaneo con `setTimeout`
+
+### 3. Panel Admin (`app/admin/page.tsx`)
+- Rediseño completo con estética motorsport: header oscuro, tarjetas blancas, jerarquía clara
+- Tabs: Dirección / Acceso QR / Pilotos / Config
+- Botón Bandera Roja siempre visible
+- QR Scanner funcional con cámara real
+- Conexión con Supabase para sesiones y pilotos
+
+### 4. App del Piloto (`app/page.tsx`)
+- Se agregó `generarQRToken` al import de `lib/auth`
+- Se creó componente `QRGenerator` con `react-qr-code`
+- Se reemplazó el SVG estático por el QR real
+
+### 5. `lib/auth.ts`
+- Se cambió `autorizado` por `valido` en todos los returns de `validarQRToken` para que coincida con el tipo `ValidacionResult` del panel admin
+- Se comentaron temporalmente las validaciones de saldo mínimo y prueba de jornada para pruebas
+
+### 6. Supabase
+- Se desactivó RLS en tabla `qr_tokens` temporalmente para pruebas
+- Se usó SQL Editor para resetear contraseñas y limpiar usuarios duplicados
+
+### 7. Deploy
+- App en producción: `autodromo-app.vercel.app`
+- Panel admin: `autodromo-app.vercel.app/admin`
+- Credenciales admin hardcodeadas: `admin@autodromo.cl` / `admin123`
+
+---
+
+## Pendiente para próxima sesión
+
+- **BUG ACTIVO**: El QR se genera con `piloto_id: null` porque `pilotoData.id` llega como `undefined`. Fix aplicado pero pendiente de confirmar en producción.
+- Reactivar validación de saldo mínimo cuando haya sistema de carga de minutos
+- Reactivar validación de prueba de jornada
+- Reactivar RLS en `qr_tokens`, `sesiones` y `pilotos` con políticas correctas
+- Implementar login admin con Supabase Auth (actualmente hardcodeado)
+- Implementar mapa de geocerca en Config
+- Implementar funciones de Bloquear piloto y Aplicar multa en tab Pilotos
+- Página de reset password para usuarios
+- Subir saldo a pilotos desde el panel admin
+
 # PROJECT_CONTEXT.md
 # Autódromo App — Contexto Completo del Proyecto
 # Última actualización: Mayo 2026
