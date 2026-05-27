@@ -10,6 +10,7 @@ import {
   generarQRToken,
 } from "@/lib/auth";
 import QRCode from "react-qr-code";
+
 type Stage = "login" | "registro" | "prueba" | "app";
 type AppTab = "perfil" | "qr" | "saldo" | "reglamento";
 type EstadoPiloto = "deshabilitado" | "pendiente" | "habilitado";
@@ -26,12 +27,12 @@ const PREGUNTAS = [
 ];
 
 const BANDERAS = [
-  { color: "bg-red-500", emoji: "🔴", nombre: "Bandera roja", desc: "Detención inmediata de todos los vehículos en pista. El cobro se pausa. Ningún piloto puede ignorarla bajo ninguna circunstancia." },
-  { color: "bg-yellow-400", emoji: "🟡", nombre: "Bandera amarilla", desc: "Peligro en la zona indicada. Reducir velocidad, no adelantar y estar preparado para detenerse." },
-  { color: "bg-yellow-400", emoji: "🟡🟡", nombre: "Bandera amarilla doble", desc: "Peligro grave o vehículo detenido en pista. Velocidad máxima reducida. Adelantar está estrictamente prohibido." },
-  { color: "bg-green-500", emoji: "🟢", nombre: "Bandera verde", desc: "Pista despejada. Circulación normal habilitada." },
-  { color: "bg-white border border-gray-300", emoji: "⬜", nombre: "Bandera blanca", desc: "Vehículo lento en pista (ambulancia, grúa, vehículo de seguridad). Precaución máxima." },
-  { color: "bg-gray-900", emoji: "⬛", nombre: "Bandera negra", desc: "El piloto señalado debe ingresar a boxes inmediatamente. Puede indicar descalificación o problema técnico grave." },
+  { color: "bg-red-500", nombre: "Bandera roja", desc: "Detención inmediata de todos los vehículos en pista. El cobro se pausa. Ningún piloto puede ignorarla bajo ninguna circunstancia." },
+  { color: "bg-yellow-400", nombre: "Bandera amarilla", desc: "Peligro en la zona indicada. Reducir velocidad, no adelantar y estar preparado para detenerse." },
+  { color: "bg-yellow-400", nombre: "Bandera amarilla doble", desc: "Peligro grave o vehículo detenido en pista. Velocidad máxima reducida. Adelantar está estrictamente prohibido." },
+  { color: "bg-green-500", nombre: "Bandera verde", desc: "Pista despejada. Circulación normal habilitada." },
+  { color: "bg-white border border-gray-300", nombre: "Bandera blanca", desc: "Vehículo lento en pista (ambulancia, grúa, vehículo de seguridad). Precaución máxima." },
+  { color: "bg-gray-900", nombre: "Bandera negra", desc: "El piloto señalado debe ingresar a boxes inmediatamente. Puede indicar descalificación o problema técnico grave." },
 ];
 
 function QRGenerator({ pilotoId }: { pilotoId: string }) {
@@ -68,6 +69,7 @@ function QRGenerator({ pilotoId }: { pilotoId: string }) {
     </div>
   );
 }
+
 export default function Home() {
   const [stage, setStage] = useState<Stage>("login");
   const [subTab, setSubTab] = useState<"prueba" | "reglamento">("prueba");
@@ -79,24 +81,17 @@ export default function Home() {
   const [appTab, setAppTab] = useState<AppTab>("perfil");
   const [estadoPiloto, setEstadoPiloto] = useState<EstadoPiloto>("deshabilitado");
   const [checks, setChecks] = useState([false, false, false]);
-
-  // ── Datos reales ──
   const [pilotoData, setPilotoData] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-
-  // ── Login ──
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-
-  // ── Registro ──
   const [regNombre, setRegNombre] = useState("");
   const [regRut, setRegRut] = useState("");
   const [regEmail, setRegEmail] = useState("");
   const [regTelefono, setRegTelefono] = useState("");
   const [regPassword, setRegPassword] = useState("");
 
-  // ── Verificar sesión al cargar ──
   useEffect(() => {
     getPiloto().then((data) => {
       if (data) {
@@ -127,7 +122,6 @@ export default function Home() {
     setAprobado(ok);
     if (ok) {
       setEstadoPiloto("habilitado");
-      // Guardar aprobación en Supabase
       const piloto = await getPiloto();
       if (piloto) {
         await aprobarPrueba(piloto.id);
@@ -150,7 +144,6 @@ export default function Home() {
     setChecks(c);
   };
 
-  // ── Login real ──
   const handleLogin = async () => {
     setError("");
     setLoading(true);
@@ -168,7 +161,6 @@ export default function Home() {
     setLoading(false);
   };
 
-  // ── Registro real ──
   const handleRegistro = async () => {
     if (!todosChecks) return;
     setError("");
@@ -185,7 +177,6 @@ export default function Home() {
       setLoading(false);
       return;
     }
-    // Guardar vehículos si se ingresaron
     const piloto = await getPiloto();
     if (piloto) {
       setPilotoData(piloto);
@@ -201,7 +192,6 @@ export default function Home() {
     setLoading(false);
   };
 
-  // ── Cerrar sesión ──
   const handleCerrarSesion = async () => {
     await cerrarSesion();
     setPilotoData(null);
@@ -213,8 +203,6 @@ export default function Home() {
 
   const incorrectas = evaluado ? PREGUNTAS.filter((p, i) => respuestas[i] !== p.correcta).length : 0;
   const todosChecks = checks.every(Boolean);
-
-  // Datos para mostrar en la UI (real o placeholder)
   const nombreMostrar = pilotoData?.nombre || "Usuario";
   const iniciales = nombreMostrar.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
   const vehiculoMostrar = pilotoData?.vehiculos?.[0]
@@ -222,9 +210,9 @@ export default function Home() {
     : "Sin vehículo registrado";
 
   const semaforo = {
-    deshabilitado: { label: "Deshabilitado", bg: "bg-red-500", text: "text-gray-900", dot: "🔴" },
-    pendiente: { label: "Prueba pendiente", bg: "bg-amber-500", text: "text-gray-900", dot: "🟠" },
-    habilitado: { label: "Habilitado", bg: "bg-green-500", text: "text-gray-900", dot: "🟢" },
+    deshabilitado: { label: "Deshabilitado", bg: "bg-red-500", text: "text-white", dot: "🔴" },
+    pendiente: { label: "Prueba pendiente", bg: "bg-amber-500", text: "text-white", dot: "🟠" },
+    habilitado: { label: "Habilitado", bg: "bg-green-500", text: "text-white", dot: "🟢" },
   }[estadoPiloto];
 
   return (
@@ -232,7 +220,7 @@ export default function Home() {
       <div className="w-full max-w-lg bg-white rounded-2xl shadow overflow-hidden">
 
         {/* HEADER */}
-        <div className="bg-indigo-700 text-gray-900 px-5 py-4 flex items-center gap-3">
+        <div className="bg-indigo-700 text-white px-5 py-4 flex items-center gap-3">
           <span className="text-2xl">🏎</span>
           <div>
             <div className="font-semibold text-sm">Autódromo Las Vizcachas</div>
@@ -259,7 +247,7 @@ export default function Home() {
 
         <div className="p-5">
 
-          {/* ── LOGIN ── */}
+          {/* LOGIN */}
           {stage === "login" && (
             <div className="space-y-5">
               <div className="text-center space-y-1">
@@ -269,31 +257,14 @@ export default function Home() {
               <div className="space-y-3">
                 <div>
                   <label className="text-xs text-gray-500 font-medium">Correo electrónico</label>
-                  <input
-                    className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    type="email"
-                    placeholder="tu@correo.cl"
-                    value={loginEmail}
-                    onChange={e => setLoginEmail(e.target.value)}
-                  />
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="email" placeholder="tu@correo.cl" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500 font-medium">Contraseña</label>
-                  <input
-                    className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                    type="password"
-                    placeholder="••••••••"
-                    value={loginPassword}
-                    onChange={e => setLoginPassword(e.target.value)}
-                    onKeyDown={e => e.key === "Enter" && handleLogin()}
-                  />
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="password" placeholder="••••••••" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />
                 </div>
                 {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
-                <button
-                  onClick={handleLogin}
-                  disabled={loading}
-                  className="w-full bg-indigo-600 text-gray-900 py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition disabled:opacity-60"
-                >
+                <button onClick={handleLogin} disabled={loading} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl font-semibold text-sm hover:bg-indigo-700 transition disabled:opacity-60">
                   {loading ? "Ingresando..." : "Ingresar"}
                 </button>
               </div>
@@ -306,7 +277,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* ── REGISTRO PASO 1 ── */}
+          {/* REGISTRO PASO 1 */}
           {stage === "registro" && regPaso === 1 && (
             <div className="space-y-4">
               <div className="text-sm font-semibold text-gray-700">Datos personales</div>
@@ -337,9 +308,7 @@ export default function Home() {
                   <div className="text-sm font-semibold text-gray-700">
                     Vehículos <span className="text-xs font-normal text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full ml-1">opcional</span>
                   </div>
-                  <button onClick={agregarAuto} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition">
-                    + Agregar vehículo
-                  </button>
+                  <button onClick={agregarAuto} className="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-lg font-medium hover:bg-indigo-100 transition">+ Agregar vehículo</button>
                 </div>
                 <div className="space-y-3">
                   {autos.map((auto, idx) => (
@@ -355,22 +324,20 @@ export default function Home() {
                     </div>
                   ))}
                 </div>
-                <div className="text-xs text-gray-400 mt-2">Puedes agregar más vehículos desde tu perfil.</div>
               </div>
-
               <div className="flex gap-2 pt-2">
                 <button onClick={() => { setStage("login"); setError(""); }} className="border rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition">← Volver</button>
-                <button onClick={() => setRegPaso(2)} className="flex-1 bg-indigo-600 text-gray-900 rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 transition">Continuar →</button>
+                <button onClick={() => setRegPaso(2)} className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 transition">Continuar →</button>
               </div>
             </div>
           )}
 
-          {/* ── REGISTRO PASO 2 ── */}
+          {/* REGISTRO PASO 2 */}
           {stage === "registro" && regPaso === 2 && (
             <div className="space-y-4">
               <div className="text-sm font-semibold text-gray-700">Términos y condiciones</div>
               <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 leading-relaxed border">
-                Al registrarte confirmas que has leído el reglamento del autódromo y aceptas las normas de seguridad, el protocolo de banderas, la política de cobro por minuto y las condiciones de acceso a pista. Tu cuenta quedará habilitada para generar QR solo después de aprobar la prueba de conocimientos con 100% de respuestas correctas.
+                Al registrarte confirmas que has leído el reglamento del autódromo y aceptas las normas de seguridad, el protocolo de banderas, la política de cobro por minuto y las condiciones de acceso a pista.
               </div>
               <div className="space-y-3">
                 {[
@@ -395,24 +362,19 @@ export default function Home() {
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setRegPaso(1)} className="border rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition">← Volver</button>
-                <button
-                  onClick={handleRegistro}
-                  disabled={!todosChecks || loading}
-                  className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${todosChecks && !loading ? "bg-indigo-600 text-gray-900 hover:bg-indigo-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}
-                >
+                <button onClick={handleRegistro} disabled={!todosChecks || loading} className={`flex-1 rounded-xl py-2.5 text-sm font-semibold transition ${todosChecks && !loading ? "bg-indigo-600 text-white hover:bg-indigo-700" : "bg-gray-200 text-gray-400 cursor-not-allowed"}`}>
                   {loading ? "Creando cuenta..." : "Crear cuenta ✓"}
                 </button>
               </div>
             </div>
           )}
 
-          {/* ── PRUEBA ── */}
+          {/* PRUEBA */}
           {stage === "prueba" && (
             <div className="space-y-4">
               <div className="flex border-b -mx-5 px-5">
                 {(["prueba", "reglamento"] as const).map(t => (
-                  <button key={t} onClick={() => setSubTab(t)}
-                    className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${subTab === t ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                  <button key={t} onClick={() => setSubTab(t)} className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-all ${subTab === t ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                     {t === "prueba" ? "📋 Prueba" : "📄 Reglamento"}
                   </button>
                 ))}
@@ -422,19 +384,6 @@ export default function Home() {
                 <div className="space-y-4">
                   <div className="text-sm text-gray-500">Lee el reglamento antes de rendir la prueba. Necesitas 100% para habilitar tu cuenta.</div>
                   <div className="space-y-2">
-                    {[
-                      { color: "bg-red-600", title: "Reglamento Interno de Pista", desc: "Normas de circulación, protocolo de banderas y condiciones de acceso" },
-                      { color: "bg-blue-600", title: "Protocolo de Seguridad", desc: "Equipamiento obligatorio, procedimientos de emergencia y rescate" },
-                      { color: "bg-green-700", title: "Condiciones y Tarifas", desc: "Política de cobro por minuto, multas, rescates y cargos adicionales" },
-                    ].map((doc, i) => (
-                      <div key={i} className="flex items-center gap-3 border rounded-xl p-3">
-                        <div className={`${doc.color} rounded-lg w-10 h-12 flex items-center justify-center text-gray-900 text-xs font-bold flex-shrink-0`}>PDF</div>
-                        <div className="flex-1"><div className="text-sm font-medium">{doc.title}</div><div className="text-xs text-gray-400">{doc.desc}</div></div>
-                        <button className="text-xs border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition flex-shrink-0">⬇ Descargar</button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
                     {BANDERAS.map((b, i) => (
                       <div key={i} className="flex gap-3 items-start bg-gray-50 rounded-xl p-3 text-sm">
                         <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0`}></div>
@@ -442,15 +391,7 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <div className="bg-gray-50 border rounded-xl p-3 text-sm space-y-2">
-                    <div className="font-medium text-gray-700">Normas de adelantamiento</div>
-                    <div className="text-gray-600 text-xs space-y-1">
-                      <div>• Solo se permite adelantar por el <strong>lado derecho</strong> del vehículo adelantado.</div>
-                      <div>• Si eres adelantado: <strong>mantén tu línea</strong> y facilita el paso. No cierres bruscamente.</div>
-                      <div>• Está prohibido adelantar bajo bandera amarilla o doble amarilla.</div>
-                    </div>
-                  </div>
-                  <button onClick={() => setSubTab("prueba")} className="w-full bg-indigo-600 text-gray-900 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
+                  <button onClick={() => setSubTab("prueba")} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                     Ir a la prueba →
                   </button>
                 </div>
@@ -491,23 +432,21 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-
                   {evaluado && aprobado && (
                     <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-                      <div className="font-semibold mb-1">🎉 ¡Prueba aprobada! {PREGUNTAS.length}/{PREGUNTAS.length} correctas</div>
+                      <div className="font-semibold mb-1">🎉 ¡Prueba aprobada!</div>
                       Accediendo a tu cuenta...
                     </div>
                   )}
                   {evaluado && !aprobado && (
                     <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600">
                       <div className="font-semibold mb-1">✗ {incorrectas} respuesta{incorrectas > 1 ? "s" : ""} incorrecta{incorrectas > 1 ? "s" : ""}</div>
-                      Necesitas 100%. Las correctas están en verde. Revisa el reglamento y vuelve a intentarlo.
+                      Necesitas 100%. Las correctas están en verde.
                     </div>
                   )}
-
                   <div className="flex gap-2">
                     {!evaluado && (
-                      <button onClick={evaluar} className="flex-1 bg-indigo-600 text-gray-900 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
+                      <button onClick={evaluar} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                         Enviar respuestas →
                       </button>
                     )}
@@ -522,33 +461,23 @@ export default function Home() {
             </div>
           )}
 
-          {/* ── APP ── */}
+          {/* APP */}
           {stage === "app" && (
             <div className="space-y-4">
-
-              {/* ALERTA SI PRUEBA PENDIENTE */}
               {estadoPiloto !== "habilitado" && (
                 <div className={`rounded-xl px-4 py-3 text-sm flex items-start gap-3 ${estadoPiloto === "deshabilitado" ? "bg-red-50 border border-red-200 text-red-700" : "bg-amber-50 border border-amber-200 text-amber-700"}`}>
                   <span className="text-lg flex-shrink-0">{estadoPiloto === "deshabilitado" ? "🔴" : "🟠"}</span>
                   <div>
                     <div className="font-semibold mb-0.5">{estadoPiloto === "deshabilitado" ? "Cuenta deshabilitada" : "Prueba pendiente"}</div>
-                    <div className="text-xs">
-                      {estadoPiloto === "deshabilitado"
-                        ? "Debes aprobar la prueba de conocimientos para habilitar tu acceso a pista y poder generar QR."
-                        : "Estás respondiendo la prueba. Debes obtener 100% para quedar habilitado."}
-                    </div>
-                    <button onClick={() => setStage("prueba")} className="mt-2 text-xs font-semibold underline">
-                      Ir a la prueba →
-                    </button>
+                    <div className="text-xs">Debes aprobar la prueba de conocimientos para habilitar tu acceso a pista y poder generar QR.</div>
+                    <button onClick={() => setStage("prueba")} className="mt-2 text-xs font-semibold underline">Ir a la prueba →</button>
                   </div>
                 </div>
               )}
 
-              {/* TABS */}
               <div className="flex border-b -mx-5 px-5 overflow-x-auto">
                 {(["perfil", "qr", "saldo", "reglamento"] as AppTab[]).map(t => (
-                  <button key={t} onClick={() => setAppTab(t)}
-                    className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${appTab === t ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
+                  <button key={t} onClick={() => setAppTab(t)} className={`px-3 py-2.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${appTab === t ? "border-indigo-600 text-indigo-700" : "border-transparent text-gray-500 hover:text-gray-700"}`}>
                     {t === "perfil" ? "👤 Perfil" : t === "qr" ? "📷 Mi QR" : t === "saldo" ? "⏱ Saldo" : "📄 Reglamento"}
                   </button>
                 ))}
@@ -568,23 +497,44 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-  <div className="flex flex-col items-center gap-4 py-4">
-  <QRGenerator pilotoId={pilotoData?.id} />
-  <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700 text-center max-w-xs">
-    QR válido para <strong>un ingreso</strong>. Al salir de pista se invalida. Genera uno nuevo para reingresar.
-  </div>
-</div>
+                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Saldo</div><div className="text-2xl font-semibold">{pilotoData?.saldo_minutos ?? 0} min</div></div>
+                    <div className="bg-gray-50 rounded-xl p-3"><div className="text-xs text-gray-500">Tandas este mes</div><div className="text-2xl font-semibold">—</div></div>
+                  </div>
+                  <div className="border rounded-xl divide-y text-sm">
+                    {[
+                      ["RUT", pilotoData?.rut || "—"],
+                      ["Teléfono", pilotoData?.telefono || "—"],
+                      ["Prueba jornada", estadoPiloto === "habilitado" ? "✓ Aprobada" : "⏳ Pendiente"],
+                    ].map(([k, v]) => (
+                      <div key={k} className="flex justify-between px-4 py-3">
+                        <span className="text-gray-500">{k}</span>
+                        <span className="font-medium">{v}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={handleCerrarSesion} className="w-full border border-red-200 text-red-500 py-2.5 rounded-xl text-sm font-medium hover:bg-red-50 transition">
+                    Cerrar sesión
+                  </button>
+                </div>
+              )}
+
+              {/* QR */}
+              {appTab === "qr" && (
+                <div className="space-y-4">
+                  {estadoPiloto !== "habilitado" ? (
                     <div className="flex flex-col items-center gap-4 py-8 text-center">
                       <div className="text-5xl">🔒</div>
                       <div className="text-base font-semibold text-gray-700">QR bloqueado</div>
                       <div className="text-sm text-gray-500 max-w-xs">Debes aprobar la prueba de conocimientos de la jornada para poder generar tu código QR de acceso.</div>
-                      <button onClick={() => setStage("prueba")} className="bg-indigo-600 text-gray-900 px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
+                      <button onClick={() => setStage("prueba")} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                         Ir a la prueba →
                       </button>
                     </div>
                   ) : (
- 
-                        <button className="border text-sm px-4 py-2 rounded-xl hover:bg-gray-50 transition">⬇ Descargar</button>
+                    <div className="flex flex-col items-center gap-4 py-4">
+                      <QRGenerator pilotoId={pilotoData?.id} />
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700 text-center max-w-xs">
+                        QR válido para <strong>un ingreso</strong>. Al salir de pista se invalida. Genera uno nuevo para reingresar.
                       </div>
                     </div>
                   )}
@@ -615,11 +565,7 @@ export default function Home() {
                       </label>
                     ))}
                   </div>
-                  <button className="w-full bg-indigo-600 text-gray-900 py-3 rounded-xl font-semibold hover:bg-indigo-700 transition">🔒 Pagar ahora</button>
-                  <div className="border-t pt-4">
-                    <div className="text-xs font-medium text-gray-500 mb-3">Historial de sesiones</div>
-                    <div className="text-sm text-gray-400 text-center py-4">Sin sesiones registradas aún.</div>
-                  </div>
+                  <button className="w-full bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition">🔒 Pagar ahora</button>
                 </div>
               )}
 
@@ -628,20 +574,6 @@ export default function Home() {
                 <div className="space-y-4">
                   <div className="text-sm text-gray-500">Consulta el reglamento y las normas de pista cuando quieras.</div>
                   <div className="space-y-2">
-                    {[
-                      { color: "bg-red-600", title: "Reglamento Interno de Pista", desc: "Normas de circulación, protocolo de banderas y condiciones de acceso" },
-                      { color: "bg-blue-600", title: "Protocolo de Seguridad", desc: "Equipamiento obligatorio, procedimientos de emergencia y rescate" },
-                      { color: "bg-green-700", title: "Condiciones y Tarifas", desc: "Política de cobro por minuto, multas, rescates y cargos adicionales" },
-                    ].map((doc, i) => (
-                      <div key={i} className="flex items-center gap-3 border rounded-xl p-3">
-                        <div className={`${doc.color} rounded-lg w-10 h-12 flex items-center justify-center text-gray-900 text-xs font-bold flex-shrink-0`}>PDF</div>
-                        <div className="flex-1"><div className="text-sm font-medium">{doc.title}</div><div className="text-xs text-gray-400">{doc.desc}</div></div>
-                        <button className="text-xs border px-3 py-1.5 rounded-lg hover:bg-gray-50 transition flex-shrink-0">⬇</button>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide pt-2">Sistema de banderas</div>
-                  <div className="space-y-2">
                     {BANDERAS.map((b, i) => (
                       <div key={i} className="flex gap-3 items-start bg-gray-50 rounded-xl p-3 text-sm">
                         <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0 border border-gray-200`}></div>
@@ -649,22 +581,14 @@ export default function Home() {
                       </div>
                     ))}
                   </div>
-                  <div className="bg-gray-50 border rounded-xl p-4 text-sm space-y-2">
-                    <div className="font-semibold text-gray-700">Normas de adelantamiento</div>
-                    <div className="text-gray-600 text-xs space-y-1.5">
-                      <div>• Solo se permite adelantar por el <strong>lado derecho</strong> del vehículo adelantado.</div>
-                      <div>• Si eres adelantado: <strong>mantén tu línea</strong> y facilita el paso. No cierres bruscamente.</div>
-                      <div>• Está prohibido adelantar bajo bandera amarilla o doble amarilla.</div>
-                      <div>• El adelantamiento debe hacerse con diferencia clara de velocidad y en zonas seguras.</div>
-                    </div>
-                  </div>
                   <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700">
-                    📋 Recuerda que la prueba de conocimientos se renueva en cada jornada de pista. Usa este reglamento para repasar antes de cada sesión.
+                    📋 La prueba de conocimientos se renueva en cada jornada de pista.
                   </div>
                 </div>
               )}
 
             </div>
+          )}
 
         </div>
       </div>
