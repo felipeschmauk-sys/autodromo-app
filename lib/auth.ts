@@ -115,25 +115,25 @@ export async function validarQRToken(token: string, maxPilotos: number = 6, minS
     .single()
 
   if (qrError || !qr) {
-    return { autorizado: false, motivo: 'QR inválido o ya utilizado' }
+    return { valido: false, motivo: 'QR inválido o ya utilizado' }
   }
 
   const piloto = qr.pilotos as any
 
   // Verifica bloqueo
   if (piloto.bloqueado) {
-    return { autorizado: false, motivo: 'Piloto bloqueado por el administrador', piloto }
+    return { valido: false, motivo: 'Piloto bloqueado por el administrador', piloto }
   }
 
   // Verifica saldo mínimo
  // if (piloto.saldo_minutos < minSaldo) {
-//   return { autorizado: false, motivo: `Saldo insuficiente` }
+//   return { valido: false, motivo: `Saldo insuficiente` }
 // }
 
   // Verifica prueba aprobada hoy
   const hoy = new Date().toISOString().split('T')[0]
   // if (!piloto.prueba_aprobada || piloto.prueba_fecha !== hoy) {
-//   return { autorizado: false, motivo: 'Prueba no aprobada para esta jornada' }
+//   return { valido: false, motivo: 'Prueba no aprobada para esta jornada' }
 // }
 
   // Verifica capacidad de pista
@@ -143,15 +143,14 @@ export async function validarQRToken(token: string, maxPilotos: number = 6, minS
     .eq('estado', 'activa')
 
   if ((count || 0) >= maxPilotos) {
-    return { autorizado: false, motivo: `Pista al máximo de capacidad (${count}/${maxPilotos} autos)`, piloto }
+    return { valido: false, motivo: `Pista al máximo de capacidad (${count}/${maxPilotos} autos)`, piloto }
   }
 
-  return {
-    autorizado: true,
-    piloto,
-    qr_id: qr.id,
-    token
-  }
+ return {
+  valido: true,
+  piloto,
+  qr_id: qr.id,
+}
 }
 
 export async function confirmarIngreso(qr_id: string, piloto_id: string) {
