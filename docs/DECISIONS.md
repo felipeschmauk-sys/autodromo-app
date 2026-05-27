@@ -1,3 +1,36 @@
+
+## DECISION: Stack de QR Scanner — 26 Mayo 2026
+
+**Decisión:** Usar `@zxing/browser` en vez de `html5-qrcode`
+
+**Motivo:** `html5-qrcode` está abandonada desde 2023 y tiene problemas serios con Next.js App Router (SSR crashes). `@zxing/browser` es la librería subyacente, activamente mantenida y con mejor soporte TypeScript.
+
+---
+
+## DECISION: Legacy Anon Key de Supabase — 26 Mayo 2026
+
+**Decisión:** Usar la key legacy `eyJ...` en vez de la nueva `sb_publishable_...`
+
+**Motivo:** Supabase lanzó un nuevo sistema de API keys pero la key nueva no funciona correctamente con el cliente `@supabase/supabase-js` actual. Mientras no migren completamente, usar la key legacy desde **Settings → API Keys → Legacy anon, service_role API keys**.
+
+---
+
+## DECISION: RLS desactivado temporalmente — 26 Mayo 2026
+
+**Decisión:** Se desactivó RLS en tabla `qr_tokens`
+
+**Motivo:** Las políticas existentes no permitían al admin (no autenticado en Supabase Auth) leer los tokens. Solución temporal para pruebas.
+
+**Acción pendiente:** Reactivar RLS con política que permita lectura anónima para validación de tokens, o autenticar el admin con Supabase Auth.
+
+---
+
+## DECISION: Validaciones QR desactivadas temporalmente — 26 Mayo 2026
+
+**Decisión:** Se comentaron las validaciones de saldo mínimo y prueba de jornada en `validarQRToken`
+
+**Motivo:** Pruebas sin saldo cargado. Reactivar cuando haya sistema de carga de minutos funcionando.
+
 # DECISIONS.md
 # Registro de Decisiones Técnicas — Autódromo App
 
