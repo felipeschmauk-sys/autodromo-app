@@ -126,15 +126,15 @@ export async function validarQRToken(token: string, maxPilotos: number = 6, minS
   }
 
   // Verifica saldo mínimo
-  if (piloto.saldo_minutos < minSaldo) {
-    return { autorizado: false, motivo: `Saldo insuficiente (${piloto.saldo_minutos} min disponibles, mínimo ${minSaldo} min)`, piloto }
-  }
+ // if (piloto.saldo_minutos < minSaldo) {
+//   return { autorizado: false, motivo: `Saldo insuficiente` }
+// }
 
   // Verifica prueba aprobada hoy
   const hoy = new Date().toISOString().split('T')[0]
-  if (!piloto.prueba_aprobada || piloto.prueba_fecha !== hoy) {
-    return { autorizado: false, motivo: 'Prueba de conocimientos no aprobada para esta jornada', piloto }
-  }
+  // if (!piloto.prueba_aprobada || piloto.prueba_fecha !== hoy) {
+//   return { autorizado: false, motivo: 'Prueba no aprobada para esta jornada' }
+// }
 
   // Verifica capacidad de pista
   const { count } = await supabase
