@@ -8,6 +8,7 @@ import {
   validarQRToken,
   confirmarIngreso,
 } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ssr: false,
@@ -72,6 +73,7 @@ export default function AdminPage() {
   const [autodromo, setAutodromo] = useState(AUTODROMO_OPTIONS[0]);
   const [busqueda, setBusqueda] = useState("");
   const [alertas, setAlertas] = useState<string[]>([]);
+  const [realtimeConectado, setRealtimeConectado] = useState(false);
 
   const [qrStep, setQrStep] = useState<QRStep>("idle");
   const [validacion, setValidacion] = useState<ValidacionResult | null>(null);
@@ -114,13 +116,40 @@ export default function AdminPage() {
     }
   }, []);
 
-  useEffect(() => {
-    if (autenticado) {
-      cargarPilotos();
-      cargarSesiones();
-      const interval = setInterval(cargarSesiones, 15000);
-      return () => clearInterval(interval);
-    }
+   useEffect(() => {
+    if (!autenticado) return;
+
+    // Carga inicial
+    cargarPilotos();
+    cargarSesiones();
+
+    // Suscripción Realtime a tabla sesiones
+    const channel = supabase
+      .channel("admin-sesiones-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "sesiones" },
+        () => {
+          // Cada vez que cambia una sesión (INSERT/UPDATE/DELETE),
+          // recargar la lista automáticamente — sin polling
+          cargarSesiones();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pilotos" },
+        () => {
+          cargarPilotos();
+        }
+      )
+      .subscribe((status) => {
+        setRealtimeConectado(status === "SUBSCRIBED");
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+      setRealtimeConectado(false);
+    };
   }, [autenticado, cargarPilotos, cargarSesiones]);
 
   // ── QR ───────────────────────────────────────────────────────────────────
@@ -245,9 +274,9 @@ export default function AdminPage() {
               ⚠ {alertas.length}
             </div>
           )}
-          <div className="flex items-center gap-1.5 text-xs text-green-400 font-medium">
-            <span className="w-2 h-2 bg-green-400 rounded-full animate-pulse inline-block" />
-            En vivo
+          <div className={`flex items-center gap-1.5 text-xs font-medium ${realtimeConectado ? "text-green-400" : "text-yellow-400"}`}>
+            <span className={`w-2 h-2 rounded-full inline-block ${realtimeConectado ? "bg-green-400 animate-pulse" : "bg-yellow-400"}`} />
+            {realtimeConectado ? "En vivo" : "Conectando..."}
           </div>
           <button
             onClick={() => setAutenticado(false)}
