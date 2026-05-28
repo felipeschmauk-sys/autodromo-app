@@ -38,13 +38,16 @@ const BANDERAS = [
 function QRGenerator({ pilotoId }: { pilotoId?: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
-
+const [error, setError] = useState<string | null>(null);
   const generar = async () => {
     setGenerando(true);
     try {
       const t = await generarQRToken(pilotoId);
       setToken(t);
-    } catch {}
+    } catch(err) {
+      console.error('QR Error:', err);
+      setError(err instanceof Error ? err.message : 'Error desconocido');
+    }
     setGenerando(false);
   };
 
