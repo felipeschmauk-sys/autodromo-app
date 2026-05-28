@@ -38,40 +38,55 @@ const BANDERAS = [
 function QRGenerator({ pilotoId }: { pilotoId?: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
-const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   const generar = async () => {
     setGenerando(true);
+    setError(null);
+    setToken(null);
     try {
       const t = await generarQRToken(pilotoId);
       setToken(t);
-    } catch(err) {
-      console.error('QR Error:', err);
-      setError(err instanceof Error ? err.message : 'Error desconocido');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al generar QR");
+    } finally {
+      setGenerando(false);
     }
-    setGenerando(false);
   };
 
   useEffect(() => {
-    if (pilotoId) generar();
-  }, [pilotoId]);
-
-if (!token) return (
-  <>
-    {error && <p className="text-red-500 text-xs text-center mb-2">{error}</p>}
-    <button onClick={generar} disabled={generando} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-60">
-      {generando ? "Generando..." : "📱 Generar QR de acceso"}
-    </button>
-  </>
-);
+    generar();
+  }, []);
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="bg-white p-4 rounded-2xl border-2 border-indigo-100 shadow-sm">
-        <QRCode value={token} size={180} />
-      </div>
-      <button onClick={generar} disabled={generando} className="border text-sm px-4 py-2 rounded-xl hover:bg-gray-50 transition disabled:opacity-60">
-        {generando ? "Generando..." : "🔄 Nuevo QR"}
-      </button>
+      {error && (
+        <div className="bg-red-50 border border-red-200 rounded-xl px-4 py-3 text-sm text-red-600 text-center w-full">
+          {error}
+        </div>
+      )}
+      {token ? (
+        <>
+          <div className="bg-white p-4 rounded-2xl border-2 border-indigo-100 shadow-sm">
+            <QRCode value={token} size={180} />
+          </div>
+          <button
+            onClick={generar}
+            disabled={generando}
+            className="border text-sm px-4 py-2 rounded-xl hover:bg-gray-50 transition disabled:opacity-60"
+          >
+            {generando ? "Generando..." : "🔄 Nuevo QR"}
+          </button>
+        </>
+      ) : (
+        <button
+          onClick={generar}
+          disabled={generando}
+          className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-60"
+        >
+          {generando ? "Generando..." : "📱 Generar QR de acceso"}
+        </button>
+      )}
     </div>
   );
 }
@@ -510,7 +525,7 @@ export default function Home() {
                     {[
                       ["RUT", pilotoData?.rut || "—"],
                       ["Teléfono", pilotoData?.telefono || "—"],
-                      ["Prueba jornada", estadoPiloto === "habilitado" ? "✓ Aprobada" : "⏳ Pendiente"],
+                      ["Prueba", estadoPiloto === "habilitado" ? "✓ Aprobada" : "⏳ Pendiente"],
                     ].map(([k, v]) => (
                       <div key={k} className="flex justify-between px-4 py-3">
                         <span className="text-gray-500">{k}</span>
@@ -531,7 +546,7 @@ export default function Home() {
                     <div className="flex flex-col items-center gap-4 py-8 text-center">
                       <div className="text-5xl">🔒</div>
                       <div className="text-base font-semibold text-gray-700">QR bloqueado</div>
-                      <div className="text-sm text-gray-500 max-w-xs">Debes aprobar la prueba de conocimientos de la jornada para poder generar tu código QR de acceso.</div>
+                      <div className="text-sm text-gray-500 max-w-xs">Debes aprobar la prueba de conocimientos para poder generar tu código QR de acceso.</div>
                       <button onClick={() => setStage("prueba")} className="bg-indigo-600 text-white px-5 py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                         Ir a la prueba →
                       </button>
