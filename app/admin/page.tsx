@@ -454,7 +454,7 @@ export default function AdminPage() {
 
               {qrStep === "scanning" && (
                 <div className="p-4">
-                  <QrScanner onResult={handleScan} />
+<QrScanner onScan={handleScan} active={qrStep === "scanning"} />
                   <button
                     onClick={detenerScanner}
                     className="mt-3 w-full text-sm text-gray-500 border border-gray-200 rounded-xl py-2 hover:bg-gray-50 transition-colors"
