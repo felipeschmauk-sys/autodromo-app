@@ -56,6 +56,7 @@ const [error, setError] = useState<string | null>(null);
   }, [pilotoId]);
 
   if (!token) return (
+    {error && <p className="text-red-500 text-xs text-center mb-2">{error}</p>}
     <button onClick={generar} disabled={generando} className="bg-indigo-600 text-white px-6 py-3 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-60">
       {generando ? "Generando..." : "📱 Generar QR de acceso"}
     </button>
