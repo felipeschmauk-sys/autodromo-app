@@ -35,7 +35,7 @@ const BANDERAS = [
   { color: "bg-gray-900", nombre: "Bandera negra", desc: "El piloto señalado debe ingresar a boxes inmediatamente. Puede indicar descalificación o problema técnico grave." },
 ];
 
-function QRGenerator({ pilotoId }: { pilotoId: string }) {
+function QRGenerator({ pilotoId }: { pilotoId?: string }) {
   const [token, setToken] = useState<string | null>(null);
   const [generando, setGenerando] = useState(false);
 
@@ -357,7 +357,7 @@ export default function Home() {
                 </div>
               )}
               <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700">
-                📋 Una vez creada tu cuenta deberás aprobar la prueba de conocimientos para quedar habilitado. La prueba se renueva en cada jornada de pista.
+                📋 Una vez creada tu cuenta deberás aprobar la prueba de conocimientos para quedar habilitado. La prueba se rinde una sola vez y queda guardada en tu cuenta.
               </div>
               {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
               <div className="flex gap-2 pt-2">
@@ -532,7 +532,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <div className="flex flex-col items-center gap-4 py-4">
-                      {pilotoData?.id && <QRGenerator pilotoId={pilotoData.id} />}
+                      <QRGenerator pilotoId={pilotoData?.id} />
                       <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-2.5 text-xs text-amber-700 text-center max-w-xs">
                         QR válido para <strong>un ingreso</strong>. Al salir de pista se invalida. Genera uno nuevo para reingresar.
                       </div>
@@ -582,7 +582,7 @@ export default function Home() {
                     ))}
                   </div>
                   <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700">
-                    📋 La prueba de conocimientos se renueva en cada jornada de pista.
+                    📋 La prueba de conocimientos se rinde una sola vez. Una vez aprobada quedas habilitado permanentemente.
                   </div>
                 </div>
               )}
