@@ -19,17 +19,12 @@ export async function registrarPiloto({
   if (error) return { error: error.message }
 
   if (data.user) {
-    const { error: perfilError } = await supabase
+    // El perfil se crea automáticamente via trigger en Supabase
+    // Solo actualizamos nombre, rut y telefono que el trigger no tiene al momento del signup
+    await supabase
       .from('pilotos')
-      .insert({
-        id: data.user.id,
-        nombre,
-        rut,
-        telefono,
-        prueba_aprobada: false,
-        saldo_minutos: 0,
-      })
-    if (perfilError) return { error: perfilError.message }
+      .update({ nombre, rut, telefono })
+      .eq('id', data.user.id)
   }
   return { ok: true }
 }
