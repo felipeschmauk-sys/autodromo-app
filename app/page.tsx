@@ -305,7 +305,7 @@ export default function Home() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs text-gray-500">Nombre completo <span className="text-red-500">*</span></label>
-                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="Felipe Schmauk" value={regNombre} onChange={e => setRegNombre(e.target.value)} />
+                  <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="Nombre Completo" value={regNombre} onChange={e => setRegNombre(e.target.value)} />
                 </div>
                 <div>
                   <label className="text-xs text-gray-500">RUT <span className="text-red-500">*</span></label>
