@@ -19,8 +19,8 @@ export async function registrarPiloto({
   if (error) return { error: error.message }
 
   if (data.user) {
-    // El perfil se crea automáticamente via trigger en Supabase
-    // Solo actualizamos nombre, rut y telefono que el trigger no tiene al momento del signup
+    // El perfil en pilotos se crea automáticamente via trigger en Supabase.
+    // Solo actualizamos los datos que el trigger recibe del metadata.
     await supabase
       .from('pilotos')
       .update({ nombre, rut, telefono })
@@ -82,7 +82,6 @@ export async function pruebaVigenteHoy(piloto_id: string) {
 // ── QR REAL ──
 
 export async function generarQRToken(piloto_id?: string): Promise<string> {
-  // Si no viene piloto_id, lo tomamos del usuario logueado
   let uid = piloto_id
   if (!uid) {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
@@ -129,7 +128,7 @@ export async function validarQRToken(
   maxPilotos: number = 6,
   minSaldo: number = 0
 ): Promise<ValidacionResult> {
-  // 1. Buscar el token (query separada, sin join — más seguro con RLS)
+  // 1. Buscar el token
   const { data: qr, error: qrError } = await supabase
     .from('qr_tokens')
     .select('id, piloto_id, usado, created_at')
@@ -147,7 +146,7 @@ export async function validarQRToken(
     return { valido: false, motivo: 'QR expirado (máximo 15 minutos)' }
   }
 
-  // 3. Obtener datos del piloto en query separada
+  // 3. Obtener datos del piloto
   const { data: piloto, error: pilotoError } = await supabase
     .from('pilotos')
     .select('id, nombre, rut, telefono, saldo_minutos, bloqueado, prueba_aprobada')
@@ -163,12 +162,7 @@ export async function validarQRToken(
     return { valido: false, motivo: 'Piloto bloqueado por el administrador', piloto }
   }
 
-  // 5. Verificar saldo mínimo (comentado hasta tener sistema de carga real)
-  // if (minSaldo > 0 && piloto.saldo_minutos < minSaldo) {
-  //   return { valido: false, motivo: `Saldo insuficiente (tiene ${piloto.saldo_minutos} min, necesita ${minSaldo} min)`, piloto }
-  // }
-
-  // 6. Verificar capacidad de pista
+  // 5. Verificar capacidad de pista
   const { count } = await supabase
     .from('sesiones')
     .select('*', { count: 'exact', head: true })
@@ -182,7 +176,6 @@ export async function validarQRToken(
     }
   }
 
-  // 7. Todo OK
   return {
     valido: true,
     motivo: 'Acceso autorizado',
@@ -193,13 +186,11 @@ export async function validarQRToken(
 }
 
 export async function confirmarIngreso(qr_id: string, piloto_id: string) {
-  // Marca QR como usado
   await supabase
     .from('qr_tokens')
     .update({ usado: true, usado_at: new Date().toISOString() })
     .eq('id', qr_id)
 
-  // Crea sesión activa
   const { data, error } = await supabase
     .from('sesiones')
     .insert({
