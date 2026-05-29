@@ -19,12 +19,26 @@ export async function registrarPiloto({
   if (error) return { error: error.message }
 
   if (data.user) {
-    // El perfil en pilotos se crea automáticamente via trigger en Supabase.
-    // Solo actualizamos los datos que el trigger recibe del metadata.
-    await supabase
+    // Esperamos brevemente para que el trigger de Supabase tenga tiempo de crear
+    // el registro en pilotos antes de nuestro upsert.
+    await new Promise(resolve => setTimeout(resolve, 800))
+
+    // Upsert: si el trigger ya creó el registro, actualiza los datos.
+    // Si por alguna razón no lo creó todavía, lo crea directamente.
+    const { error: upsertError } = await supabase
       .from('pilotos')
-      .update({ nombre, rut, telefono })
-      .eq('id', data.user.id)
+      .upsert(
+        { id: data.user.id, nombre, rut, telefono },
+        { onConflict: 'id' }
+      )
+
+    if (upsertError) {
+      // Si upsert falla por RLS, intentar solo el UPDATE
+      await supabase
+        .from('pilotos')
+        .update({ nombre, rut, telefono })
+        .eq('id', data.user.id)
+    }
   }
   return { ok: true }
 }
@@ -89,6 +103,28 @@ export async function generarQRToken(piloto_id?: string): Promise<string> {
     uid = user.id
   }
 
+  // Verificar que el piloto existe en la tabla pilotos.
+  // Si no existe (trigger aún no ejecutado), crearlo como fallback.
+  const { data: pilotoExiste } = await supabase
+    .from('pilotos')
+    .select('id')
+    .eq('id', uid)
+    .single()
+
+  if (!pilotoExiste) {
+    // Fallback: obtener metadata del usuario y crear el registro
+    const { data: { user } } = await supabase.auth.getUser()
+    const meta = user?.user_metadata || {}
+    await supabase
+      .from('pilotos')
+      .upsert({
+        id: uid,
+        nombre: meta.nombre || 'Piloto',
+        rut: meta.rut || '',
+        telefono: meta.telefono || '',
+      }, { onConflict: 'id' })
+  }
+
   // Invalida QR anteriores no usados de este piloto
   await supabase
     .from('qr_tokens')
@@ -125,8 +161,7 @@ export interface ValidacionResult {
 
 export async function validarQRToken(
   token: string,
-  maxPilotos: number = 6,
-  minSaldo: number = 0
+  maxPilotos: number = 20
 ): Promise<ValidacionResult> {
   // 1. Buscar el token
   const { data: qr, error: qrError } = await supabase
@@ -157,7 +192,7 @@ export async function validarQRToken(
     return { valido: false, motivo: 'Piloto no encontrado en el sistema' }
   }
 
-  // 4. Verificar bloqueo
+  // 4. Verificar bloqueo explícito por el administrador
   if (piloto.bloqueado) {
     return { valido: false, motivo: 'Piloto bloqueado por el administrador', piloto }
   }
@@ -176,6 +211,9 @@ export async function validarQRToken(
     }
   }
 
+  // NOTA: No se verifica saldo_minutos durante fase de pruebas.
+  // Cualquier piloto no bloqueado con QR válido puede ingresar.
+
   return {
     valido: true,
     motivo: 'Acceso autorizado',
@@ -183,41 +221,3 @@ export async function validarQRToken(
     qr_id: qr.id,
     token,
   }
-}
-
-export async function confirmarIngreso(qr_id: string, piloto_id: string) {
-  await supabase
-    .from('qr_tokens')
-    .update({ usado: true, usado_at: new Date().toISOString() })
-    .eq('id', qr_id)
-
-  const { data, error } = await supabase
-    .from('sesiones')
-    .insert({
-      piloto_id,
-      estado: 'activa',
-      inicio: new Date().toISOString()
-    })
-    .select()
-    .single()
-
-  return { ok: !error, sesion: data, error: error?.message }
-}
-
-export async function getPilotosEnSesion() {
-  const { data } = await supabase
-    .from('sesiones')
-    .select('*, pilotos(nombre, rut, saldo_minutos, vehiculos(marca, modelo))')
-    .eq('estado', 'activa')
-    .order('inicio', { ascending: false })
-
-  return data || []
-}
-
-export async function getTodosLosPilotos() {
-  const { data } = await supabase
-    .from('pilotos')
-    .select('*, vehiculos(*)')
-    .order('created_at', { ascending: false })
-  return data || []
-}
