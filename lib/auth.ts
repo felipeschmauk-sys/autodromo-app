@@ -221,3 +221,41 @@ export async function validarQRToken(
     qr_id: qr.id,
     token,
   }
+}
+
+export async function confirmarIngreso(qr_id: string, piloto_id: string) {
+  await supabase
+    .from('qr_tokens')
+    .update({ usado: true, usado_at: new Date().toISOString() })
+    .eq('id', qr_id)
+
+  const { data, error } = await supabase
+    .from('sesiones')
+    .insert({
+      piloto_id,
+      estado: 'activa',
+      inicio: new Date().toISOString()
+    })
+    .select()
+    .single()
+
+  return { ok: !error, sesion: data, error: error?.message }
+}
+
+export async function getPilotosEnSesion() {
+  const { data } = await supabase
+    .from('sesiones')
+    .select('*, pilotos(nombre, rut, saldo_minutos, vehiculos(marca, modelo))')
+    .eq('estado', 'activa')
+    .order('inicio', { ascending: false })
+
+  return data || []
+}
+
+export async function getTodosLosPilotos() {
+  const { data } = await supabase
+    .from('pilotos')
+    .select('*, vehiculos(*)')
+    .order('created_at', { ascending: false })
+  return data || []
+}
