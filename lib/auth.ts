@@ -161,7 +161,8 @@ export interface ValidacionResult {
 
 export async function validarQRToken(
   token: string,
-  maxPilotos: number = 20
+  maxPilotos: number = 20,
+  _minSaldo: number = 0  // ignorado durante fase de pruebas
 ): Promise<ValidacionResult> {
   // 1. Buscar el token
   const { data: qr, error: qrError } = await supabase
