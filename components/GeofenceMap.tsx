@@ -78,9 +78,10 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
         zoomControl: true,
       });
 
+      // Satélite Esri — gratuito, sin API key, buena cobertura Chile
       L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        { subdomains: "abcd", maxZoom: 20 }
+        "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+        { maxZoom: 20, attribution: "Tiles © Esri" }
       ).addTo(map);
 
       mapInstanceRef.current = map;
