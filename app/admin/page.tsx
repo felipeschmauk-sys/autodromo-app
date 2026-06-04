@@ -9,6 +9,7 @@ import {
   confirmarIngreso,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ssr: false,
@@ -722,9 +723,7 @@ export default function AdminPage() {
                 <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700 mb-4">
                   📍 Haz clic en el mapa para marcar los vértices de la geocerca. Mínimo 3 puntos para guardar.
                 </div>
-                <div className="w-full h-64 bg-gray-100 rounded-xl border border-gray-200 flex items-center justify-center text-gray-400 text-sm">
-                  Mapa disponible próximamente
-                </div>
+                <GeofenceMap />
                 <div className="flex gap-2 mt-3">
                   <button className="bg-gray-900 text-white text-xs font-medium px-4 py-2 rounded-xl hover:bg-gray-700 transition-colors">
                     ✓ Guardar geocerca
