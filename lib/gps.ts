@@ -15,6 +15,28 @@ export interface UbicacionPiloto {
   dentro_geocerca: boolean
 }
 
+// ── TRAZADO DE PISTA ──────────────────────────────────────────
+
+export async function getTrazadoActivo(): Promise<Coordenada[] | null> {
+  const { data } = await supabase
+    .from('trazado_pista')
+    .select('coordenadas')
+    .eq('activo', true)
+    .single()
+  return data?.coordenadas ?? null
+}
+
+export async function guardarTrazado(
+  coordenadas: Coordenada[],
+  nombre: string = 'Circuito principal'
+) {
+  await supabase.from('trazado_pista').update({ activo: false }).eq('activo', true)
+  const { error } = await supabase
+    .from('trazado_pista')
+    .insert({ nombre, coordenadas, activo: true })
+  return { error: error?.message }
+}
+
 // ── GEOCERCA ──────────────────────────────────────────────────
 
 export async function getGeocercaActiva(): Promise<Coordenada[] | null> {
