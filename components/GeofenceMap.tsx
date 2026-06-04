@@ -2,21 +2,52 @@
 
 /**
  * GeofenceMap.tsx — COLOCAR en: components/GeofenceMap.tsx
- *
- * Requiere: npm install leaflet @types/leaflet
- *
- * En admin/page.tsx usar así:
- *   import dynamic from 'next/dynamic'
- *   const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
+ * No requiere npm install — usa Leaflet via CDN
  */
 
 import { useEffect, useRef, useState } from "react";
-// Tipos de leaflet se usan via import dinámico, no aquí
 import { guardarGeocerca, getGeocercaActiva, getUltimasUbicaciones, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 
 interface Props {
   pilotosEnPista?: { id: string; nombre: string }[];
+}
+
+// Carga Leaflet CSS + JS desde CDN y devuelve una promesa que resuelve cuando está listo
+function cargarLeaflet(): Promise<any> {
+  return new Promise((resolve) => {
+    // Si ya está cargado, resolver inmediatamente
+    if ((window as any).L) {
+      resolve((window as any).L);
+      return;
+    }
+
+    // CSS
+    if (!document.getElementById("leaflet-css")) {
+      const link = document.createElement("link");
+      link.id = "leaflet-css";
+      link.rel = "stylesheet";
+      link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
+      document.head.appendChild(link);
+    }
+
+    // JS
+    if (!document.getElementById("leaflet-js")) {
+      const script = document.createElement("script");
+      script.id = "leaflet-js";
+      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+      script.onload = () => resolve((window as any).L);
+      document.head.appendChild(script);
+    } else {
+      // Script ya existe, esperar a que cargue
+      const interval = setInterval(() => {
+        if ((window as any).L) {
+          clearInterval(interval);
+          resolve((window as any).L);
+        }
+      }, 50);
+    }
+  });
 }
 
 export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
@@ -29,38 +60,27 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
   const [coordenadas, setCoordenadas] = useState<Coordenada[]>([]);
   const [modoEdicion, setModoEdicion] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [cargando, setCargando] = useState(true);
   const [mensaje, setMensaje] = useState<{ tipo: "ok" | "error"; texto: string } | null>(null);
 
   // Inicializar mapa
   useEffect(() => {
-    if (!mapRef.current || mapInstanceRef.current) return;
+    if (!mapRef.current) return;
 
-    // Import dinámico de leaflet (solo en cliente)
-    import("leaflet").then((L) => {
-      // Fix icono por defecto de Leaflet con webpack
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-
+    cargarLeaflet().then((L) => {
       if (!mapRef.current || mapInstanceRef.current) return;
 
+      setCargando(false);
+
       const map = L.map(mapRef.current, {
-        center: [-33.58, -70.58], // Las Vizcachas / Santiago sur
+        center: [-33.58, -70.58],
         zoom: 15,
         zoomControl: true,
       });
 
-      // Tile oscuro Carto Dark Matter
       L.tileLayer(
         "https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",
-        {
-          attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> © <a href="https://carto.com/">CARTO</a>',
-          subdomains: "abcd",
-          maxZoom: 20,
-        }
+        { subdomains: "abcd", maxZoom: 20 }
       ).addTo(map);
 
       mapInstanceRef.current = map;
@@ -70,13 +90,13 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
         if (coords && coords.length >= 3) {
           setCoordenadas(coords);
           dibujarPoligono(L, map, coords);
-          const bounds = L.latLngBounds(coords.map((c) => [c.lat, c.lng] as [number, number]));
+          const bounds = L.latLngBounds(coords.map((c: Coordenada) => [c.lat, c.lng]));
           map.fitBounds(bounds, { padding: [50, 50] });
         }
       });
 
-      // Cargar ubicaciones
-      getUltimasUbicaciones().then((data) => {
+      // Cargar posiciones de pilotos
+      getUltimasUbicaciones().then((data: any[]) => {
         actualizarMarcadores(L, map, data);
       });
     });
@@ -89,37 +109,35 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     };
   }, []);
 
-  // Click en el mapa para agregar puntos
+  // Modo edición: click para agregar puntos
   useEffect(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
-    import("leaflet").then((L) => {
-      const handleClick = (e: any) => {
-        if (!modoEdicion) return;
-        const nueva: Coordenada = { lat: e.latlng.lat, lng: e.latlng.lng };
-        setCoordenadas((prev) => {
-          const nuevas = [...prev, nueva];
-          dibujarPoligono(L, map, nuevas);
-          return nuevas;
-        });
-      };
+    const handleClick = (e: any) => {
+      if (!modoEdicion) return;
+      const nueva: Coordenada = { lat: e.latlng.lat, lng: e.latlng.lng };
+      setCoordenadas((prev) => {
+        const nuevas = [...prev, nueva];
+        const L = (window as any).L;
+        if (L) dibujarPoligono(L, map, nuevas);
+        return nuevas;
+      });
+    };
 
-      map.on("click", handleClick);
-      return () => { map.off("click", handleClick); };
-    });
-  }, [modoEdicion]);
+    map.on("click", handleClick);
+    return () => { map.off("click", handleClick); };
+  }, [modoEdicion, mapInstanceRef.current]);
 
-  // Realtime ubicaciones
+  // Realtime: actualizar posiciones cuando llegan datos nuevos
   useEffect(() => {
     const channel = supabase
       .channel("gps-live-map")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ubicaciones_piloto" }, () => {
         const map = mapInstanceRef.current;
-        if (!map) return;
-        import("leaflet").then((L) => {
-          getUltimasUbicaciones().then((data) => actualizarMarcadores(L, map, data));
-        });
+        const L = (window as any).L;
+        if (!map || !L) return;
+        getUltimasUbicaciones().then((data: any[]) => actualizarMarcadores(L, map, data));
       })
       .subscribe();
 
@@ -127,28 +145,19 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
   }, []);
 
   function dibujarPoligono(L: any, map: any, coords: Coordenada[]) {
-    // Limpiar anteriores
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
     if (polygonRef.current) { polygonRef.current.remove(); polygonRef.current = null; }
     if (coords.length < 2) return;
 
-    const latLngs = coords.map((c) => [c.lat, c.lng] as [number, number]);
-
-    polygonRef.current = L.polygon(latLngs, {
-      color: "#22c55e",
-      fillColor: "#22c55e",
-      fillOpacity: 0.07,
-      weight: 2,
-    }).addTo(map);
+    polygonRef.current = L.polygon(
+      coords.map((c) => [c.lat, c.lng]),
+      { color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.07, weight: 2 }
+    ).addTo(map);
 
     coords.forEach((c, i) => {
       const m = L.circleMarker([c.lat, c.lng], {
-        radius: 5,
-        color: "#22c55e",
-        fillColor: "#0a0a0a",
-        fillOpacity: 1,
-        weight: 2,
+        radius: 5, color: "#22c55e", fillColor: "#0a0a0a", fillOpacity: 1, weight: 2,
       }).bindTooltip(`Punto ${i + 1}`).addTo(map);
       vertexMarkersRef.current.push(m);
     });
@@ -156,7 +165,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
   function actualizarMarcadores(L: any, map: any, data: any[]) {
     pilotoMarkersRef.current.forEach((m) => m.remove());
-    (pilotoMarkersRef.current as any).clear();
+    pilotoMarkersRef.current.clear();
 
     data.forEach((u: any) => {
       if (!u.lat || !u.lng) return;
@@ -173,22 +182,20 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
       });
 
       const marker = L.marker([u.lat, u.lng], { icon })
-        .bindPopup(`
-          <div style="background:#111;color:#fff;padding:8px 10px;border-radius:8px;font-size:12px;min-width:130px;border:1px solid #333">
-            <div style="font-weight:700;margin-bottom:4px">${nombre}</div>
-            <div style="color:#22c55e;font-size:13px">${vel} km/h</div>
-            <div style="color:${color};font-size:11px;margin-top:2px">${dentro ? "✓ En pista" : "⚠ Fuera de pista"}</div>
-          </div>
-        `)
+        .bindPopup(`<div style="background:#111;color:#fff;padding:8px 10px;border-radius:8px;font-size:12px;min-width:120px;border:1px solid #222">
+          <div style="font-weight:700;margin-bottom:3px">${nombre}</div>
+          <div style="color:#22c55e">${vel} km/h</div>
+          <div style="color:${color};font-size:11px;margin-top:2px">${dentro ? "✓ En pista" : "⚠ Fuera de pista"}</div>
+        </div>`)
         .addTo(map);
 
-      (pilotoMarkersRef.current as any).set(u.piloto_id, marker);
+      pilotoMarkersRef.current.set(u.piloto_id, marker);
     });
   }
 
   const handleGuardar = async () => {
     if (coordenadas.length < 3) {
-      setMensaje({ tipo: "error", texto: "Se necesitan al menos 3 puntos para definir la geocerca." });
+      setMensaje({ tipo: "error", texto: "Se necesitan al menos 3 puntos." });
       return;
     }
     setGuardando(true);
@@ -212,18 +219,13 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
   return (
     <>
-      {/* Leaflet CSS — cargado una sola vez */}
       <style>{`
-        @import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
-        .leaflet-container { background: #0a0a0a; }
-        .leaflet-popup-content-wrapper {
-          background: transparent !important;
-          border: none !important;
-          box-shadow: none !important;
-          padding: 0 !important;
-        }
-        .leaflet-popup-tip { display: none; }
-        .leaflet-control-attribution { display: none; }
+        .leaflet-container { background: #0a0a0a !important; font-family: inherit; }
+        .leaflet-popup-content-wrapper { background: transparent !important; border: none !important; box-shadow: none !important; padding: 0 !important; }
+        .leaflet-popup-tip-container { display: none; }
+        .leaflet-control-attribution { display: none !important; }
+        .leaflet-bar a { background: #1a1a1a !important; color: #fff !important; border-color: #333 !important; }
+        .leaflet-bar a:hover { background: #222 !important; }
       `}</style>
 
       <div className="flex flex-col gap-3">
@@ -238,7 +240,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
                   : "bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700"
               }`}
             >
-              {modoEdicion ? "✏️ Editando — clic en el mapa para agregar puntos" : "✏️ Editar geocerca"}
+              {modoEdicion ? "✏️ Editando — clic en el mapa para marcar puntos" : "✏️ Editar geocerca"}
             </button>
             {coordenadas.length > 0 && (
               <span className="text-xs text-gray-500">
@@ -279,11 +281,14 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
         )}
 
         {/* Mapa */}
-        <div
-          ref={mapRef}
-          className="w-full rounded-xl overflow-hidden border border-gray-800"
-          style={{ height: "420px" }}
-        />
+        <div className="relative w-full rounded-xl overflow-hidden border border-gray-800" style={{ height: "420px" }}>
+          {cargando && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-950 z-10">
+              <span className="text-xs text-gray-500 animate-pulse">Cargando mapa...</span>
+            </div>
+          )}
+          <div ref={mapRef} style={{ width: "100%", height: "100%" }} />
+        </div>
 
         {modoEdicion && (
           <p className="text-xs text-gray-500">
