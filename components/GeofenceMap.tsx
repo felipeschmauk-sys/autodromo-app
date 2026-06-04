@@ -11,7 +11,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { Map, Polygon, CircleMarker } from "leaflet";
+// Tipos de leaflet se usan via import dinámico, no aquí
 import { guardarGeocerca, getGeocercaActiva, getUltimasUbicaciones, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 
@@ -21,10 +21,10 @@ interface Props {
 
 export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const mapInstanceRef = useRef<Map | null>(null);
-  const polygonRef = useRef<Polygon | null>(null);
-  const vertexMarkersRef = useRef<CircleMarker[]>([]);
-  const pilotoMarkersRef = useRef<Map<string, any>>(new Map());
+  const mapInstanceRef = useRef<any>(null);
+  const polygonRef = useRef<any>(null);
+  const vertexMarkersRef = useRef<any[]>([]);
+  const pilotoMarkersRef = useRef<globalThis.Map<string, any>>(new globalThis.Map());
 
   const [coordenadas, setCoordenadas] = useState<Coordenada[]>([]);
   const [modoEdicion, setModoEdicion] = useState(false);
@@ -126,7 +126,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  function dibujarPoligono(L: any, map: Map, coords: Coordenada[]) {
+  function dibujarPoligono(L: any, map: any, coords: Coordenada[]) {
     // Limpiar anteriores
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
@@ -154,7 +154,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     });
   }
 
-  function actualizarMarcadores(L: any, map: Map, data: any[]) {
+  function actualizarMarcadores(L: any, map: any, data: any[]) {
     pilotoMarkersRef.current.forEach((m) => m.remove());
     (pilotoMarkersRef.current as any).clear();
 
