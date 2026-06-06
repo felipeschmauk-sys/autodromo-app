@@ -44,6 +44,7 @@ const STROKE_COLOR: Record<string, string> = {
   roja:           "#ef4444",
   blanca:         "#9ca3af",
   negra:          "#6b7280",
+  safety_car:     "#f97316",
 };
 
 const FLAG_LABEL: Record<string, string> = {
@@ -53,6 +54,7 @@ const FLAG_LABEL: Record<string, string> = {
   roja:           "Bandera roja",
   blanca:         "Vehículo lento",
   negra:          "A boxes",
+  safety_car:     "Safety Car",
 };
 
 export default function DireccionCarrera() {
@@ -214,9 +216,10 @@ export default function DireccionCarrera() {
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mapa en tiempo real</span>
         </div>
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${
-          bandera === "verde"             ? "bg-green-950  text-green-400"  :
-          bandera === "roja"              ? "bg-red-950    text-red-400 animate-pulse" :
-          bandera.startsWith("amarilla") ? "bg-yellow-950 text-yellow-400" :
+          bandera === "verde"              ? "bg-green-950  text-green-400"  :
+          bandera === "roja"               ? "bg-red-950    text-red-400 animate-pulse" :
+          bandera.startsWith("amarilla")   ? "bg-yellow-950 text-yellow-400" :
+          bandera === "safety_car"         ? "bg-orange-950 text-orange-400 animate-pulse" :
           "bg-gray-800 text-gray-400"
         }`}>
           <span className="w-1.5 h-1.5 rounded-full bg-current" />
@@ -251,7 +254,7 @@ export default function DireccionCarrera() {
                 {/* Sectores coloreados según su bandera */}
                 {sectores.length > 0 ? (
                   sectores.map((s, i) => {
-                    const globalOverride = bandera === "roja" || bandera === "amarilla";
+                    const globalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "safety_car";
                     const efectiva       = globalOverride ? bandera : s.bandera;
                     const segStroke      = efectiva === "roja"    ? "#ef4444"
                                         : efectiva === "amarilla" ? "#eab308"

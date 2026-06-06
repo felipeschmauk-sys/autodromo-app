@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import GpsPiloto from "@/components/GpsPiloto";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
@@ -45,6 +45,7 @@ const BANDERAS_INFO = [
   { color: "bg-yellow-400", nombre: "Bandera amarilla",        desc: "Peligro en la zona indicada. Reducir velocidad, no adelantar y estar preparado para detenerse." },
   { color: "bg-yellow-400", nombre: "Bandera amarilla doble",  desc: "Peligro grave o vehículo detenido en pista. Velocidad máxima reducida. Adelantar estrictamente prohibido." },
   { color: "bg-green-500",  nombre: "Bandera verde",           desc: "Pista despejada. Circulación normal habilitada." },
+  { color: "bg-orange-500", nombre: "Safety Car",              desc: "Vehículo de seguridad en pista. Todos los pilotos deben seguirlo sin adelantar." },
   { color: "bg-white border border-gray-600", nombre: "Bandera blanca", desc: "Vehículo lento en pista (ambulancia, grúa, seguridad). Precaución máxima." },
   { color: "bg-gray-900 border border-gray-600",  nombre: "Bandera negra", desc: "El piloto señalado debe ingresar a boxes inmediatamente." },
 ];
@@ -58,6 +59,7 @@ const FLAG_CONFIG: Record<string, {
   amarilla:       { bg: "bg-yellow-950", border: "border-yellow-800", color: "text-yellow-400", subColor: "text-yellow-700", emoji: "🟡",    title: "BANDERA AMARILLA", desc: "Reducir velocidad · Prohibido adelantar",              pulse: false },
   amarilla_doble: { bg: "bg-yellow-950", border: "border-yellow-700", color: "text-yellow-300", subColor: "text-yellow-600", emoji: "🟡🟡", title: "DOBLE AMARILLA",   desc: "Peligro grave · Velocidad reducida · No adelantar",    pulse: true  },
   roja:           { bg: "bg-red-950",    border: "border-red-700",    color: "text-red-400",    subColor: "text-red-700",    emoji: "🔴",    title: "BANDERA ROJA",     desc: "Detención inmediata · Dirigirse a boxes",              pulse: true  },
+  safety_car:     { bg: "bg-orange-950", border: "border-orange-700", color: "text-orange-400", subColor: "text-orange-700", emoji: "🚗",    title: "SAFETY CAR",       desc: "Seguir al safety car · No adelantar",                 pulse: true  },
   blanca:         { bg: "bg-gray-900",   border: "border-gray-700",   color: "text-gray-200",   subColor: "text-gray-500",   emoji: "⬜",    title: "VEHÍCULO LENTO",  desc: "Máxima precaución · No adelantar",                    pulse: false },
   negra:          { bg: "bg-gray-950",   border: "border-gray-600",   color: "text-white",      subColor: "text-gray-400",   emoji: "⬛",    title: "INGRESE A BOXES", desc: "El piloto señalado debe retirarse de pista",          pulse: false },
 };
@@ -68,6 +70,7 @@ function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
   const [prec, setPrec]     = useState<number | null>(null);
   const [gpsOk, setGpsOk]   = useState(false);
   const [dentro, setDentro] = useState<boolean | null>(null);
+  const gpsHist             = useRef<[number, number][]>([]);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
@@ -76,8 +79,13 @@ function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
         setGpsOk(true);
         setVel(pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : 0);
         setPrec(Math.round(pos.coords.accuracy));
+        // Suavizado GPS: promedia las últimas 4 lecturas para reducir jitter
+        gpsHist.current.push([pos.coords.latitude, pos.coords.longitude]);
+        if (gpsHist.current.length > 4) gpsHist.current.shift();
+        const lat = gpsHist.current.reduce((s, p) => s + p[0], 0) / gpsHist.current.length;
+        const lng = gpsHist.current.reduce((s, p) => s + p[1], 0) / gpsHist.current.length;
         if (geocercaCoords.length >= 3) {
-          setDentro(puntoEnGeocerca({ lat: pos.coords.latitude, lng: pos.coords.longitude }, geocercaCoords));
+          setDentro(puntoEnGeocerca({ lat, lng }, geocercaCoords));
         }
       },
       () => setGpsOk(false),
@@ -138,16 +146,18 @@ function TrackSVG({
   const strokeColor: Record<string, string> = {
     roja: "#ef4444", amarilla: "#eab308", amarilla_doble: "#f59e0b",
     verde: "#22c55e", blanca: "#9ca3af", negra: "#6b7280",
+    safety_car: "#f97316",
   };
   const glowColor: Record<string, string> = {
     roja: "rgba(239,68,68,0.3)", amarilla: "rgba(234,179,8,0.3)", amarilla_doble: "rgba(245,158,11,0.3)",
     verde: "rgba(34,197,94,0.2)", blanca: "rgba(156,163,175,0.15)", negra: "rgba(107,114,128,0.15)",
+    safety_car: "rgba(249,115,22,0.3)",
   };
   const stroke = strokeColor[bandera] || strokeColor.verde;
   const glow   = glowColor[bandera]   || glowColor.verde;
 
   // Flag global tiene prioridad sobre sectores
-  const globalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "amarilla_doble";
+  const globalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "amarilla_doble" || bandera === "safety_car";
   const usarSectores   = sectores.length > 0 && !globalOverride;
 
   if (!trazado.length) {
@@ -390,6 +400,24 @@ export default function Home() {
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
+  }, [stage]);
+
+  // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
+  useEffect(() => {
+    if (stage !== "app") return;
+    let wakeLock: any = null;
+    const request = async () => {
+      if (!("wakeLock" in navigator)) return;
+      try { wakeLock = await (navigator as any).wakeLock.request("screen"); }
+      catch { /* no disponible en este navegador */ }
+    };
+    request();
+    const onVisible = () => { if (document.visibilityState === "visible") request(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      wakeLock?.release().catch(() => {});
+    };
   }, [stage]);
 
   // ── Detección de orientación ──

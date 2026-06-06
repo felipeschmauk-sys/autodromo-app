@@ -336,25 +336,29 @@ export default function AdminPage() {
               bandera === "roja"             ? "bg-red-50    border-red-300"
               : bandera === "amarilla"       ? "bg-yellow-50 border-yellow-300"
               : bandera === "amarilla_doble" ? "bg-yellow-50 border-yellow-400"
+              : bandera === "safety_car"     ? "bg-orange-50 border-orange-300"
               : "bg-green-50 border-green-300"
             }`}>
               {/* Estado actual */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                    bandera === "roja"              ? "bg-red-500 animate-pulse"
+                    bandera === "roja"               ? "bg-red-500 animate-pulse"
                     : bandera.startsWith("amarilla") ? "bg-yellow-500 animate-pulse"
+                    : bandera === "safety_car"        ? "bg-orange-500 animate-pulse"
                     : "bg-green-500 animate-pulse"
                   }`} />
                   <div>
                     <p className={`font-bold text-base leading-tight ${
-                      bandera === "roja"              ? "text-red-700"
+                      bandera === "roja"               ? "text-red-700"
                       : bandera.startsWith("amarilla") ? "text-yellow-700"
+                      : bandera === "safety_car"        ? "text-orange-700"
                       : "text-green-700"
                     }`}>
-                      {bandera === "roja"              ? "🚩 BANDERA ROJA — Detención inmediata"
-                       : bandera === "amarilla"        ? "🟡 BANDERA AMARILLA — Reducir velocidad"
-                       : bandera === "amarilla_doble"  ? "🟡🟡 DOBLE AMARILLA — Peligro grave"
+                      {bandera === "roja"             ? "🚩 BANDERA ROJA — Detención inmediata"
+                       : bandera === "amarilla"       ? "🟡 BANDERA AMARILLA — Reducir velocidad"
+                       : bandera === "amarilla_doble" ? "🟡🟡 DOBLE AMARILLA — Peligro grave"
+                       : bandera === "safety_car"     ? "🚗 SAFETY CAR — Seguir al safety car"
                        : "🟢 PISTA HABILITADA"}
                     </p>
                     <p className="text-sm text-gray-500">
@@ -390,6 +394,17 @@ export default function AdminPage() {
                   🟡 Amarilla
                 </button>
                 <button
+                  onClick={() => aplicarBandera("safety_car")}
+                  disabled={bandera === "safety_car" || cargandoBandera}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                    bandera === "safety_car"
+                      ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200 animate-pulse"
+                      : "bg-white border-orange-300 text-orange-700 hover:bg-orange-50 disabled:opacity-40"
+                  }`}
+                >
+                  🚗 Safety Car
+                </button>
+                <button
                   onClick={() => aplicarBandera("roja")}
                   disabled={bandera === "roja" || cargandoBandera}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
@@ -418,7 +433,7 @@ export default function AdminPage() {
                   {sectores.map((s, i) => {
                     const colors = ["bg-blue-400", "bg-amber-400", "bg-emerald-400", "bg-pink-400", "bg-violet-400", "bg-orange-400", "bg-cyan-400", "bg-lime-400"];
                     const dotColor = colors[i % colors.length];
-                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla";
+                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "safety_car";
                     const efectiva = isGlobalOverride ? bandera : s.bandera;
                     return (
                       <div key={s.id} className="px-5 py-3 flex items-center gap-4">
@@ -428,11 +443,12 @@ export default function AdminPage() {
                         <span className="text-sm font-medium text-gray-800 flex-1">{s.nombre}</span>
                         {/* Estado efectivo */}
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
-                          efectiva === "roja"             ? "bg-red-100 text-red-600"
-                          : efectiva === "amarilla"       ? "bg-yellow-100 text-yellow-700"
+                          efectiva === "roja"           ? "bg-red-100 text-red-600"
+                          : efectiva === "amarilla"     ? "bg-yellow-100 text-yellow-700"
+                          : efectiva === "safety_car"   ? "bg-orange-100 text-orange-700"
                           : "bg-green-100 text-green-700"
                         }`}>
-                          {efectiva === "roja" ? "🔴 Roja" : efectiva === "amarilla" ? "🟡 Amarilla" : "🟢 Verde"}
+                          {efectiva === "roja" ? "🔴 Roja" : efectiva === "amarilla" ? "🟡 Amarilla" : efectiva === "safety_car" ? "🚗 SC" : "🟢 Verde"}
                         </span>
                         {/* Botones solo si no hay override global */}
                         {!isGlobalOverride && (
