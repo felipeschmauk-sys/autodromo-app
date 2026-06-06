@@ -1,0 +1,458 @@
+RACE CONTROL
+
+Documento Base del Proyecto
+
+Visión, Alcance y Roadmap Inicial
+
+Versión: 1.0
+
+Autores:
+
+- Andrés Werner
+- Felipe [Apellido]
+
+Fecha:
+Junio 2026
+
+---
+
+1. INTRODUCCIÓN
+
+Race Control nace desde una necesidad real observada en la organización y operación de competencias de automovilismo.
+
+Actualmente, gran parte de la gestión de eventos deportivos se realiza mediante múltiples herramientas independientes: formularios, correos electrónicos, planillas Excel, grupos de WhatsApp, radios de comunicación y documentación en PDF.
+
+Esta fragmentación genera ineficiencias, errores administrativos, problemas de comunicación y riesgos operacionales.
+
+El objetivo de Race Control es centralizar todas las etapas de una competencia deportiva en una única plataforma digital.
+
+---
+
+2. VISIÓN
+
+Convertirse en la plataforma integral de referencia para la gestión y control de competencias deportivas en Latinoamérica.
+
+Race Control deberá permitir administrar completamente una competencia, desde la inscripción de un participante hasta la publicación de resultados finales.
+
+---
+
+3. MISIÓN
+
+Digitalizar los procesos deportivos, administrativos y operacionales de las competencias, mejorando la seguridad, trazabilidad, eficiencia y experiencia de organizadores, oficiales y competidores.
+
+---
+
+4. PROBLEMA ACTUAL
+
+Los organizadores de eventos enfrentan problemas recurrentes:
+
+Administración
+
+- Inscripciones manuales.
+- Pagos difíciles de controlar.
+- Documentación dispersa.
+- Reglamentos no leídos.
+- Información duplicada.
+
+Operación
+
+- Comunicación limitada con pilotos.
+- Dependencia de radios.
+- Dificultad para registrar incidentes.
+- Falta de trazabilidad.
+
+Seguridad
+
+- Comunicación tardía de incidentes.
+- Dificultad para verificar recepción de información.
+- Escasa digitalización de procedimientos críticos.
+
+---
+
+5. PROPUESTA DE VALOR
+
+Race Control centraliza toda la operación de una competencia deportiva en una única plataforma.
+
+Permite administrar:
+
+- Competidores.
+- Vehículos.
+- Eventos.
+- Pagos.
+- Reglamentos.
+- Revisiones técnicas.
+- Control de carrera.
+- Incidentes.
+- Resultados.
+
+Todo bajo un único ecosistema.
+
+---
+
+6. DIFERENCIADOR PRINCIPAL
+
+La principal innovación del proyecto es el sistema de comunicación de carrera en tiempo real.
+
+A diferencia de plataformas tradicionales que se enfocan únicamente en inscripciones o resultados, Race Control busca transformar el teléfono móvil en una extensión digital de Dirección de Carrera.
+
+La plataforma permitirá:
+
+- Localizar participantes mediante GPS.
+- Dividir circuitos por sectores.
+- Detectar ubicación de competidores.
+- Comunicar banderas e instrucciones en tiempo real.
+- Mantener registro completo de todas las acciones.
+
+Este es el núcleo estratégico del proyecto.
+
+---
+
+7. ESTRUCTURA GENERAL DEL SISTEMA
+
+Módulo 1: Competidores
+
+Objetivo:
+
+Administrar toda la información de los participantes.
+
+Funciones:
+
+- Perfil de piloto.
+- Perfil de navegante/copiloto.
+- Perfil de equipo.
+- Historial deportivo.
+- Licencias.
+- Vehículos asociados.
+- Documentos personales.
+
+---
+
+Módulo 2: Administración
+
+Objetivo:
+
+Gestionar eventos y participantes.
+
+Funciones:
+
+- Campeonatos.
+- Eventos.
+- Categorías.
+- Inscripciones.
+- Pagos.
+- Facturación.
+- Estados administrativos.
+
+---
+
+Módulo 3: Documentación
+
+Objetivo:
+
+Eliminar la dependencia del papel.
+
+Funciones:
+
+- Reglamento técnico.
+- Reglamento deportivo.
+- Manual del piloto.
+- Briefing.
+- Comunicados oficiales.
+
+Cada aceptación deberá registrar:
+
+- Usuario.
+- Fecha.
+- Hora.
+- Evento.
+
+---
+
+Módulo 4: Verificación Técnica
+
+Objetivo:
+
+Digitalizar las inspecciones técnicas.
+
+Funciones:
+
+- Checklist configurable.
+- Fotografías.
+- Observaciones.
+- Estado aprobado/rechazado.
+- Firma digital del inspector.
+
+---
+
+Módulo 5: Race Control
+
+Objetivo:
+
+Administrar la operación en pista.
+
+Funciones:
+
+- Mapa del circuito.
+- GPS en tiempo real.
+- Control por sectores.
+- Gestión de incidentes.
+- Control de banderas.
+- Dirección de carrera.
+
+Este módulo constituye el corazón del proyecto.
+
+---
+
+Módulo 6: Sporting
+
+Objetivo:
+
+Gestionar la actividad deportiva.
+
+Funciones:
+
+- Reclamos.
+- Investigaciones.
+- Penalizaciones.
+- Resoluciones.
+- Historial disciplinario.
+
+---
+
+Módulo 7: Resultados
+
+Objetivo:
+
+Gestionar clasificaciones y campeonatos.
+
+Funciones:
+
+- Resultados.
+- Clasificaciones.
+- Campeonatos.
+- Ranking histórico.
+- Estadísticas.
+
+---
+
+8. MVP (PRODUCTO MÍNIMO VIABLE)
+
+Objetivo
+
+Validar el concepto en una carrera real.
+
+El MVP NO debe intentar resolver todos los problemas.
+
+Debe enfocarse únicamente en demostrar la viabilidad del sistema de control de carrera.
+
+---
+
+Funcionalidades MVP
+
+Eventos
+
+- Crear evento.
+- Administrar participantes.
+
+Pilotos
+
+- Registro básico.
+- Asociación a evento.
+
+Pistas
+
+- Carga de archivos KML/KMZ.
+- Visualización de recorrido.
+
+Sectores
+
+- Creación de sectores.
+- Edición de sectores.
+
+GPS
+
+- Visualización en tiempo real.
+- Posición de participantes.
+
+Control de Carrera
+
+- Activación de banderas.
+- Activación por sector.
+- Activación global.
+
+Aplicación Piloto
+
+Visualización simplificada:
+
+- Verde.
+- Amarilla.
+- Roja.
+- Azul.
+- Negra.
+- Safety Car.
+- Fin de carrera.
+
+Diseñada para máxima legibilidad y mínima distracción.
+
+---
+
+9. CRITERIOS DE ÉXITO DEL MVP
+
+El MVP será considerado exitoso cuando logre:
+
+- 20 participantes conectados simultáneamente.
+- Actualización GPS estable.
+- Sectores operativos.
+- Comunicación de banderas en tiempo real.
+- Uso completo durante una carrera real.
+- Registro histórico de acciones.
+
+---
+
+10. PRINCIPIOS DE DESARROLLO
+
+Prioridad N°1
+
+Seguridad.
+
+Toda decisión debe favorecer la seguridad operacional.
+
+---
+
+Prioridad N°2
+
+Simplicidad.
+
+El usuario en pista debe recibir únicamente la información necesaria.
+
+---
+
+Prioridad N°3
+
+Trazabilidad.
+
+Toda acción relevante debe quedar registrada.
+
+---
+
+Prioridad N°4
+
+Escalabilidad.
+
+La arquitectura debe permitir crecimiento futuro.
+
+---
+
+11. REGISTRO LEGAL DE CARRERA
+
+Todas las acciones importantes deberán registrarse automáticamente.
+
+Ejemplos:
+
+- Activación de bandera.
+- Modificación de resultados.
+- Aprobación técnica.
+- Aplicación de sanciones.
+- Aceptación de reglamentos.
+
+Cada registro deberá almacenar:
+
+- Usuario.
+- Fecha.
+- Hora.
+- Acción.
+- Evento asociado.
+
+Este historial permitirá reconstruir completamente una competencia.
+
+---
+
+12. ROADMAP
+
+Fase 1
+
+Control de carrera.
+
+Incluye:
+
+- Eventos.
+- Pilotos.
+- GPS.
+- Pista.
+- Sectores.
+- Banderas.
+
+---
+
+Fase 2
+
+Administración.
+
+Incluye:
+
+- Inscripciones.
+- Documentos.
+- Pagos.
+- Check-in.
+
+---
+
+Fase 3
+
+Control técnico y deportivo.
+
+Incluye:
+
+- Revisiones técnicas.
+- Incidentes.
+- Penalizaciones.
+
+---
+
+Fase 4
+
+Resultados y campeonatos.
+
+Incluye:
+
+- Clasificaciones.
+- Rankings.
+- Estadísticas.
+
+---
+
+Fase 5
+
+Expansión a otras disciplinas.
+
+Posibles mercados:
+
+- Karting.
+- Rally.
+- Motociclismo.
+- Enduro.
+- Ciclismo.
+- Running.
+
+---
+
+13. VISIÓN A LARGO PLAZO
+
+Un competidor debería poder llegar a cualquier evento utilizando Race Control y encontrar en una sola aplicación:
+
+- Su licencia.
+- Sus vehículos.
+- Sus inscripciones.
+- Sus pagos.
+- Los reglamentos.
+- El briefing.
+- La revisión técnica.
+- Las comunicaciones oficiales.
+- Las banderas de carrera.
+- Los resultados.
+
+Todo desde una única plataforma.
+
+Race Control no busca ser solamente un software para carreras.
+
+Busca convertirse en la infraestructura digital que conecta organizadores, oficiales y competidores dentro de un mismo ecosistema deportivo.
