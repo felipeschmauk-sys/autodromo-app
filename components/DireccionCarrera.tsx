@@ -7,7 +7,7 @@
  * Lista de pilotos al costado derecho.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
@@ -58,6 +58,61 @@ export default function DireccionCarrera() {
   const [bandera,  setBandera]  = useState("verde");
   const [sectores, setSectores] = useState<SectorInfo[]>([]);
   const [tick,     setTick]     = useState(0);
+
+  // Refs para acceder a valores actuales dentro de callbacks de Supabase (evita stale closures)
+  const trazadoRef    = useRef<Coordenada[]>([]);
+  const sectoresRef   = useRef<SectorInfo[]>([]);
+  const banderaRef    = useRef<string>("verde");
+  // Track auto-yellows: sectorId → pilotoId que lo causó
+  const autoYellowRef = useRef<Map<string, string>>(new Map());
+
+  // Sincronizar refs con estado (para callbacks de Supabase)
+  useEffect(() => { trazadoRef.current  = trazado;  }, [trazado]);
+  useEffect(() => { sectoresRef.current = sectores; }, [sectores]);
+  useEffect(() => { banderaRef.current  = bandera;  }, [bandera]);
+
+  // ── Auto-yellow helpers ────────────────────────────────────
+  function findClosestIdx(lat: number, lng: number, trazado: Coordenada[]): number {
+    let minD = Infinity, closest = 0;
+    trazado.forEach((c, i) => {
+      const d = (lat - c.lat) ** 2 + (lng - c.lng) ** 2;
+      if (d < minD) { minD = d; closest = i; }
+    });
+    return closest;
+  }
+
+  function detectSectorByPos(lat: number, lng: number): SectorInfo | null {
+    const t = trazadoRef.current;
+    const s = sectoresRef.current;
+    if (!t.length || !s.length) return null;
+    const idx = findClosestIdx(lat, lng, t);
+    return s.find(sec => idx >= sec.punto_inicio && idx <= sec.punto_fin) || null;
+  }
+
+  async function checkAutoYellow(pilotoId: string, lat: number, lng: number, velocidad: number) {
+    // Solo aplica cuando la pista está en verde (sin override global)
+    if (banderaRef.current !== "verde") return;
+
+    const stopped = velocidad <= 2;
+
+    if (stopped) {
+      const sector = detectSectorByPos(lat, lng);
+      if (sector && sector.bandera === "verde" && !autoYellowRef.current.has(sector.id)) {
+        autoYellowRef.current.set(sector.id, pilotoId);
+        await supabase.from("sectores_pista").update({ bandera: "amarilla" }).eq("id", sector.id);
+        console.log(`🟡 Auto-amarilla: ${sector.nombre} (piloto ${pilotoId})`);
+      }
+    } else {
+      // Piloto se mueve — revertir su auto-amarilla si la tenía
+      for (const [sectorId, pId] of autoYellowRef.current.entries()) {
+        if (pId === pilotoId) {
+          autoYellowRef.current.delete(sectorId);
+          await supabase.from("sectores_pista").update({ bandera: "verde" }).eq("id", sectorId);
+          console.log(`🟢 Revertido auto-amarilla: sector ${sectorId}`);
+        }
+      }
+    }
+  }
 
   // Cargar circuito
   useEffect(() => {
@@ -147,6 +202,8 @@ export default function DireccionCarrera() {
         { event: "INSERT", schema: "public", table: "ubicaciones_piloto" },
         payload => {
           const u = payload.new as any;
+
+          // Actualizar posición del piloto en el mapa
           setPilotos(prev => {
             const next = new Map(prev);
             const p    = next.get(u.piloto_id);
@@ -162,6 +219,11 @@ export default function DireccionCarrera() {
             }
             return next;
           });
+
+          // Auto-yellow: si el piloto está detenido, amarillar su sector
+          if (u.lat && u.lng) {
+            checkAutoYellow(u.piloto_id, u.lat, u.lng, u.velocidad ?? 0);
+          }
         })
       .subscribe();
 

@@ -6,23 +6,36 @@
  * Editor de sectores de pista.
  * Usa un selector numérico (+/-) para elegir cuántos sectores,
  * divide el trazado en partes iguales y permite renombrar cada uno.
+ * Muestra un mapa Leaflet real con marcadores arrastrables en los límites.
  */
 
 import { useEffect, useState, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
+
+const LeafletSectoresMap = dynamic(
+  () => import("@/components/LeafletSectoresMap"),
+  { ssr: false }
+);
 
 const COLORS = [
   "#60a5fa", "#f59e0b", "#34d399", "#f472b6",
   "#a78bfa", "#fb923c", "#22d3ee", "#4ade80",
 ];
 
-const W = 480, H = 240, PAD = 24;
+interface Rango {
+  nombre: string;
+  inicio: number;
+  fin:    number;
+  color:  string;
+}
 
 export default function SectoresEditor() {
   const [trazado,   setTrazado]   = useState<Coordenada[]>([]);
   const [cantidad,  setCantidad]  = useState(1);
   const [nombres,   setNombres]   = useState<string[]>(["Sector 1"]);
+  const [rangos,    setRangos]    = useState<Rango[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [mensaje,   setMensaje]   = useState<{ texto: string; ok: boolean } | null>(null);
   const [cargando,  setCargando]  = useState(true);
@@ -51,52 +64,61 @@ export default function SectoresEditor() {
     init();
   }, []);
 
-  // ── Cuando cambia la cantidad, ajustar nombres ────────────
+  // ── Cuando cambia la cantidad, ajustar nombres y recalcular rangos ─
   const cambiarCantidad = (nueva: number) => {
     if (nueva < 1 || nueva > 8) return;
     const n = [...nombres];
     while (n.length < nueva) n.push(`Sector ${n.length + 1}`);
-    setNombres(n.slice(0, nueva));
+    const nextNombres = n.slice(0, nueva);
+    setNombres(nextNombres);
     setCantidad(nueva);
+    // Recalcular rangos con división uniforme al cambiar cantidad
+    if (trazado.length) {
+      const total = trazado.length;
+      const tramo = Math.floor(total / nueva);
+      setRangos(Array.from({ length: nueva }, (_, i) => ({
+        nombre: nextNombres[i] || `Sector ${i + 1}`,
+        inicio: i * tramo,
+        fin:    i === nueva - 1 ? total - 1 : (i + 1) * tramo,
+        color:  COLORS[i % COLORS.length],
+      })));
+    }
   };
 
-  // ── Calcular rangos dividiendo el trazado en partes iguales
-  const calcularRangos = useCallback(() => {
-    if (!trazado.length || cantidad < 1) return [];
-    const total  = trazado.length;
-    const tramo  = Math.floor(total / cantidad);
-    return Array.from({ length: cantidad }, (_, i) => ({
-      nombre: nombres[i] || `Sector ${i + 1}`,
-      inicio: i * tramo,
-      fin:    i === cantidad - 1 ? total - 1 : (i + 1) * tramo,
-      color:  COLORS[i % COLORS.length],
-    }));
-  }, [trazado, cantidad, nombres]);
+  // ── Inicializar rangos cuando trazado o cantidad cambian ───
+  useEffect(() => {
+    if (!trazado.length || cantidad < 1) return;
+    const total = trazado.length;
+    const tramo = Math.floor(total / cantidad);
+    setRangos(prev => {
+      // Si ya hay rangos y coincide la cantidad, solo actualizar nombres
+      if (prev.length === cantidad) {
+        return prev.map((r, i) => ({ ...r, nombre: nombres[i] || r.nombre }));
+      }
+      // División uniforme
+      return Array.from({ length: cantidad }, (_, i) => ({
+        nombre: nombres[i] || `Sector ${i + 1}`,
+        inicio: i * tramo,
+        fin:    i === cantidad - 1 ? total - 1 : (i + 1) * tramo,
+        color:  COLORS[i % COLORS.length],
+      }));
+    });
+  }, [trazado, cantidad]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const rangos = calcularRangos();
+  // ── Actualizar nombres en rangos cuando se editan ──────────
+  useEffect(() => {
+    setRangos(prev => prev.map((r, i) => ({ ...r, nombre: nombres[i] || r.nombre })));
+  }, [nombres]);
 
-  // ── Proyección SVG ──────────────────────────────────────────
-  const lats   = trazado.map(c => c.lat);
-  const lngs   = trazado.map(c => c.lng);
-  const minLat = trazado.length ? Math.min(...lats) : 0;
-  const maxLat = trazado.length ? Math.max(...lats) : 1;
-  const minLng = trazado.length ? Math.min(...lngs) : 0;
-  const maxLng = trazado.length ? Math.max(...lngs) : 1;
-  const dLat   = maxLat - minLat || 0.0001;
-  const dLng   = maxLng - minLng || 0.0001;
-  const scaleX = (W - PAD * 2) / dLng;
-  const scaleY = (H - PAD * 2) / dLat;
-  const scale  = Math.min(scaleX, scaleY);
-  const offX   = (W - dLng * scale) / 2;
-  const offY   = (H - dLat * scale) / 2;
-
-  const toX = (lng: number) => offX + (lng - minLng) * scale;
-  const toY = (lat: number) => H - offY - (lat - minLat) * scale;
-
-  const sectorPath = (inicio: number, fin: number) =>
-    trazado.slice(inicio, fin + 1)
-      .map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`)
-      .join(" ");
+  // ── Handler para drag de marcadores de límite ──────────────
+  const handleBoundaryChange = useCallback((boundaryIdx: number, newFin: number) => {
+    setRangos(prev => {
+      const next = [...prev];
+      next[boundaryIdx]     = { ...next[boundaryIdx],     fin:   newFin };
+      next[boundaryIdx + 1] = { ...next[boundaryIdx + 1], inicio: newFin };
+      return next;
+    });
+  }, []);
 
   // ── Guardar en Supabase ─────────────────────────────────────
   const guardarSectores = async () => {
@@ -188,61 +210,26 @@ export default function SectoresEditor() {
         </div>
       </div>
 
-      {/* ── Mapa del trazado con sectores coloreados ── */}
-      <div className="bg-gray-950 border border-gray-800 rounded-2xl overflow-hidden">
+      {/* ── Mapa Leaflet con sectores coloreados y límites arrastrables ── */}
+      <div>
         {!trazado.length ? (
-          <div className="py-12 text-center text-gray-600 text-sm">
+          <div className="bg-gray-950 border border-gray-800 rounded-2xl py-12 text-center text-gray-600 text-sm">
             <p className="text-2xl mb-2">🗺</p>
             <p>Sin trazado cargado en Supabase</p>
           </div>
         ) : (
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
-            {/* Fondo del trazado */}
-            <path
-              d={trazado.map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`).join(" ")}
-              fill="none" stroke="#1f2937" strokeWidth="8"
-              strokeLinecap="round" strokeLinejoin="round"
+          <>
+            <LeafletSectoresMap
+              trazado={trazado}
+              rangos={rangos}
+              onBoundaryChange={handleBoundaryChange}
             />
-
-            {/* Sectores coloreados */}
-            {rangos.map((r, i) => (
-              <g key={i}>
-                <path
-                  d={sectorPath(r.inicio, r.fin)}
-                  fill="none" stroke={r.color} strokeWidth="10"
-                  strokeLinecap="round" strokeLinejoin="round" opacity="0.15"
-                />
-                <path
-                  d={sectorPath(r.inicio, r.fin)}
-                  fill="none" stroke={r.color} strokeWidth="3.5"
-                  strokeLinecap="round" strokeLinejoin="round"
-                />
-                {/* Etiqueta del sector */}
-                {(() => {
-                  const midIdx = Math.floor((r.inicio + r.fin) / 2);
-                  const mc     = trazado[midIdx];
-                  return mc ? (
-                    <text
-                      x={toX(mc.lng)} y={toY(mc.lat) - 12}
-                      textAnchor="middle" fill={r.color}
-                      fontSize="9" fontWeight="bold"
-                    >
-                      {r.nombre}
-                    </text>
-                  ) : null;
-                })()}
-              </g>
-            ))}
-
-            {/* Punto de inicio */}
-            {trazado[0] && (
-              <>
-                <circle cx={toX(trazado[0].lng)} cy={toY(trazado[0].lat)} r="5" fill="#22c55e" />
-                <circle cx={toX(trazado[0].lng)} cy={toY(trazado[0].lat)} r="9"
-                  fill="none" stroke="#22c55e" strokeWidth="1.5" opacity="0.5" />
-              </>
+            {cantidad >= 2 && (
+              <p className="text-xs text-gray-600 text-center mt-2">
+                Arrastrá los marcadores de límite para ajustar los sectores
+              </p>
             )}
-          </svg>
+          </>
         )}
       </div>
 

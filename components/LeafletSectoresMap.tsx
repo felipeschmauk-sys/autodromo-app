@@ -1,0 +1,190 @@
+"use client";
+/**
+ * LeafletSectoresMap.tsx — components/LeafletSectoresMap.tsx
+ *
+ * Mapa Leaflet para el editor de sectores.
+ * Muestra el trazado dividido en sectores con marcadores arrastrables
+ * en cada punto de división para ajustar los límites.
+ *
+ * ⚠ Importar siempre con dynamic({ ssr: false })
+ */
+
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
+import { useEffect, useRef } from "react";
+
+interface Coordenada { lat: number; lng: number; }
+
+interface Rango {
+  nombre: string;
+  inicio: number;
+  fin:    number;
+  color:  string;
+}
+
+interface Props {
+  trazado: Coordenada[];
+  rangos:  Rango[];
+  onBoundaryChange: (boundaryIdx: number, newFin: number) => void;
+}
+
+export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }: Props) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const mapRef       = useRef<L.Map | null>(null);
+  const layersRef    = useRef<L.Layer[]>([]);
+  const markersRef   = useRef<L.Marker[]>([]);
+
+  // ── Inicializar mapa ───────────────────────────────────────
+  useEffect(() => {
+    if (!containerRef.current || mapRef.current) return;
+
+    const map = L.map(containerRef.current, {
+      center:             [-33.5, -70.6],
+      zoom:               14,
+      zoomControl:        false,
+      attributionControl: false,
+      // El editor sí permite navegar para ajustar con precisión
+      dragging:        true,
+      scrollWheelZoom: true,
+      touchZoom:       true,
+    });
+
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+      subdomains: "abcd", maxZoom: 20,
+    }).addTo(map);
+
+    mapRef.current = map;
+    return () => { map.remove(); mapRef.current = null; };
+  }, []);
+
+  // ── Redibujar sectores y markers cuando cambian rangos ─────
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || trazado.length < 2 || !rangos.length) return;
+
+    // Limpiar capas anteriores
+    layersRef.current.forEach(l => { try { map.removeLayer(l); } catch {} });
+    markersRef.current.forEach(m => { try { map.removeLayer(m); } catch {} });
+    layersRef.current  = [];
+    markersRef.current = [];
+
+    // Fondo del trazado completo (gris oscuro)
+    const allLatlngs = trazado.map(c => [c.lat, c.lng] as [number, number]);
+    layersRef.current.push(
+      L.polyline(allLatlngs, { color: "#374151", weight: 8, opacity: 1 }).addTo(map)
+    );
+
+    // Sectores coloreados
+    rangos.forEach(r => {
+      const pts = trazado
+        .slice(r.inicio, r.fin + 1)
+        .map(c => [c.lat, c.lng] as [number, number]);
+      if (pts.length < 2) return;
+
+      // Glow
+      layersRef.current.push(
+        L.polyline(pts, { color: r.color, weight: 18, opacity: 0.18 }).addTo(map)
+      );
+      // Línea principal
+      layersRef.current.push(
+        L.polyline(pts, { color: r.color, weight: 6, opacity: 0.95 }).addTo(map)
+      );
+
+      // Etiqueta en el punto medio del sector
+      const midIdx = Math.floor((r.inicio + r.fin) / 2);
+      const mc     = trazado[midIdx];
+      if (mc) {
+        const label = L.divIcon({
+          html: `<div style="
+            background:rgba(5,5,15,.88);color:${r.color};
+            border:1px solid ${r.color}55;border-radius:5px;
+            padding:2px 8px;font-size:10px;font-weight:800;
+            font-family:monospace;letter-spacing:1px;
+            white-space:nowrap;text-transform:uppercase;
+          ">${r.nombre}</div>`,
+          iconSize:   [100, 20],
+          iconAnchor: [50, 10],
+          className:  "",
+        });
+        layersRef.current.push(
+          L.marker([mc.lat, mc.lng], { icon: label, interactive: false }).addTo(map)
+        );
+      }
+    });
+
+    // Marcador de largada
+    const start = trazado[0];
+    if (start) {
+      layersRef.current.push(
+        (L.circleMarker as any)([start.lat, start.lng], {
+          radius: 8, fillColor: "#22c55e",
+          color: "#fff", weight: 2, fillOpacity: 1,
+        }).addTo(map)
+      );
+    }
+
+    // ── Boundary markers arrastrables ──────────────────────
+    // Hay N-1 boundaries entre N sectores
+    for (let i = 0; i < rangos.length - 1; i++) {
+      const boundaryIdx = i;
+      const ptIdx       = rangos[i].fin; // punto de división
+      const pt          = trazado[ptIdx];
+      if (!pt) continue;
+
+      const colorA = rangos[i].color;
+      const colorB = rangos[i + 1].color;
+
+      const icon = L.divIcon({
+        html: `<div style="
+          width:28px;height:28px;border-radius:50%;
+          background:linear-gradient(135deg,${colorA} 50%,${colorB} 50%);
+          border:3px solid #fff;
+          display:flex;align-items:center;justify-content:center;
+          font-size:9px;font-weight:900;color:#fff;
+          box-shadow:0 2px 12px rgba(0,0,0,.8);
+          cursor:grab;font-family:monospace;
+          text-shadow:0 1px 3px rgba(0,0,0,.9);
+        ">${i + 1}|${i + 2}</div>`,
+        iconSize:   [28, 28],
+        iconAnchor: [14, 14],
+        className:  "",
+      });
+
+      const marker = L.marker([pt.lat, pt.lng], { draggable: true, icon, zIndexOffset: 800 }).addTo(map);
+
+      marker.on("drag", function (e: any) {
+        const latlng = e.target.getLatLng();
+        // Snap al punto más cercano del trazado
+        let minD = Infinity, nearest = ptIdx;
+        trazado.forEach((c, i) => {
+          const d = (latlng.lat - c.lat) ** 2 + (latlng.lng - c.lng) ** 2;
+          if (d < minD) { minD = d; nearest = i; }
+        });
+        // Mantener mínimo 2 puntos por sector
+        const minIdx = rangos[boundaryIdx].inicio + 2;
+        const maxIdx = rangos[boundaryIdx + 1].fin - 2;
+        const snapped = Math.max(minIdx, Math.min(maxIdx, nearest));
+        e.target.setLatLng([trazado[snapped].lat, trazado[snapped].lng]);
+        onBoundaryChange(boundaryIdx, snapped);
+      });
+
+      markersRef.current.push(marker);
+    }
+
+    // Ajustar vista al trazado
+    map.fitBounds(L.polyline(allLatlngs).getBounds(), { padding: [24, 24] });
+  }, [trazado, rangos, onBoundaryChange]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        width:        "100%",
+        height:       240,
+        borderRadius: "16px",
+        overflow:     "hidden",
+        position:     "relative",
+      }}
+    />
+  );
+}
