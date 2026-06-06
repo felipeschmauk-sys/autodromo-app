@@ -1,17 +1,20 @@
 "use client";
 
 /**
- * DireccionCarrera.tsx — COLOCAR en: components/DireccionCarrera.tsx
+ * DireccionCarrera.tsx — components/DireccionCarrera.tsx
  *
- * Mapa del circuito al centro con pilotos activos en tiempo real.
+ * Mapa del circuito al centro con pilotos activos en tiempo real (Leaflet).
  * Lista de pilotos al costado derecho.
- * Se integra directamente dentro del tab "direccion" del admin.
  */
 
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
 
+const LeafletAdminMap = dynamic(() => import("@/components/LeafletAdminMap"), { ssr: false });
+
+// ── Tipos ─────────────────────────────────────────────────────
 interface SectorInfo {
   id: string;
   nombre: string;
@@ -32,31 +35,23 @@ interface PilotoEnPista {
   color: string;
 }
 
+// ── Colores para pilotos ───────────────────────────────────────
 const COLORES = [
   "#60a5fa", "#f59e0b", "#34d399", "#f472b6",
   "#a78bfa", "#fb923c", "#22d3ee", "#4ade80",
 ];
-
-const STROKE_COLOR: Record<string, string> = {
-  verde:          "#22c55e",
-  amarilla:       "#eab308",
-  amarilla_doble: "#f59e0b",
-  roja:           "#ef4444",
-  blanca:         "#9ca3af",
-  negra:          "#6b7280",
-  safety_car:     "#f97316",
-};
 
 const FLAG_LABEL: Record<string, string> = {
   verde:          "Pista libre",
   amarilla:       "Amarilla",
   amarilla_doble: "Doble amarilla",
   roja:           "Bandera roja",
+  safety_car:     "Safety Car",
   blanca:         "Vehículo lento",
   negra:          "A boxes",
-  safety_car:     "Safety Car",
 };
 
+// ── Componente ─────────────────────────────────────────────────
 export default function DireccionCarrera() {
   const [trazado,  setTrazado]  = useState<Coordenada[]>([]);
   const [pilotos,  setPilotos]  = useState<Map<string, PilotoEnPista>>(new Map());
@@ -117,17 +112,18 @@ export default function DireccionCarrera() {
       if (!data) return;
 
       setPilotos(prev => {
-        const next = new Map(prev);
+        const next      = new Map(prev);
         const activeIds = new Set(data.map(s => s.piloto_id));
 
         for (const s of data) {
           if (!next.has(s.piloto_id)) {
             next.set(s.piloto_id, {
-              piloto_id: s.piloto_id,
-              nombre: (s.pilotos as any)?.nombre || "Piloto",
+              piloto_id:           s.piloto_id,
+              nombre:              (s.pilotos as any)?.nombre || "Piloto",
               lat: null, lng: null, velocidad: 0,
-              dentro_geocerca: null, ultima_actualizacion: null,
-              color: COLORES[colorIdx++ % COLORES.length],
+              dentro_geocerca:     null,
+              ultima_actualizacion: null,
+              color:               COLORES[colorIdx++ % COLORES.length],
             });
           }
         }
@@ -153,13 +149,14 @@ export default function DireccionCarrera() {
           const u = payload.new as any;
           setPilotos(prev => {
             const next = new Map(prev);
-            const p = next.get(u.piloto_id);
+            const p    = next.get(u.piloto_id);
             if (p) {
               next.set(u.piloto_id, {
                 ...p,
-                lat: u.lat, lng: u.lng,
-                velocidad: u.velocidad ?? 0,
-                dentro_geocerca: u.dentro_geocerca,
+                lat:                  u.lat,
+                lng:                  u.lng,
+                velocidad:            u.velocidad ?? 0,
+                dentro_geocerca:      u.dentro_geocerca,
                 ultima_actualizacion: new Date(),
               });
             }
@@ -180,30 +177,6 @@ export default function DireccionCarrera() {
     return () => clearInterval(id);
   }, []);
 
-  // ── Proyección SVG ──────────────────────────────────────────
-  const W = 520, H = 300, PAD = 32;
-  const lats   = trazado.map(c => c.lat);
-  const lngs   = trazado.map(c => c.lng);
-  const minLat = trazado.length ? Math.min(...lats) : 0;
-  const maxLat = trazado.length ? Math.max(...lats) : 1;
-  const minLng = trazado.length ? Math.min(...lngs) : 0;
-  const maxLng = trazado.length ? Math.max(...lngs) : 1;
-  const dLat   = maxLat - minLat || 0.0001;
-  const dLng   = maxLng - minLng || 0.0001;
-  const scaleX = (W - PAD * 2) / dLng;
-  const scaleY = (H - PAD * 2) / dLat;
-  const scale  = Math.min(scaleX, scaleY);
-  const offX   = (W - dLng * scale) / 2;
-  const offY   = (H - dLat * scale) / 2;
-
-  const toX = (lng: number) => offX + (lng - minLng) * scale;
-  const toY = (lat: number) => H - offY - (lat - minLat) * scale;
-
-  const trackPath = trazado.length > 0
-    ? trazado.map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`).join(" ")
-    : "";
-
-  const stroke      = STROKE_COLOR[bandera] || STROKE_COLOR.verde;
   const pilotosList = Array.from(pilotos.values());
 
   return (
@@ -213,117 +186,66 @@ export default function DireccionCarrera() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
         <div className="flex items-center gap-2">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mapa en tiempo real</span>
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Mapa en tiempo real
+          </span>
         </div>
         <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${
-          bandera === "verde"              ? "bg-green-950  text-green-400"  :
-          bandera === "roja"               ? "bg-red-950    text-red-400 animate-pulse" :
-          bandera.startsWith("amarilla")   ? "bg-yellow-950 text-yellow-400" :
-          bandera === "safety_car"         ? "bg-orange-950 text-orange-400 animate-pulse" :
-          "bg-gray-800 text-gray-400"
+          bandera === "verde"            ? "bg-green-950  text-green-400"
+          : bandera === "roja"           ? "bg-red-950    text-red-400 animate-pulse"
+          : bandera === "safety_car"     ? "bg-orange-950 text-orange-400 animate-pulse"
+          : bandera.startsWith("amarilla") ? "bg-yellow-950 text-yellow-400"
+          : "bg-gray-800 text-gray-400"
         }`}>
           <span className="w-1.5 h-1.5 rounded-full bg-current" />
           {FLAG_LABEL[bandera] || bandera}
         </div>
       </div>
 
-      {/* ── Contenido principal: mapa + lista ── */}
+      {/* ── Contenido: mapa + lista ── */}
       <div className="flex flex-col sm:flex-row">
 
-        {/* MAPA — centro */}
-        <div className="flex-1 min-w-0">
-          {/* Leyenda de pilotos (sobre el mapa) */}
+        {/* MAPA (Leaflet) */}
+        <div className="flex-1 min-w-0" style={{ minHeight: 300 }}>
+          {/* Leyenda de pilotos */}
           {pilotosList.length > 0 && (
             <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-4 pt-3 pb-1">
               {pilotosList.map(p => (
                 <div key={p.piloto_id} className="flex items-center gap-1.5">
-                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                  <div
+                    className="w-2 h-2 rounded-full flex-shrink-0"
+                    style={{ background: p.color }}
+                  />
                   <span className="text-xs text-white/50">{p.nombre.split(" ")[0]}</span>
                 </div>
               ))}
             </div>
           )}
 
-          <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+          {/* Mapa Leaflet */}
+          <div style={{ height: 300, position: "relative" }}>
             {trazado.length > 0 ? (
-              <>
-                {/* Base del trazado (fondo oscuro) */}
-                <path d={trackPath} fill="none" stroke="#1f2937" strokeWidth="8"
-                  strokeLinecap="round" strokeLinejoin="round" />
-
-                {/* Sectores coloreados según su bandera */}
-                {sectores.length > 0 ? (
-                  sectores.map((s, i) => {
-                    const globalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "safety_car";
-                    const efectiva       = globalOverride ? bandera : s.bandera;
-                    const segStroke      = efectiva === "roja"    ? "#ef4444"
-                                        : efectiva === "amarilla" ? "#eab308"
-                                        : "#22c55e";
-                    const segPath = trazado.slice(s.punto_inicio, s.punto_fin + 1)
-                      .map((c, j) => `${j === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`)
-                      .join(" ");
-                    return (
-                      <g key={s.id}>
-                        <path d={segPath} fill="none" stroke={segStroke} strokeWidth="10"
-                          strokeLinecap="round" strokeLinejoin="round" opacity="0.12" />
-                        <path d={segPath} fill="none" stroke={segStroke} strokeWidth="3"
-                          strokeLinecap="round" strokeLinejoin="round" />
-                      </g>
-                    );
-                  })
-                ) : (
-                  /* Sin sectores: trazado global con color de bandera */
-                  <>
-                    <path d={trackPath} fill="none" stroke={stroke} strokeWidth="10"
-                      strokeLinecap="round" strokeLinejoin="round" opacity="0.10" />
-                    <path d={trackPath} fill="none" stroke={stroke} strokeWidth="3"
-                      strokeLinecap="round" strokeLinejoin="round" />
-                  </>
-                )}
-
-                {/* Meta */}
-                <circle cx={toX(trazado[0].lng).toFixed(1)} cy={toY(trazado[0].lat).toFixed(1)}
-                  r="5" fill={stroke} />
-                <circle cx={toX(trazado[0].lng).toFixed(1)} cy={toY(trazado[0].lat).toFixed(1)}
-                  r="10" fill="none" stroke={stroke} strokeWidth="1.5" opacity="0.4" />
-
-                {/* Pilotos */}
-                {pilotosList.map(p => {
-                  if (p.lat === null || p.lng === null) return null;
-                  const x = parseFloat(toX(p.lng).toFixed(1));
-                  const y = parseFloat(toY(p.lat).toFixed(1));
-                  return (
-                    <g key={p.piloto_id}>
-                      <circle cx={x} cy={y} r="14" fill={p.color} opacity="0.18" />
-                      <circle cx={x} cy={y} r="8"  fill={p.color} />
-                      <text x={x} y={y + 4} textAnchor="middle" fill="white"
-                        fontSize="9" fontWeight="bold">
-                        {p.nombre.charAt(0).toUpperCase()}
-                      </text>
-                      <text x={x} y={y - 17} textAnchor="middle" fill={p.color}
-                        fontSize="9" fontWeight="600">
-                        {p.velocidad}km/h
-                      </text>
-                    </g>
-                  );
-                })}
-              </>
+              <LeafletAdminMap
+                trazado={trazado}
+                sectores={sectores}
+                bandera={bandera}
+                pilotos={pilotosList}
+              />
             ) : (
-              <text x={W / 2} y={H / 2} textAnchor="middle" fill="#374151" fontSize="13">
-                Sin trazado configurado
-              </text>
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-600">
+                <p className="text-2xl">🗺</p>
+                <p className="text-sm">Sin trazado configurado</p>
+              </div>
             )}
-          </svg>
+          </div>
         </div>
 
-        {/* LISTA DE PILOTOS — costado derecho */}
+        {/* LISTA DE PILOTOS */}
         <div className="sm:w-52 border-t sm:border-t-0 sm:border-l border-gray-800 flex flex-col">
 
           <div className="px-3 py-2.5 border-b border-gray-800">
             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-              {pilotosList.length === 0
-                ? "Sin pilotos"
-                : `${pilotosList.length} en pista`}
+              {pilotosList.length === 0 ? "Sin pilotos" : `${pilotosList.length} en pista`}
             </p>
           </div>
 
@@ -335,32 +257,43 @@ export default function DireccionCarrera() {
           ) : (
             <div className="flex-1 overflow-y-auto divide-y divide-gray-800/60">
               {pilotosList.map(p => {
-                const segs  = p.ultima_actualizacion
+                const segs   = p.ultima_actualizacion
                   ? Math.floor((Date.now() - p.ultima_actualizacion.getTime()) / 1000)
                   : null;
                 const activo = segs !== null && segs < 10;
+                const stopped = p.velocidad <= 2 && segs !== null;
 
                 return (
                   <div key={p.piloto_id} className="px-3 py-3 flex flex-col gap-1">
                     {/* Nombre + color */}
                     <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                      <div
+                        className="w-2 h-2 rounded-full flex-shrink-0"
+                        style={{ background: p.color }}
+                      />
                       <p className="text-xs font-semibold text-white truncate">{p.nombre}</p>
                     </div>
 
                     {/* Velocidad */}
                     <div className="flex items-end gap-1 pl-4">
-                      <span className="text-xl font-black text-white tabular-nums leading-none">
+                      <span className={`text-xl font-black tabular-nums leading-none ${
+                        stopped ? "text-yellow-400" : "text-white"
+                      }`}>
                         {p.velocidad}
                       </span>
                       <span className="text-xs text-white/30 mb-0.5">km/h</span>
+                      {stopped && (
+                        <span className="text-xs font-bold text-yellow-400 mb-0.5 ml-1">
+                          · DETENIDO
+                        </span>
+                      )}
                     </div>
 
                     {/* Geocerca + señal */}
                     <div className="flex items-center gap-2 pl-4">
                       <span className={`text-xs font-medium ${
                         p.dentro_geocerca === null ? "text-gray-600"
-                        : p.dentro_geocerca         ? "text-green-400"
+                        : p.dentro_geocerca        ? "text-green-400"
                         : "text-red-400"
                       }`}>
                         {p.dentro_geocerca === null ? "—"

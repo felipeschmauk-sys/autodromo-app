@@ -1,8 +1,11 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import GpsPiloto from "@/components/GpsPiloto";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
+
+const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
 import {
   registrarPiloto,
   loginPiloto,
@@ -769,13 +772,12 @@ export default function Home() {
             <div className="fixed inset-0 z-40 bg-gray-950 flex" style={{ maxWidth: "none" }}>
 
               {/* Circuito — 70% */}
-              <div className="flex items-center justify-center bg-gray-950 p-4" style={{ width: "70%" }}>
-                <TrackSVG
+              <div className="flex items-center justify-center bg-gray-950" style={{ width: "70%" }}>
+                <LeafletPilotMap
                   trazado={trazado}
                   bandera={estadoPista.bandera}
                   sectores={sectores}
                   height={viewportH - 32}
-                  onTap={() => {}}
                 />
               </div>
 
@@ -842,8 +844,8 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* TRAZADO SVG */}
-                <TrackSVG
+                {/* TRAZADO — Mapa Leaflet */}
+                <LeafletPilotMap
                   trazado={trazado}
                   bandera={estadoPista.bandera}
                   sectores={sectores}
@@ -1073,7 +1075,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="flex-1 flex items-center justify-center p-4">
-                <TrackSVG trazado={trazado} bandera={estadoPista.bandera} sectores={sectores} height={300} />
+                <LeafletPilotMap trazado={trazado} bandera={estadoPista.bandera} sectores={sectores} height={300} />
               </div>
               <div className={`mx-4 mb-6 rounded-2xl border p-5 ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}>
                 <div className="flex items-center gap-3">
