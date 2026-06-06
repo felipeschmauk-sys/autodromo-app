@@ -29,20 +29,26 @@ export default function SectoresEditor() {
 
   // ── Cargar trazado y sectores existentes ──────────────────
   useEffect(() => {
-    getTrazadoActivo().then(c => { if (c) setTrazado(c); });
+    const init = async () => {
+      const coords = await getTrazadoActivo();
+      if (coords) setTrazado(coords);
 
-    supabase
-      .from("sectores_pista")
-      .select("*")
-      .order("orden")
-      .then(({ data }) => {
+      try {
+        const { data } = await supabase
+          .from("sectores_pista")
+          .select("*")
+          .order("orden");
         if (data && data.length > 0) {
           setCantidad(data.length);
-          setNombres(data.map(r => r.nombre));
+          setNombres(data.map((r: any) => r.nombre));
         }
+      } catch (_) {
+        // tabla puede no existir aún
+      } finally {
         setCargando(false);
-      })
-      .catch(() => setCargando(false));
+      }
+    };
+    init();
   }, []);
 
   // ── Cuando cambia la cantidad, ajustar nombres ────────────
