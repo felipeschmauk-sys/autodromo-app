@@ -17,6 +17,7 @@ const QrScanner = dynamic(() => import("@/components/QrScanner"), {
 });
 const DireccionCarrera = dynamic(() => import('@/components/DireccionCarrera'), { ssr: false });
 const SectoresEditor   = dynamic(() => import('@/components/SectoresEditor'),   { ssr: false });
+const AdminMensajes    = dynamic(() => import('@/components/AdminMensajes'),    { ssr: false });
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Sector {
   id: string;
@@ -105,10 +106,6 @@ export default function AdminPage() {
     try {
       const data = await getPilotosEnSesion();
       setSesiones(data || []);
-      const nuevasAlertas = (data || [])
-        .filter((s: SesionActiva) => s.piloto && s.piloto.saldo_minutos < 20)
-        .map((s: SesionActiva) => `${s.piloto?.nombre} — saldo bajo (${s.piloto?.saldo_minutos} min)`);
-      setAlertas(nuevasAlertas);
     } catch {
       setSesiones([]);
     }
@@ -490,6 +487,9 @@ export default function AdminPage() {
             {/* ── MAPA EN TIEMPO REAL ── */}
             <DireccionCarrera />
 
+            {/* ── MENSAJES A PILOTOS ── */}
+            <AdminMensajes />
+
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad de pista</span>
@@ -539,9 +539,8 @@ export default function AdminPage() {
               ) : (
                 <div className="divide-y divide-gray-50">
                   {sesiones.map(s => {
-                    const nombre = s.piloto?.nombre || `Piloto ${s.piloto_id.slice(0, 6)}`;
-                    const iniciales = nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                    const saldo = s.piloto?.saldo_minutos ?? 0;
+                    const nombre = s.piloto?.nombre || s.piloto_id.slice(0, 8);
+                    const iniciales = nombre.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
                     const colors = ["bg-indigo-500", "bg-teal-500", "bg-orange-500", "bg-pink-500", "bg-purple-500"];
                     const color = colors[nombre.charCodeAt(0) % colors.length];
                     return (
@@ -555,12 +554,6 @@ export default function AdminPage() {
                             {new Date(s.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
                           </p>
                         </div>
-                        {saldo < 20 && (
-                          <span className="text-xs text-amber-600 font-medium">⚠ Saldo bajo</span>
-                        )}
-                        <span className={`text-sm font-bold ${saldo < 20 ? "text-amber-600" : "text-gray-900"}`}>
-                          {saldo} min
-                        </span>
                         <span className="text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">
                           En pista
                         </span>
@@ -652,9 +645,8 @@ export default function AdminPage() {
                       <p className="font-bold text-gray-900">{validacion.piloto.nombre}</p>
                       <div className="grid grid-cols-2 gap-2">
                         <div><span className="text-gray-400 text-xs">RUT</span><p className="font-medium">{validacion.piloto.rut}</p></div>
-                        <div><span className="text-gray-400 text-xs">Saldo</span><p className={`font-bold ${validacion.piloto.saldo_minutos < minSaldo ? "text-red-500" : "text-green-600"}`}>{validacion.piloto.saldo_minutos} min</p></div>
-                        <div><span className="text-gray-400 text-xs">Prueba</span><p className={validacion.piloto.prueba_aprobada ? "text-green-600 font-medium" : "text-red-500 font-medium"}>{validacion.piloto.prueba_aprobada ? "✓ Aprobada" : "✗ Pendiente"}</p></div>
-                        <div><span className="text-gray-400 text-xs">Teléfono</span><p className="font-medium">{validacion.piloto.telefono}</p></div>
+                        <div><span className="text-gray-400 text-xs">Prueba</span><p className={validacion.piloto.prueba_aprobada ? "text-green-600 font-medium" : "text-amber-500 font-medium"}>{validacion.piloto.prueba_aprobada ? "✓ Aprobada" : "Pendiente"}</p></div>
+                        <div><span className="text-gray-400 text-xs">Teléfono</span><p className="font-medium">{validacion.piloto.telefono || "—"}</p></div>
                       </div>
                     </div>
                   )}
@@ -756,9 +748,6 @@ export default function AdminPage() {
                           ) : (
                             <span className="text-xs bg-gray-100 text-gray-500 font-medium px-2.5 py-1 rounded-full">Fuera</span>
                           )}
-                          <span className={`text-sm font-bold ${p.saldo_minutos < minSaldo ? "text-red-500" : "text-gray-900"}`}>
-                            {p.saldo_minutos} min
-                          </span>
                           <button className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors">
                             Ver
                           </button>
@@ -773,14 +762,8 @@ export default function AdminPage() {
               </div>
             )}
             <div className="flex gap-2 flex-wrap">
-              <button onClick={cargarPilotos} className="text-xs border border-green-200 text-green-700 bg-green-50 px-4 py-2 rounded-xl font-medium hover:bg-green-100 transition-colors">
-                + Cargar minutos
-              </button>
               <button className="text-xs border border-orange-200 text-orange-700 bg-orange-50 px-4 py-2 rounded-xl font-medium hover:bg-orange-100 transition-colors">
                 🔒 Bloquear piloto
-              </button>
-              <button className="text-xs border border-yellow-200 text-yellow-700 bg-yellow-50 px-4 py-2 rounded-xl font-medium hover:bg-yellow-100 transition-colors">
-                ⚠ Aplicar multa
               </button>
             </div>
           </>
@@ -812,19 +795,6 @@ export default function AdminPage() {
                       min={1} max={30}
                       className="mt-1 w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
                     />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-500 font-medium">Saldo mínimo para ingresar</label>
-                    <div className="mt-1 relative">
-                      <input
-                        type="number"
-                        value={minSaldo}
-                        onChange={e => setMinSaldo(Number(e.target.value))}
-                        min={0} max={60}
-                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 pr-10"
-                      />
-                      <span className="absolute right-4 top-3 text-xs text-gray-400">min</span>
-                    </div>
                   </div>
                 </div>
                 <button className="w-full bg-gray-900 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl text-sm transition-colors">

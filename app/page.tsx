@@ -984,18 +984,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-                    <p className="text-xs text-gray-600 mb-1">Saldo</p>
-                    <p className="text-3xl font-black text-white">{pilotoData?.saldo_minutos ?? 0}</p>
-                    <p className="text-xs text-gray-600">minutos</p>
-                  </div>
-                  <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4">
-                    <p className="text-xs text-gray-600 mb-1">Tandas</p>
-                    <p className="text-3xl font-black text-white">—</p>
-                    <p className="text-xs text-gray-600">este mes</p>
-                  </div>
-                </div>
 
                 <div className="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800">
                   {[
@@ -1024,38 +1012,6 @@ export default function Home() {
             )}
 
             {/* ── VISTA SALDO ── */}
-            {secView === "saldo" && (
-              <div className="px-4 py-4 space-y-4">
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-                  <p className="text-xs text-gray-600 uppercase tracking-wider mb-2">Saldo disponible</p>
-                  <p className="text-5xl font-black text-white">
-                    {pilotoData?.saldo_minutos ?? 0}
-                    <span className="text-xl text-gray-600 ml-2">min</span>
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  {[{ min: 30, precio: "$18.900" }, { min: 60, precio: "$34.900" }, { min: 120, precio: "$59.900" }].map((p, i) => (
-                    <div key={i} className={`rounded-2xl p-3 text-center border-2 cursor-pointer transition ${i === 1 ? "border-green-700 bg-green-950" : "border-gray-800 bg-gray-900 hover:border-gray-600"}`}>
-                      <p className="text-white font-bold text-xl">{p.min}</p>
-                      <p className="text-gray-500 text-xs">min</p>
-                      <p className="text-gray-400 text-xs mt-1">{p.precio}</p>
-                      {i === 1 && <p className="text-green-500 text-xs mt-1">popular</p>}
-                      {i === 2 && <p className="text-blue-400 text-xs mt-1">mejor valor</p>}
-                    </div>
-                  ))}
-                </div>
-                <div className="space-y-2">
-                  {["Webpay (débito / crédito)", "MercadoPago"].map((m, i) => (
-                    <label key={i} className="flex items-center gap-3 bg-gray-900 border border-gray-800 rounded-2xl p-4 cursor-pointer text-sm text-gray-300">
-                      <input type="radio" name="pago" defaultChecked={i === 0} className="accent-green-500" />{m}
-                    </label>
-                  ))}
-                </div>
-                <button className="w-full bg-green-600 text-white py-3 rounded-2xl font-bold hover:bg-green-700 transition">
-                  🔒 Pagar ahora
-                </button>
-              </div>
-            )}
 
             {/* ── VISTA REGLAMENTO ── */}
             {secView === "reglamento" && (
@@ -1084,7 +1040,6 @@ export default function Home() {
               {([
                 { id: "main",        emoji: "🏁", label: "Pista"    },
                 { id: "perfil",      emoji: "👤", label: "Perfil"   },
-                { id: "saldo",       emoji: "⏱",  label: "Saldo"    },
                 { id: "reglamento",  emoji: "📄", label: "Reglas"   },
               ] as { id: SecView; emoji: string; label: string }[]).map(item => (
                 <button
