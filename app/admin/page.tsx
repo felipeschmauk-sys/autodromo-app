@@ -1,5 +1,4 @@
 "use client";
-
 import { useEffect, useRef, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import {
@@ -10,14 +9,14 @@ import {
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
-
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ssr: false,
   loading: () => (
     <div className="text-center py-10 text-gray-400 text-sm">Iniciando cámara…</div>
   ),
 });
-
+// ── NUEVO: Dirección de Carrera ───────────────────────────────
+const DireccionCarrera = dynamic(() => import('@/components/DireccionCarrera'), { ssr: false });
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Piloto {
   id: string;
@@ -28,14 +27,12 @@ interface Piloto {
   saldo_minutos: number;
   bloqueado: boolean;
 }
-
 interface SesionActiva {
   id: string;
   piloto_id: string;
   inicio: string;
   piloto?: Piloto;
 }
-
 interface ValidacionResult {
   valido: boolean;
   motivo?: string;
@@ -43,13 +40,10 @@ interface ValidacionResult {
   qr_id?: string;
   advertencia?: string;
 }
-
 type PanelTab = "direccion" | "qr" | "pilotos" | "config";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
-
 const MAX_PILOTOS_DEFAULT = 10;
 const MIN_SALDO_DEFAULT = 5;
-
 const AUTODROMO_OPTIONS = [
   "Las Vizcachas — Puente Alto, RM",
   "Leyda — San Antonio, RM",
@@ -57,13 +51,11 @@ const AUTODROMO_OPTIONS = [
   "Interlomas — Santiago",
   "Huachalalume — IV Región",
 ];
-
 export default function AdminPage() {
   const [autenticado, setAutenticado] = useState(false);
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPass, setLoginPass] = useState("");
   const [loginError, setLoginError] = useState("");
-
   const [tab, setTab] = useState<PanelTab>("direccion");
   const [pilotos, setPilotos] = useState<Piloto[]>([]);
   const [sesiones, setSesiones] = useState<SesionActiva[]>([]);
@@ -75,11 +67,9 @@ export default function AdminPage() {
   const [busqueda, setBusqueda] = useState("");
   const [alertas, setAlertas] = useState<string[]>([]);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
-
   const [qrStep, setQrStep] = useState<QRStep>("idle");
   const [validacion, setValidacion] = useState<ValidacionResult | null>(null);
   const [scanError, setScanError] = useState("");
-
   // ── Login ────────────────────────────────────────────────────────────────
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +79,6 @@ export default function AdminPage() {
       setLoginError("Credenciales incorrectas");
     }
   };
-
   // ── Data ─────────────────────────────────────────────────────────────────
   const cargarPilotos = useCallback(async () => {
     setLoadingPilotos(true);
@@ -102,12 +91,10 @@ export default function AdminPage() {
       setLoadingPilotos(false);
     }
   }, []);
-
   const cargarSesiones = useCallback(async () => {
     try {
       const data = await getPilotosEnSesion();
       setSesiones(data || []);
-      // Generar alertas de saldo bajo
       const nuevasAlertas = (data || [])
         .filter((s: SesionActiva) => s.piloto && s.piloto.saldo_minutos < 20)
         .map((s: SesionActiva) => `${s.piloto?.nombre} — saldo bajo (${s.piloto?.saldo_minutos} min)`);
@@ -116,61 +103,45 @@ export default function AdminPage() {
       setSesiones([]);
     }
   }, []);
-
    useEffect(() => {
     if (!autenticado) return;
-
-    // Carga inicial
     cargarPilotos();
     cargarSesiones();
-
-    // Suscripción Realtime a tabla sesiones
     const channel = supabase
       .channel("admin-sesiones-live")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sesiones" },
-        () => {
-          // Cada vez que cambia una sesión (INSERT/UPDATE/DELETE),
-          // recargar la lista automáticamente — sin polling
-          cargarSesiones();
-        }
+        () => { cargarSesiones(); }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "pilotos" },
-        () => {
-          cargarPilotos();
-        }
+        () => { cargarPilotos(); }
       )
       .subscribe((status) => {
         setRealtimeConectado(status === "SUBSCRIBED");
       });
-
     return () => {
       supabase.removeChannel(channel);
       setRealtimeConectado(false);
     };
   }, [autenticado, cargarPilotos, cargarSesiones]);
-
   // ── QR ───────────────────────────────────────────────────────────────────
   const iniciarScanner = useCallback(() => {
     setScanError("");
     setValidacion(null);
     setQrStep("scanning");
   }, []);
-
   const detenerScanner = useCallback(() => {
     setQrStep("idle");
     setValidacion(null);
     setScanError("");
   }, []);
-
   const handleScan = useCallback(async (decodedText: string) => {
     setQrStep("validating");
     try {
       const result = await validarQRToken(decodedText, maxPilotos, minSaldo);
-      // Normalize field name (auth.ts uses 'autorizado', panel expects 'valido')
       const normalized: ValidacionResult = {
         valido: (result as any).valido ?? (result as any).autorizado ?? false,
         motivo: (result as any).motivo,
@@ -184,7 +155,6 @@ export default function AdminPage() {
       setQrStep("result");
     }
   }, [maxPilotos, minSaldo]);
-
   const handleConfirmarIngreso = async () => {
     if (!validacion?.qr_id || !validacion?.piloto?.id) return;
     try {
@@ -196,18 +166,14 @@ export default function AdminPage() {
       setScanError("Error al confirmar el ingreso.");
     }
   };
-
   useEffect(() => {
     if (tab !== "qr") detenerScanner();
   }, [tab, detenerScanner]);
-
   const pilotosFiltrados = pilotos.filter(p =>
     p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
     p.rut.includes(busqueda)
   );
-
   const nombreAutodromo = autodromo.split(" — ")[0];
-
   // ── Login screen ──────────────────────────────────────────────────────────
   if (!autenticado) {
     return (
@@ -255,11 +221,9 @@ export default function AdminPage() {
       </div>
     );
   }
-
   // ── Main Panel ────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-gray-100">
-
       {/* Header */}
       <header className="bg-gray-900 text-white px-5 py-3 flex items-center justify-between sticky top-0 z-50">
         <div className="flex items-center gap-3">
@@ -288,18 +252,17 @@ export default function AdminPage() {
         </div>
       </header>
 
-      {/* Tab Navigation */}
-      <nav className="bg-white border-b border-gray-200 px-4 flex sticky top-[52px] z-40">
+      <nav className="bg-white border-b border-gray-200 px-4 flex sticky top-[52px] z-40 overflow-x-auto">
         {([
-          { id: "direccion", label: "Dirección", emoji: "🏎" },
-          { id: "qr", label: "Acceso QR", emoji: "📷" },
-          { id: "pilotos", label: "Pilotos", emoji: "👤" },
-          { id: "config", label: "Config", emoji: "⚙️" },
+          { id: "direccion", label: "Dirección",  emoji: "🏎"  },
+          { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
+          { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
+          { id: "config",    label: "Config",     emoji: "⚙️"  },
         ] as const).map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium border-b-2 transition-all ${
+            className={`flex items-center gap-1.5 px-4 py-3.5 text-sm font-medium border-b-2 transition-all whitespace-nowrap ${
               tab === t.id
                 ? "border-gray-900 text-gray-900"
                 : "border-transparent text-gray-500 hover:text-gray-700"
@@ -312,11 +275,9 @@ export default function AdminPage() {
       </nav>
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
-
         {/* ── DIRECCIÓN ──────────────────────────────────────────────── */}
         {tab === "direccion" && (
           <>
-            {/* Estado de pista + Bandera roja */}
             <div className={`rounded-2xl border-2 px-5 py-4 flex items-center justify-between ${
               banderaRoja
                 ? "bg-red-50 border-red-300"
@@ -346,8 +307,9 @@ export default function AdminPage() {
                 🚩 {banderaRoja ? "Desactivar" : "Bandera roja"}
               </button>
             </div>
+            {/* ── MAPA EN TIEMPO REAL ── */}
+            <DireccionCarrera />
 
-            {/* Capacidad de pista */}
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad de pista</span>
@@ -364,8 +326,6 @@ export default function AdminPage() {
                 />
               </div>
             </div>
-
-            {/* Alertas activas */}
             {alertas.length > 0 && (
               <div className="bg-amber-50 border border-amber-200 rounded-2xl px-5 py-4">
                 <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider mb-2">⚠ Alertas activas</p>
@@ -380,8 +340,6 @@ export default function AdminPage() {
                 ))}
               </div>
             )}
-
-            {/* Pilotos en sesión */}
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -432,8 +390,6 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
-
-            {/* Log de acciones */}
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Log de acciones</span>
@@ -457,6 +413,7 @@ export default function AdminPage() {
           </>
         )}
 
+
         {/* ── ACCESO QR ──────────────────────────────────────────────── */}
         {tab === "qr" && (
           <>
@@ -464,7 +421,6 @@ export default function AdminPage() {
               <div className="px-5 py-3.5 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Escanear QR de ingreso</p>
               </div>
-
               {qrStep === "idle" && (
                 <div
                   onClick={sesiones.length < maxPilotos ? iniciarScanner : undefined}
@@ -481,10 +437,9 @@ export default function AdminPage() {
                   {scanError && <p className="text-red-500 text-xs text-center">{scanError}</p>}
                 </div>
               )}
-
               {qrStep === "scanning" && (
                 <div className="p-4">
-<QrScanner onScan={handleScan} active={qrStep === "scanning"} />
+                  <QrScanner onScan={handleScan} active={qrStep === "scanning"} />
                   <button
                     onClick={detenerScanner}
                     className="mt-3 w-full text-sm text-gray-500 border border-gray-200 rounded-xl py-2 hover:bg-gray-50 transition-colors"
@@ -493,14 +448,12 @@ export default function AdminPage() {
                   </button>
                 </div>
               )}
-
               {qrStep === "validating" && (
                 <div className="py-12 flex flex-col items-center gap-3">
                   <div className="w-10 h-10 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
                   <p className="text-sm text-gray-500">Validando…</p>
                 </div>
               )}
-
               {qrStep === "result" && validacion && (
                 <div className="p-4 space-y-3">
                   <div className={`rounded-xl p-4 border-2 flex items-center gap-3 ${
@@ -514,7 +467,6 @@ export default function AdminPage() {
                       {validacion.motivo && <p className="text-xs text-gray-500 mt-0.5">{validacion.motivo}</p>}
                     </div>
                   </div>
-
                   {validacion.piloto && (
                     <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 space-y-2 text-sm">
                       <p className="font-bold text-gray-900">{validacion.piloto.nombre}</p>
@@ -526,7 +478,6 @@ export default function AdminPage() {
                       </div>
                     </div>
                   )}
-
                   <div className="flex gap-2">
                     <button
                       onClick={() => { setQrStep("idle"); setValidacion(null); }}
@@ -552,7 +503,6 @@ export default function AdminPage() {
                   </div>
                 </div>
               )}
-
               {qrStep === "confirmed" && (
                 <div className="py-12 flex flex-col items-center gap-3">
                   <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center text-2xl">✓</div>
@@ -561,8 +511,6 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
-
-            {/* Control manual */}
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Control manual de tanda</p>
@@ -586,7 +534,6 @@ export default function AdminPage() {
             </div>
           </>
         )}
-
         {/* ── PILOTOS ────────────────────────────────────────────────── */}
         {tab === "pilotos" && (
           <>
@@ -600,7 +547,6 @@ export default function AdminPage() {
                 className="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 w-40"
               />
             </div>
-
             {loadingPilotos ? (
               <div className="bg-white rounded-2xl border border-gray-200 py-12 flex justify-center">
                 <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
@@ -624,17 +570,11 @@ export default function AdminPage() {
                         </div>
                         <div className="text-right flex-shrink-0 flex items-center gap-3">
                           {p.bloqueado ? (
-                            <span className="text-xs bg-red-100 text-red-600 font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
-                              🔴 Bloqueado
-                            </span>
+                            <span className="text-xs bg-red-100 text-red-600 font-medium px-2.5 py-1 rounded-full">🔴 Bloqueado</span>
                           ) : enPista ? (
-                            <span className="text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full flex items-center gap-1">
-                              🟢 En pista
-                            </span>
+                            <span className="text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">🟢 En pista</span>
                           ) : (
-                            <span className="text-xs bg-gray-100 text-gray-500 font-medium px-2.5 py-1 rounded-full">
-                              Fuera
-                            </span>
+                            <span className="text-xs bg-gray-100 text-gray-500 font-medium px-2.5 py-1 rounded-full">Fuera</span>
                           )}
                           <span className={`text-sm font-bold ${p.saldo_minutos < minSaldo ? "text-red-500" : "text-gray-900"}`}>
                             {p.saldo_minutos} min
@@ -652,7 +592,6 @@ export default function AdminPage() {
                 </div>
               </div>
             )}
-
             <div className="flex gap-2 flex-wrap">
               <button onClick={cargarPilotos} className="text-xs border border-green-200 text-green-700 bg-green-50 px-4 py-2 rounded-xl font-medium hover:bg-green-100 transition-colors">
                 + Cargar minutos
@@ -666,7 +605,6 @@ export default function AdminPage() {
             </div>
           </>
         )}
-
         {/* ── CONFIG ─────────────────────────────────────────────────── */}
         {tab === "config" && (
           <>
@@ -714,7 +652,6 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
-
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Definir geocerca de pista</p>
@@ -734,7 +671,6 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
-
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado del sistema</p>
@@ -755,7 +691,6 @@ export default function AdminPage() {
             </div>
           </>
         )}
-
       </main>
     </div>
   );

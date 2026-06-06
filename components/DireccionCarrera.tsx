@@ -1,0 +1,327 @@
+"use client";
+
+/**
+ * DireccionCarrera.tsx — COLOCAR en: components/DireccionCarrera.tsx
+ *
+ * Mapa del circuito al centro con pilotos activos en tiempo real.
+ * Lista de pilotos al costado derecho.
+ * Se integra directamente dentro del tab "direccion" del admin.
+ */
+
+import { useEffect, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
+
+interface PilotoEnPista {
+  piloto_id: string;
+  nombre: string;
+  lat: number | null;
+  lng: number | null;
+  velocidad: number;
+  dentro_geocerca: boolean | null;
+  ultima_actualizacion: Date | null;
+  color: string;
+}
+
+const COLORES = [
+  "#60a5fa", "#f59e0b", "#34d399", "#f472b6",
+  "#a78bfa", "#fb923c", "#22d3ee", "#4ade80",
+];
+
+const STROKE_COLOR: Record<string, string> = {
+  verde:          "#22c55e",
+  amarilla:       "#eab308",
+  amarilla_doble: "#f59e0b",
+  roja:           "#ef4444",
+  blanca:         "#9ca3af",
+  negra:          "#6b7280",
+};
+
+const FLAG_LABEL: Record<string, string> = {
+  verde:          "Pista libre",
+  amarilla:       "Amarilla",
+  amarilla_doble: "Doble amarilla",
+  roja:           "Bandera roja",
+  blanca:         "Vehículo lento",
+  negra:          "A boxes",
+};
+
+export default function DireccionCarrera() {
+  const [trazado, setTrazado] = useState<Coordenada[]>([]);
+  const [pilotos, setPilotos] = useState<Map<string, PilotoEnPista>>(new Map());
+  const [bandera, setBandera]  = useState("verde");
+  const [tick, setTick]        = useState(0);
+
+  // Cargar circuito
+  useEffect(() => {
+    getTrazadoActivo().then(c => { if (c) setTrazado(c); });
+  }, []);
+
+  // Estado de pista (bandera)
+  useEffect(() => {
+    supabase
+      .from("estado_pista")
+      .select("bandera")
+      .eq("activo", true)
+      .single()
+      .then(({ data }) => { if (data) setBandera(data.bandera); });
+
+    const ch = supabase
+      .channel("dir-bandera")
+      .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" },
+        payload => { const n = payload.new as any; if (n?.bandera) setBandera(n.bandera); })
+      .subscribe();
+
+    return () => { supabase.removeChannel(ch); };
+  }, []);
+
+  // Sesiones activas + ubicaciones en tiempo real
+  useEffect(() => {
+    let colorIdx = 0;
+
+    const loadSessions = async () => {
+      const { data } = await supabase
+        .from("sesiones")
+        .select("piloto_id, pilotos(nombre)")
+        .eq("estado", "activa");
+
+      if (!data) return;
+
+      setPilotos(prev => {
+        const next = new Map(prev);
+        const activeIds = new Set(data.map(s => s.piloto_id));
+
+        for (const s of data) {
+          if (!next.has(s.piloto_id)) {
+            next.set(s.piloto_id, {
+              piloto_id: s.piloto_id,
+              nombre: (s.pilotos as any)?.nombre || "Piloto",
+              lat: null, lng: null, velocidad: 0,
+              dentro_geocerca: null, ultima_actualizacion: null,
+              color: COLORES[colorIdx++ % COLORES.length],
+            });
+          }
+        }
+        for (const id of next.keys()) {
+          if (!activeIds.has(id)) next.delete(id);
+        }
+        return next;
+      });
+    };
+
+    loadSessions();
+
+    const sesCh = supabase
+      .channel("dir-sesiones")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sesiones" }, loadSessions)
+      .subscribe();
+
+    const locCh = supabase
+      .channel("dir-ubicaciones")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "ubicaciones_piloto" },
+        payload => {
+          const u = payload.new as any;
+          setPilotos(prev => {
+            const next = new Map(prev);
+            const p = next.get(u.piloto_id);
+            if (p) {
+              next.set(u.piloto_id, {
+                ...p,
+                lat: u.lat, lng: u.lng,
+                velocidad: u.velocidad ?? 0,
+                dentro_geocerca: u.dentro_geocerca,
+                ultima_actualizacion: new Date(),
+              });
+            }
+            return next;
+          });
+        })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(sesCh);
+      supabase.removeChannel(locCh);
+    };
+  }, []);
+
+  // Tick para "hace Xs"
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  // ── Proyección SVG ──────────────────────────────────────────
+  const W = 520, H = 300, PAD = 32;
+  const lats   = trazado.map(c => c.lat);
+  const lngs   = trazado.map(c => c.lng);
+  const minLat = trazado.length ? Math.min(...lats) : 0;
+  const maxLat = trazado.length ? Math.max(...lats) : 1;
+  const minLng = trazado.length ? Math.min(...lngs) : 0;
+  const maxLng = trazado.length ? Math.max(...lngs) : 1;
+  const dLat   = maxLat - minLat || 0.0001;
+  const dLng   = maxLng - minLng || 0.0001;
+  const scaleX = (W - PAD * 2) / dLng;
+  const scaleY = (H - PAD * 2) / dLat;
+  const scale  = Math.min(scaleX, scaleY);
+  const offX   = (W - dLng * scale) / 2;
+  const offY   = (H - dLat * scale) / 2;
+
+  const toX = (lng: number) => offX + (lng - minLng) * scale;
+  const toY = (lat: number) => H - offY - (lat - minLat) * scale;
+
+  const trackPath = trazado.length > 0
+    ? trazado.map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`).join(" ")
+    : "";
+
+  const stroke      = STROKE_COLOR[bandera] || STROKE_COLOR.verde;
+  const pilotosList = Array.from(pilotos.values());
+
+  return (
+    <div className="rounded-2xl bg-gray-950 border border-gray-800 overflow-hidden">
+
+      {/* ── Header ── */}
+      <div className="flex items-center justify-between px-4 py-3 border-b border-gray-800">
+        <div className="flex items-center gap-2">
+          <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mapa en tiempo real</span>
+        </div>
+        <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold ${
+          bandera === "verde"             ? "bg-green-950  text-green-400"  :
+          bandera === "roja"              ? "bg-red-950    text-red-400 animate-pulse" :
+          bandera.startsWith("amarilla") ? "bg-yellow-950 text-yellow-400" :
+          "bg-gray-800 text-gray-400"
+        }`}>
+          <span className="w-1.5 h-1.5 rounded-full bg-current" />
+          {FLAG_LABEL[bandera] || bandera}
+        </div>
+      </div>
+
+      {/* ── Contenido principal: mapa + lista ── */}
+      <div className="flex flex-col sm:flex-row">
+
+        {/* MAPA — centro */}
+        <div className="flex-1 min-w-0">
+          {/* Leyenda de pilotos (sobre el mapa) */}
+          {pilotosList.length > 0 && (
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-4 pt-3 pb-1">
+              {pilotosList.map(p => (
+                <div key={p.piloto_id} className="flex items-center gap-1.5">
+                  <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                  <span className="text-xs text-white/50">{p.nombre.split(" ")[0]}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
+            {trazado.length > 0 ? (
+              <>
+                {/* Glow */}
+                <path d={trackPath} fill="none" stroke={stroke} strokeWidth="14"
+                  strokeLinecap="round" strokeLinejoin="round" opacity="0.10" />
+                {/* Trazado */}
+                <path d={trackPath} fill="none" stroke={stroke} strokeWidth="3"
+                  strokeLinecap="round" strokeLinejoin="round" />
+                {/* Meta */}
+                <circle cx={toX(trazado[0].lng).toFixed(1)} cy={toY(trazado[0].lat).toFixed(1)}
+                  r="5" fill={stroke} />
+                <circle cx={toX(trazado[0].lng).toFixed(1)} cy={toY(trazado[0].lat).toFixed(1)}
+                  r="10" fill="none" stroke={stroke} strokeWidth="1.5" opacity="0.4" />
+
+                {/* Pilotos */}
+                {pilotosList.map(p => {
+                  if (p.lat === null || p.lng === null) return null;
+                  const x = parseFloat(toX(p.lng).toFixed(1));
+                  const y = parseFloat(toY(p.lat).toFixed(1));
+                  return (
+                    <g key={p.piloto_id}>
+                      <circle cx={x} cy={y} r="14" fill={p.color} opacity="0.18" />
+                      <circle cx={x} cy={y} r="8"  fill={p.color} />
+                      <text x={x} y={y + 4} textAnchor="middle" fill="white"
+                        fontSize="9" fontWeight="bold">
+                        {p.nombre.charAt(0).toUpperCase()}
+                      </text>
+                      <text x={x} y={y - 17} textAnchor="middle" fill={p.color}
+                        fontSize="9" fontWeight="600">
+                        {p.velocidad}km/h
+                      </text>
+                    </g>
+                  );
+                })}
+              </>
+            ) : (
+              <text x={W / 2} y={H / 2} textAnchor="middle" fill="#374151" fontSize="13">
+                Sin trazado configurado
+              </text>
+            )}
+          </svg>
+        </div>
+
+        {/* LISTA DE PILOTOS — costado derecho */}
+        <div className="sm:w-52 border-t sm:border-t-0 sm:border-l border-gray-800 flex flex-col">
+
+          <div className="px-3 py-2.5 border-b border-gray-800">
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              {pilotosList.length === 0
+                ? "Sin pilotos"
+                : `${pilotosList.length} en pista`}
+            </p>
+          </div>
+
+          {pilotosList.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center py-10 text-center px-4">
+              <p className="text-2xl mb-2">🏁</p>
+              <p className="text-xs text-white/20">Esperando pilotos</p>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-800/60">
+              {pilotosList.map(p => {
+                const segs  = p.ultima_actualizacion
+                  ? Math.floor((Date.now() - p.ultima_actualizacion.getTime()) / 1000)
+                  : null;
+                const activo = segs !== null && segs < 10;
+
+                return (
+                  <div key={p.piloto_id} className="px-3 py-3 flex flex-col gap-1">
+                    {/* Nombre + color */}
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: p.color }} />
+                      <p className="text-xs font-semibold text-white truncate">{p.nombre}</p>
+                    </div>
+
+                    {/* Velocidad */}
+                    <div className="flex items-end gap-1 pl-4">
+                      <span className="text-xl font-black text-white tabular-nums leading-none">
+                        {p.velocidad}
+                      </span>
+                      <span className="text-xs text-white/30 mb-0.5">km/h</span>
+                    </div>
+
+                    {/* Geocerca + señal */}
+                    <div className="flex items-center gap-2 pl-4">
+                      <span className={`text-xs font-medium ${
+                        p.dentro_geocerca === null ? "text-gray-600"
+                        : p.dentro_geocerca         ? "text-green-400"
+                        : "text-red-400"
+                      }`}>
+                        {p.dentro_geocerca === null ? "—"
+                         : p.dentro_geocerca ? "En pista"
+                         : "Fuera"}
+                      </span>
+                      {segs !== null && (
+                        <span className={`text-xs ${activo ? "text-white/30" : "text-yellow-600"}`}>
+                          {activo ? `${segs}s` : `⚠ ${segs}s`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
