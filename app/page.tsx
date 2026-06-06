@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import GpsPiloto from "@/components/GpsPiloto";
-import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 import {
   registrarPiloto,
@@ -52,6 +52,65 @@ const FLAG_CONFIG: Record<string, {
   blanca:         { bg: "bg-gray-900",   border: "border-gray-700",   color: "text-gray-200",   subColor: "text-gray-500",   emoji: "⬜",    title: "VEHÍCULO LENTO",  desc: "Máxima precaución · No adelantar",                    pulse: false },
   negra:          { bg: "bg-gray-950",   border: "border-gray-600",   color: "text-white",      subColor: "text-gray-400",   emoji: "⬛",    title: "INGRESE A BOXES", desc: "El piloto señalado debe retirarse de pista",          pulse: false },
 };
+
+// ── Componente: Speed Card (zona amarilla portrait) ──────────
+function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
+  const [vel, setVel]       = useState(0);
+  const [prec, setPrec]     = useState<number | null>(null);
+  const [gpsOk, setGpsOk]   = useState(false);
+  const [dentro, setDentro] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (pos) => {
+        setGpsOk(true);
+        setVel(pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : 0);
+        setPrec(Math.round(pos.coords.accuracy));
+        if (geocercaCoords.length >= 3) {
+          setDentro(puntoEnGeocerca({ lat: pos.coords.latitude, lng: pos.coords.longitude }, geocercaCoords));
+        }
+      },
+      () => setGpsOk(false),
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, [geocercaCoords]);
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div className="px-5 pt-4 pb-5">
+        <p className="text-xs text-gray-400 uppercase tracking-widest mb-3 font-medium">Velocidad</p>
+        <div className="flex items-end justify-between">
+          <div className="flex items-baseline gap-2">
+            <span className="text-7xl font-black text-gray-900 tabular-nums leading-none">{vel}</span>
+            <span className="text-xl text-gray-400 font-medium pb-1">km/h</span>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-1.5">
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${gpsOk ? "bg-green-500 animate-pulse" : "bg-gray-300"}`} />
+              <span className="text-xs text-gray-500">
+                {prec != null ? `GPS ±${prec}m` : "Sin GPS"}
+              </span>
+            </div>
+            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+              dentro === null
+                ? "bg-gray-100 text-gray-500"
+                : dentro
+                ? "bg-green-100 text-green-700"
+                : "bg-red-100 text-red-600"
+            }`}>
+              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                dentro === null ? "bg-gray-400" : dentro ? "bg-green-500" : "bg-red-500"
+              }`} />
+              {dentro === null ? "Verificando..." : dentro ? "En pista" : "Fuera de pista"}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ── Componente: Trazado SVG ───────────────────────────────────
 function TrackSVG({
@@ -236,6 +295,9 @@ export default function Home() {
   const [showFullTrack, setShowFullTrack] = useState(false);
   const [estadoPista, setEstadoPista] = useState<{ bandera: string; sector?: string; mensaje?: string }>({ bandera: "verde" });
   const [trazado, setTrazado]         = useState<Coordenada[]>([]);
+  const [geocerca, setGeocerca]       = useState<Coordenada[]>([]);
+  const [isLandscape, setIsLandscape] = useState(false);
+  const [viewportH, setViewportH]     = useState(600);
 
   // ── Cargar sesión al montar ──
   useEffect(() => {
@@ -253,6 +315,7 @@ export default function Home() {
     if (stage !== "app") return;
 
     getTrazadoActivo().then((coords) => { if (coords) setTrazado(coords); });
+    getGeocercaActiva().then((coords) => { if (coords) setGeocerca(coords); });
 
     supabase
       .from("estado_pista")
@@ -273,6 +336,24 @@ export default function Home() {
 
     return () => { supabase.removeChannel(channel); };
   }, [stage]);
+
+  // ── Detección de orientación ──
+  useEffect(() => {
+    const update = () => {
+      const landscape = window.innerWidth > window.innerHeight;
+      setIsLandscape(landscape);
+      setViewportH(window.innerHeight);
+      if (landscape) setSecView("main");
+    };
+    update();
+    window.addEventListener("resize", update);
+    const onOrient = () => setTimeout(update, 100);
+    window.addEventListener("orientationchange", onOrient);
+    return () => {
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", onOrient);
+    };
+  }, []);
 
   // ── Handlers existentes (sin cambios) ──
   const agregarAuto = () => setAutos([...autos, { id: Date.now(), marca: "", modelo: "" }]);
@@ -595,20 +676,61 @@ export default function Home() {
       )}
 
       {/* ══════════════════════════════════════════════════════
-          STAGE: APP — Vista cockpit oscura (rediseñada)
+          STAGE: APP — Vista piloto
       ══════════════════════════════════════════════════════ */}
       {stage === "app" && (
-        <div className="min-h-screen bg-gray-950 text-white flex flex-col" style={{ maxWidth: 480, margin: "0 auto" }}>
+        <div className="min-h-screen bg-gray-100 text-gray-900 flex flex-col" style={{ maxWidth: 480, margin: "0 auto" }}>
+
+          {/* ══ LANDSCAPE — MODO CONDUCCIÓN ══ */}
+          {isLandscape && (
+            <div className="fixed inset-0 z-40 bg-gray-950 flex" style={{ maxWidth: "none" }}>
+
+              {/* Circuito — 70% */}
+              <div className="flex items-center justify-center bg-gray-950 p-4" style={{ width: "70%" }}>
+                <TrackSVG
+                  trazado={trazado}
+                  bandera={estadoPista.bandera}
+                  height={viewportH - 32}
+                  onTap={() => {}}
+                />
+              </div>
+
+              {/* Panel bandera — 30% */}
+              <div
+                className={`flex flex-col items-center justify-center p-6 border-l ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}
+                style={{ width: "30%" }}
+              >
+                <span className="text-6xl mb-5 leading-none">{flag.emoji}</span>
+                <p className={`text-xl font-black tracking-widest text-center leading-tight ${flag.color}`}>
+                  {flag.title}
+                </p>
+                <p className={`text-xs mt-3 text-center leading-snug ${flag.subColor}`}>
+                  {flag.desc}
+                </p>
+                {estadoPista.sector && (
+                  <p className="text-xs text-gray-600 mt-4">Sector: {estadoPista.sector}</p>
+                )}
+                {estadoPista.mensaje && (
+                  <p className="text-xs text-gray-600 mt-1">{estadoPista.mensaje}</p>
+                )}
+                {/* Mini indicador habilitado */}
+                <div className={`mt-6 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${semaforo.bg} ${semaforo.text}`}>
+                  {semaforo.dot} {semaforo.label}
+                </div>
+              </div>
+
+            </div>
+          )}
 
           {/* ── HEADER ── */}
-          <div className="px-4 py-3 border-b border-gray-900 flex items-center justify-between">
+          <div className="bg-indigo-700 text-white px-4 py-3 flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-gray-800 flex items-center justify-center font-bold text-sm text-white flex-shrink-0">
+              <div className="w-9 h-9 rounded-xl bg-indigo-500 flex items-center justify-center font-bold text-sm text-white flex-shrink-0">
                 {iniciales}
               </div>
               <div>
-                <p className="text-xs text-gray-500 leading-none">{nombreMostrar}</p>
-                <p className="text-xs text-gray-400 leading-none mt-0.5">{vehiculoMostrar}</p>
+                <p className="text-xs text-indigo-200 leading-none">{nombreMostrar}</p>
+                <p className="text-xs text-indigo-100 leading-none mt-0.5">{vehiculoMostrar}</p>
               </div>
             </div>
             <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${semaforo.bg} ${semaforo.text}`}>
@@ -625,10 +747,10 @@ export default function Home() {
 
                 {/* Aviso si no está habilitado */}
                 {!habilitado && (
-                  <div className="bg-amber-950 border border-amber-800 rounded-2xl px-4 py-3 flex items-center gap-3">
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 flex items-center gap-3">
                     <span className="text-xl flex-shrink-0">🔒</span>
                     <div>
-                      <p className="text-amber-400 text-xs font-semibold">Cuenta no habilitada para pista</p>
+                      <p className="text-amber-700 text-xs font-semibold">Cuenta no habilitada para pista</p>
                       <button onClick={() => setStage("prueba")} className="text-amber-600 text-xs underline mt-0.5">
                         Completar prueba de conocimientos →
                       </button>
@@ -640,11 +762,11 @@ export default function Home() {
                 <TrackSVG
                   trazado={trazado}
                   bandera={estadoPista.bandera}
-                  height={170}
+                  height={230}
                   onTap={() => setShowFullTrack(true)}
                 />
 
-                {/* PIZARRA DE BANDERAS */}
+                {/* PIZARRA DE BANDERA — panel único grande */}
                 <div className={`rounded-2xl border px-5 py-5 ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}>
                   <div className="flex items-center gap-4">
                     <span className="text-5xl flex-shrink-0">{flag.emoji}</span>
@@ -657,8 +779,8 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* PANEL GPS (velocidad + geocerca si hay sesión activa) */}
-                <GpsPiloto pilotoId={pilotoData?.id} />
+                {/* SPEED CARD — Zona Amarilla */}
+                <SpeedCard geocercaCoords={geocerca} />
 
               </div>
             )}
@@ -777,41 +899,45 @@ export default function Home() {
 
           </div>
 
-          {/* ── BOTTOM NAVIGATION ── */}
-          <div className="border-t border-gray-900 bg-gray-950 flex items-center justify-around px-1 py-1.5">
-            {([
-              { id: "main",        emoji: "🏁", label: "Pista"    },
-              { id: "perfil",      emoji: "👤", label: "Perfil"   },
-              { id: "saldo",       emoji: "⏱",  label: "Saldo"    },
-              { id: "reglamento",  emoji: "📄", label: "Reglas"   },
-            ] as { id: SecView; emoji: string; label: string }[]).map(item => (
-              <button
-                key={item.id}
-                onClick={() => setSecView(item.id)}
-                className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${
-                  secView === item.id ? "text-white" : "text-gray-600 hover:text-gray-400"
-                }`}
-              >
-                <span className="text-xl">{item.emoji}</span>
-                <span className="text-xs font-medium">{item.label}</span>
-              </button>
-            ))}
-          </div>
+          {/* ── BOTTOM NAVIGATION — oculto en landscape ── */}
+          {!isLandscape && (
+            <div className="border-t border-gray-200 bg-white flex items-center justify-around px-1 py-1.5">
+              {([
+                { id: "main",        emoji: "🏁", label: "Pista"    },
+                { id: "perfil",      emoji: "👤", label: "Perfil"   },
+                { id: "saldo",       emoji: "⏱",  label: "Saldo"    },
+                { id: "reglamento",  emoji: "📄", label: "Reglas"   },
+              ] as { id: SecView; emoji: string; label: string }[]).map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setSecView(item.id)}
+                  className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${
+                    secView === item.id ? "text-indigo-700" : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  <span className="text-xl">{item.emoji}</span>
+                  <span className="text-xs font-medium">{item.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
-          {/* ── BOTÓN QR FLOTANTE ── */}
-          <button
-            onClick={() => habilitado ? setShowQRModal(true) : setStage("prueba")}
-            className="fixed bottom-20 right-4 w-16 h-16 rounded-2xl z-40 flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform"
-            style={{
-              background:  habilitado ? "white" : "#1f2937",
-              boxShadow:   habilitado
-                ? "0 0 0 1px rgba(255,255,255,0.1), 0 0 24px rgba(255,255,255,0.2), 0 8px 32px rgba(0,0,0,0.6)"
-                : "0 8px 32px rgba(0,0,0,0.5)",
-            }}
-          >
-            <QRIcon size={26} color={habilitado ? "black" : "#4b5563"} />
-            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, color: habilitado ? "black" : "#4b5563" }}>QR</span>
-          </button>
+          {/* ── BOTÓN QR FLOTANTE — oculto en landscape ── */}
+          {!isLandscape && (
+            <button
+              onClick={() => habilitado ? setShowQRModal(true) : setStage("prueba")}
+              className="fixed bottom-20 right-4 w-16 h-16 rounded-2xl z-40 flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform"
+              style={{
+                background:  habilitado ? "white" : "#1f2937",
+                boxShadow:   habilitado
+                  ? "0 0 0 1px rgba(255,255,255,0.1), 0 0 24px rgba(255,255,255,0.2), 0 8px 32px rgba(0,0,0,0.6)"
+                  : "0 8px 32px rgba(0,0,0,0.5)",
+              }}
+            >
+              <QRIcon size={26} color={habilitado ? "black" : "#4b5563"} />
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, color: habilitado ? "black" : "#4b5563" }}>QR</span>
+            </button>
+          )}
 
           {/* ── MODAL QR ── */}
           {showQRModal && (
