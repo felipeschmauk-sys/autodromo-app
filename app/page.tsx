@@ -769,7 +769,7 @@ export default function Home() {
 
           {/* ══ LANDSCAPE — MODO CONDUCCIÓN ══ */}
           {isLandscape && (
-            <div className="fixed inset-0 z-40 bg-gray-950 flex" style={{ maxWidth: "none" }}>
+            <div className="fixed inset-0 bg-gray-950 flex" style={{ maxWidth: "none", zIndex: 2000 }}>
 
               {/* Circuito — 70% */}
               <div className="flex items-center justify-center bg-gray-950" style={{ width: "70%" }}>
@@ -844,14 +844,16 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* TRAZADO — Mapa Leaflet */}
-                <LeafletPilotMap
-                  trazado={trazado}
-                  bandera={estadoPista.bandera}
-                  sectores={sectores}
-                  height={230}
-                  onTap={() => setShowFullTrack(true)}
-                />
+                {/* TRAZADO — Mapa Leaflet (solo en portrait) */}
+                {!isLandscape && (
+                  <LeafletPilotMap
+                    trazado={trazado}
+                    bandera={estadoPista.bandera}
+                    sectores={sectores}
+                    height={230}
+                    onTap={() => setShowFullTrack(true)}
+                  />
+                )}
 
                 {/* PIZARRA DE BANDERA — panel único grande */}
                 <div className={`rounded-2xl border px-5 py-5 ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}>

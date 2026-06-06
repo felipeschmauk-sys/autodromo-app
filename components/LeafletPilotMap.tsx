@@ -68,6 +68,13 @@ export default function LeafletPilotMap({
       zoom:               15,
       zoomControl:        false,
       attributionControl: false,
+      // Vista fija: el piloto no necesita explorar el mapa
+      dragging:           false,
+      scrollWheelZoom:    false,
+      doubleClickZoom:    false,
+      touchZoom:          false,
+      keyboard:           false,
+      boxZoom:            false,
     });
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -180,6 +187,7 @@ export default function LeafletPilotMap({
         height,
         borderRadius: "16px",
         overflow:     "hidden",
+        position:     "relative", // necesario para contener z-indexes de Leaflet
         cursor:       onTap ? "pointer" : "default",
       }}
     />
