@@ -57,7 +57,6 @@ export default function LeafletPilotMap({
   const posRef       = useRef<L.Marker | null>(null);
   const watchRef     = useRef<number | null>(null);
   const gpsHistRef   = useRef<[number, number][]>([]);
-  const fittedRef    = useRef(false);
 
   // ── Inicializar mapa una sola vez ──────────────────────────
   useEffect(() => {
@@ -113,8 +112,7 @@ export default function LeafletPilotMap({
           } else {
             posRef.current.setLatLng([lat, lng]);
           }
-
-          map.panTo([lat, lng], { animate: true, duration: 0.5 });
+          // Sin panTo — el mapa queda fijo mostrando el trazado completo
         },
         null,
         { enableHighAccuracy: true, maximumAge: 0 }
@@ -124,9 +122,8 @@ export default function LeafletPilotMap({
     return () => {
       if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
       map.remove();
-      mapRef.current  = null;
-      posRef.current  = null;
-      fittedRef.current = false;
+      mapRef.current     = null;
+      posRef.current     = null;
       gpsHistRef.current = [];
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -150,27 +147,24 @@ export default function LeafletPilotMap({
           .map(c => [c.lat, c.lng] as [number, number]);
         if (pts.length < 2) return;
         trackRef.current.push(
-          L.polyline(pts, { color, weight: 14, opacity: 0.15 }).addTo(map)
+          L.polyline(pts, { color, weight: 20, opacity: 0.18 }).addTo(map)
         );
         trackRef.current.push(
-          L.polyline(pts, { color, weight: 3.5, opacity: 0.9 }).addTo(map)
+          L.polyline(pts, { color, weight: 7, opacity: 0.95 }).addTo(map)
         );
       });
     } else {
       const color = STROKE[bandera] || STROKE.verde;
       trackRef.current.push(
-        L.polyline(latlngs, { color, weight: 14, opacity: 0.15 }).addTo(map)
+        L.polyline(latlngs, { color, weight: 20, opacity: 0.18 }).addTo(map)
       );
       trackRef.current.push(
-        L.polyline(latlngs, { color, weight: 3.5, opacity: 0.9 }).addTo(map)
+        L.polyline(latlngs, { color, weight: 7, opacity: 0.95 }).addTo(map)
       );
     }
 
-    // Ajustar vista solo la primera vez (después el GPS toma el control)
-    if (!fittedRef.current) {
-      map.fitBounds(L.polyline(latlngs).getBounds(), { padding: [28, 28] });
-      fittedRef.current = true;
-    }
+    // Siempre ajustar la vista al trazado completo — el punto GPS se mueve sin mover el mapa
+    map.fitBounds(L.polyline(latlngs).getBounds(), { padding: [28, 28] });
   }, [trazado, sectores, bandera]);
 
   // ── Invalidar tamaño cuando cambia height ─────────────────
