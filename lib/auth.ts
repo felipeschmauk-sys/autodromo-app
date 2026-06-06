@@ -246,11 +246,13 @@ export async function confirmarIngreso(qr_id: string, piloto_id: string) {
 export async function getPilotosEnSesion() {
   const { data } = await supabase
     .from('sesiones')
-    .select('*, pilotos(nombre, rut, saldo_minutos, vehiculos(marca, modelo))')
+    .select('*, pilotos(nombre, rut, saldo_minutos, bloqueado, prueba_aprobada, vehiculos(marca, modelo))')
     .eq('estado', 'activa')
     .order('inicio', { ascending: false })
 
-  return data || []
+  // Supabase devuelve el join bajo la clave "pilotos" (nombre de tabla).
+  // Lo remapeamos a "piloto" para que coincida con la interfaz del admin.
+  return (data || []).map((s: any) => ({ ...s, piloto: s.pilotos }))
 }
 
 export async function getTodosLosPilotos() {
