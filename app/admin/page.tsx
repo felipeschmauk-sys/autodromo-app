@@ -15,9 +15,17 @@ const QrScanner = dynamic(() => import("@/components/QrScanner"), {
     <div className="text-center py-10 text-gray-400 text-sm">Iniciando cámara…</div>
   ),
 });
-// ── NUEVO: Dirección de Carrera ───────────────────────────────
 const DireccionCarrera = dynamic(() => import('@/components/DireccionCarrera'), { ssr: false });
+const SectoresEditor   = dynamic(() => import('@/components/SectoresEditor'),   { ssr: false });
 // ─── Types ────────────────────────────────────────────────────────────────────
+interface Sector {
+  id: string;
+  nombre: string;
+  orden: number;
+  punto_inicio: number;
+  punto_fin: number;
+  bandera: string;
+}
 interface Piloto {
   id: string;
   nombre: string;
@@ -62,8 +70,9 @@ export default function AdminPage() {
   const [loadingPilotos, setLoadingPilotos] = useState(false);
   const [maxPilotos, setMaxPilotos] = useState(MAX_PILOTOS_DEFAULT);
   const [minSaldo, setMinSaldo] = useState(MIN_SALDO_DEFAULT);
-  const [bandera, setBandera]           = useState("verde");
+  const [bandera, setBandera]                 = useState("verde");
   const [cargandoBandera, setCargandoBandera] = useState(false);
+  const [sectores, setSectores]               = useState<Sector[]>([]);
   const [autodromo, setAutodromo] = useState(AUTODROMO_OPTIONS[0]);
   const [busqueda, setBusqueda] = useState("");
   const [alertas, setAlertas] = useState<string[]>([]);
@@ -114,6 +123,23 @@ export default function AdminPage() {
     if (data?.bandera) setBandera(data.bandera);
   }, []);
 
+  const cargarSectores = useCallback(async () => {
+    const { data } = await supabase
+      .from("sectores_pista")
+      .select("*")
+      .order("orden");
+    if (data) setSectores(data);
+  }, []);
+
+  const setSectorBandera = useCallback(async (id: string, nuevaBandera: string) => {
+    // Optimistic update
+    setSectores(prev => prev.map(s => s.id === id ? { ...s, bandera: nuevaBandera } : s));
+    await supabase
+      .from("sectores_pista")
+      .update({ bandera: nuevaBandera })
+      .eq("id", id);
+  }, []);
+
   const aplicarBandera = useCallback(async (nuevaBandera: string) => {
     setCargandoBandera(true);
     setBandera(nuevaBandera); // optimistic
@@ -137,34 +163,23 @@ export default function AdminPage() {
     cargarPilotos();
     cargarSesiones();
     cargarBandera();
+    cargarSectores();
     const channel = supabase
       .channel("admin-sesiones-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sesiones" },
-        () => { cargarSesiones(); }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pilotos" },
-        () => { cargarPilotos(); }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "estado_pista" },
-        (payload) => {
-          const n = payload.new as any;
-          if (n?.bandera) setBandera(n.bandera);
-        }
-      )
-      .subscribe((status) => {
-        setRealtimeConectado(status === "SUBSCRIBED");
-      });
+      .on("postgres_changes", { event: "*", schema: "public", table: "sesiones" },
+          () => { cargarSesiones(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "pilotos" },
+          () => { cargarPilotos(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" },
+          (payload) => { const n = payload.new as any; if (n?.bandera) setBandera(n.bandera); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" },
+          () => { cargarSectores(); })
+      .subscribe((status) => { setRealtimeConectado(status === "SUBSCRIBED"); });
     return () => {
       supabase.removeChannel(channel);
       setRealtimeConectado(false);
     };
-  }, [autenticado, cargarPilotos, cargarSesiones, cargarBandera]);
+  }, [autenticado, cargarPilotos, cargarSesiones, cargarBandera, cargarSectores]);
   // ── QR ───────────────────────────────────────────────────────────────────
   const iniciarScanner = useCallback(() => {
     setScanError("");
@@ -387,6 +402,75 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+            {/* ── CONTROL DE SECTORES ── */}
+            {sectores.length > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Control por sector</span>
+                    {bandera === "roja" && (
+                      <span className="text-xs text-red-500 font-medium">· Bandera roja activa</span>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400">{sectores.length} sectores</span>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {sectores.map((s, i) => {
+                    const colors = ["bg-blue-400", "bg-amber-400", "bg-emerald-400", "bg-pink-400", "bg-violet-400", "bg-orange-400", "bg-cyan-400", "bg-lime-400"];
+                    const dotColor = colors[i % colors.length];
+                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla";
+                    const efectiva = isGlobalOverride ? bandera : s.bandera;
+                    return (
+                      <div key={s.id} className="px-5 py-3 flex items-center gap-4">
+                        {/* Indicador de color de sector */}
+                        <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${dotColor}`} />
+                        {/* Nombre */}
+                        <span className="text-sm font-medium text-gray-800 flex-1">{s.nombre}</span>
+                        {/* Estado efectivo */}
+                        <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
+                          efectiva === "roja"             ? "bg-red-100 text-red-600"
+                          : efectiva === "amarilla"       ? "bg-yellow-100 text-yellow-700"
+                          : "bg-green-100 text-green-700"
+                        }`}>
+                          {efectiva === "roja" ? "🔴 Roja" : efectiva === "amarilla" ? "🟡 Amarilla" : "🟢 Verde"}
+                        </span>
+                        {/* Botones solo si no hay override global */}
+                        {!isGlobalOverride && (
+                          <div className="flex gap-1.5">
+                            <button
+                              onClick={() => setSectorBandera(s.id, "verde")}
+                              disabled={s.bandera === "verde"}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                s.bandera === "verde"
+                                  ? "bg-green-600 border-green-600 text-white"
+                                  : "bg-white border-gray-200 text-gray-500 hover:border-green-400 hover:text-green-600"
+                              }`}
+                            >
+                              🟢
+                            </button>
+                            <button
+                              onClick={() => setSectorBandera(s.id, "amarilla")}
+                              disabled={s.bandera === "amarilla"}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                s.bandera === "amarilla"
+                                  ? "bg-yellow-500 border-yellow-500 text-white animate-pulse"
+                                  : "bg-white border-gray-200 text-gray-500 hover:border-yellow-400 hover:text-yellow-600"
+                              }`}
+                            >
+                              🟡
+                            </button>
+                          </div>
+                        )}
+                        {isGlobalOverride && (
+                          <span className="text-xs text-gray-400 italic">Override global</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* ── MAPA EN TIEMPO REAL ── */}
             <DireccionCarrera />
 
@@ -751,6 +835,17 @@ export default function AdminPage() {
                 </div>
               </div>
             </div>
+            {/* ── SECTORES DE PISTA ── */}
+            <div className="bg-gray-900 rounded-2xl border border-gray-700 overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-gray-700">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sectores de pista</p>
+                <p className="text-xs text-gray-600 mt-0.5">Definí divisiones del circuito para control independiente de banderas</p>
+              </div>
+              <div className="p-5">
+                <SectoresEditor />
+              </div>
+            </div>
+
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
               <div className="px-5 py-3.5 border-b border-gray-100">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado del sistema</p>

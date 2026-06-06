@@ -12,6 +12,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
 
+interface SectorInfo {
+  id: string;
+  nombre: string;
+  orden: number;
+  punto_inicio: number;
+  punto_fin: number;
+  bandera: string;
+}
+
 interface PilotoEnPista {
   piloto_id: string;
   nombre: string;
@@ -47,14 +56,32 @@ const FLAG_LABEL: Record<string, string> = {
 };
 
 export default function DireccionCarrera() {
-  const [trazado, setTrazado] = useState<Coordenada[]>([]);
-  const [pilotos, setPilotos] = useState<Map<string, PilotoEnPista>>(new Map());
-  const [bandera, setBandera]  = useState("verde");
-  const [tick, setTick]        = useState(0);
+  const [trazado,  setTrazado]  = useState<Coordenada[]>([]);
+  const [pilotos,  setPilotos]  = useState<Map<string, PilotoEnPista>>(new Map());
+  const [bandera,  setBandera]  = useState("verde");
+  const [sectores, setSectores] = useState<SectorInfo[]>([]);
+  const [tick,     setTick]     = useState(0);
 
   // Cargar circuito
   useEffect(() => {
     getTrazadoActivo().then(c => { if (c) setTrazado(c); });
+  }, []);
+
+  // Cargar sectores y suscribir cambios
+  useEffect(() => {
+    const loadSectores = async () => {
+      const { data } = await supabase
+        .from("sectores_pista")
+        .select("*")
+        .order("orden");
+      if (data) setSectores(data);
+    };
+    loadSectores();
+    const ch = supabase
+      .channel("dir-sectores")
+      .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" }, loadSectores)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   // Estado de pista (bandera)
@@ -217,12 +244,40 @@ export default function DireccionCarrera() {
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full">
             {trazado.length > 0 ? (
               <>
-                {/* Glow */}
-                <path d={trackPath} fill="none" stroke={stroke} strokeWidth="14"
-                  strokeLinecap="round" strokeLinejoin="round" opacity="0.10" />
-                {/* Trazado */}
-                <path d={trackPath} fill="none" stroke={stroke} strokeWidth="3"
+                {/* Base del trazado (fondo oscuro) */}
+                <path d={trackPath} fill="none" stroke="#1f2937" strokeWidth="8"
                   strokeLinecap="round" strokeLinejoin="round" />
+
+                {/* Sectores coloreados según su bandera */}
+                {sectores.length > 0 ? (
+                  sectores.map((s, i) => {
+                    const globalOverride = bandera === "roja" || bandera === "amarilla";
+                    const efectiva       = globalOverride ? bandera : s.bandera;
+                    const segStroke      = efectiva === "roja"    ? "#ef4444"
+                                        : efectiva === "amarilla" ? "#eab308"
+                                        : "#22c55e";
+                    const segPath = trazado.slice(s.punto_inicio, s.punto_fin + 1)
+                      .map((c, j) => `${j === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`)
+                      .join(" ");
+                    return (
+                      <g key={s.id}>
+                        <path d={segPath} fill="none" stroke={segStroke} strokeWidth="10"
+                          strokeLinecap="round" strokeLinejoin="round" opacity="0.12" />
+                        <path d={segPath} fill="none" stroke={segStroke} strokeWidth="3"
+                          strokeLinecap="round" strokeLinejoin="round" />
+                      </g>
+                    );
+                  })
+                ) : (
+                  /* Sin sectores: trazado global con color de bandera */
+                  <>
+                    <path d={trackPath} fill="none" stroke={stroke} strokeWidth="10"
+                      strokeLinecap="round" strokeLinejoin="round" opacity="0.10" />
+                    <path d={trackPath} fill="none" stroke={stroke} strokeWidth="3"
+                      strokeLinecap="round" strokeLinejoin="round" />
+                  </>
+                )}
+
                 {/* Meta */}
                 <circle cx={toX(trazado[0].lng).toFixed(1)} cy={toY(trazado[0].lat).toFixed(1)}
                   r="5" fill={stroke} />
