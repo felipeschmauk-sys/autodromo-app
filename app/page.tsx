@@ -1,8 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import GpsPiloto from "@/components/GpsPiloto";
-import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -471,6 +470,69 @@ export default function Home() {
       if (mensajeDismissRef.current) clearTimeout(mensajeDismissRef.current);
     };
   }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Envío GPS a Supabase (background) ────────────────────────
+  // Manda posición a ubicaciones_piloto cada 4s cuando hay sesión activa.
+  // Esto permite al admin ver al piloto en el mapa de Dirección de Carrera.
+  useEffect(() => {
+    if (stage !== "app" || !pilotoData?.id) return;
+
+    let sesionId: string | null = null;
+    let watchId: number | null = null;
+    let intervalo: ReturnType<typeof setInterval> | null = null;
+    let ultimaPos: GeolocationPosition | null = null;
+
+    const iniciar = async () => {
+      // Buscar sesión activa del piloto
+      const { data } = await supabase
+        .from("sesiones")
+        .select("id")
+        .eq("piloto_id", pilotoData.id)
+        .eq("estado", "activa")
+        .single();
+
+      if (!data) return; // Sin sesión, no enviar GPS
+      sesionId = data.id;
+
+      if (!navigator.geolocation) return;
+
+      // Observar posición GPS
+      watchId = navigator.geolocation.watchPosition(
+        pos => { ultimaPos = pos; },
+        null,
+        { enableHighAccuracy: true, maximumAge: 2000 }
+      );
+
+      // Enviar a Supabase cada 4 segundos
+      intervalo = setInterval(async () => {
+        if (!ultimaPos || !sesionId) return;
+        const lat = ultimaPos.coords.latitude;
+        const lng = ultimaPos.coords.longitude;
+        const dentro = geocerca.length >= 3
+          ? puntoEnGeocerca({ lat, lng }, geocerca)
+          : true;
+
+        await registrarUbicacion({
+          piloto_id:        pilotoData.id,
+          sesion_id:        sesionId!,
+          lat,
+          lng,
+          velocidad:        ultimaPos.coords.speed != null
+                              ? Math.round(ultimaPos.coords.speed * 3.6)
+                              : 0,
+          precision_metros: Math.round(ultimaPos.coords.accuracy),
+          dentro_geocerca:  dentro,
+        });
+      }, 4000);
+    };
+
+    iniciar();
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      if (intervalo) clearInterval(intervalo);
+    };
+  }, [stage, pilotoData?.id, geocerca]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Detección de orientación ──
   useEffect(() => {

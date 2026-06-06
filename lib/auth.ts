@@ -224,6 +224,15 @@ export async function validarQRToken(
   }
 }
 
+export async function cerrarSesionAdmin(piloto_id: string) {
+  const { error } = await supabase
+    .from('sesiones')
+    .update({ estado: 'inactiva', fin: new Date().toISOString() })
+    .eq('piloto_id', piloto_id)
+    .eq('estado', 'activa')
+  return { error: error?.message }
+}
+
 export async function confirmarIngreso(qr_id: string, piloto_id: string) {
   await supabase
     .from('qr_tokens')

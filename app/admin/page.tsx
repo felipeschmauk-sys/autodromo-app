@@ -6,6 +6,7 @@ import {
   getPilotosEnSesion,
   validarQRToken,
   confirmarIngreso,
+  cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
@@ -557,6 +558,17 @@ export default function AdminPage() {
                         <span className="text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">
                           En pista
                         </span>
+                        <button
+                          onClick={async () => {
+                            if (!confirm(`¿Retirar a ${nombre} de pista?`)) return;
+                            await cerrarSesionAdmin(s.piloto_id);
+                            cargarSesiones();
+                          }}
+                          className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2.5 py-1 rounded-lg transition-colors"
+                          title="Cerrar sesión del piloto"
+                        >
+                          ✕ Retirar
+                        </button>
                       </div>
                     );
                   })}
