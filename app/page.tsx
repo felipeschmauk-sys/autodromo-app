@@ -471,49 +471,51 @@ export default function Home() {
     };
   }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Ref para geocerca (acceso siempre actualizado dentro del intervalo) ──
+  const geocercaGpsRef = useRef<Coordenada[]>([]);
+  useEffect(() => { geocercaGpsRef.current = geocerca; }, [geocerca]);
+
   // ── Envío GPS a Supabase (background) ────────────────────────
-  // Manda posición a ubicaciones_piloto cada 4s cuando hay sesión activa.
-  // Esto permite al admin ver al piloto en el mapa de Dirección de Carrera.
+  // Manda posición a ubicaciones_piloto cada 3s cuando hay sesión activa.
+  // Se activa automáticamente al crear la sesión (suscripción Realtime).
   useEffect(() => {
     if (stage !== "app" || !pilotoData?.id) return;
 
+    const pilotoId = pilotoData.id;
     let sesionId: string | null = null;
     let watchId: number | null = null;
     let intervalo: ReturnType<typeof setInterval> | null = null;
     let ultimaPos: GeolocationPosition | null = null;
 
-    const iniciar = async () => {
-      // Buscar sesión activa del piloto
-      const { data } = await supabase
-        .from("sesiones")
-        .select("id")
-        .eq("piloto_id", pilotoData.id)
-        .eq("estado", "activa")
-        .single();
+    const detenerGPS = () => {
+      if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+      if (intervalo)         { clearInterval(intervalo); intervalo = null; }
+      sesionId = null;
+    };
 
-      if (!data) return; // Sin sesión, no enviar GPS
-      sesionId = data.id;
-
+    const iniciarGPS = (sid: string) => {
+      if (sesionId === sid) return; // ya corriendo con esta sesión
+      detenerGPS();
+      sesionId = sid;
       if (!navigator.geolocation) return;
 
-      // Observar posición GPS
       watchId = navigator.geolocation.watchPosition(
         pos => { ultimaPos = pos; },
         null,
-        { enableHighAccuracy: true, maximumAge: 2000 }
+        { enableHighAccuracy: true, maximumAge: 1000 }
       );
 
-      // Enviar a Supabase cada 4 segundos
       intervalo = setInterval(async () => {
         if (!ultimaPos || !sesionId) return;
         const lat = ultimaPos.coords.latitude;
         const lng = ultimaPos.coords.longitude;
-        const dentro = geocerca.length >= 3
-          ? puntoEnGeocerca({ lat, lng }, geocerca)
+        const gc = geocercaGpsRef.current;
+        const dentro = gc.length >= 3
+          ? puntoEnGeocerca({ lat, lng }, gc)
           : true;
 
         await registrarUbicacion({
-          piloto_id:        pilotoData.id,
+          piloto_id:        pilotoId,
           sesion_id:        sesionId!,
           lat,
           lng,
@@ -523,16 +525,47 @@ export default function Home() {
           precision_metros: Math.round(ultimaPos.coords.accuracy),
           dentro_geocerca:  dentro,
         });
-      }, 4000);
+      }, 3000);
     };
 
-    iniciar();
+    // 1. Verificar si ya hay sesión activa al montar
+    supabase
+      .from("sesiones")
+      .select("id")
+      .eq("piloto_id", pilotoId)
+      .eq("estado", "activa")
+      .single()
+      .then(({ data }) => { if (data?.id) iniciarGPS(data.id); });
+
+    // 2. Escuchar nuevas sesiones creadas por el admin (INSERT)
+    //    Esto activa el GPS sin necesidad de recargar la app.
+    const ch = supabase
+      .channel("piloto-sesion-watch")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "sesiones" },
+        payload => {
+          const s = payload.new as any;
+          if (s.piloto_id === pilotoId && s.estado === "activa") {
+            iniciarGPS(s.id);
+          }
+        })
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "sesiones" },
+        payload => {
+          const s = payload.new as any;
+          if (s.piloto_id === pilotoId) {
+            if (s.estado === "activa")   iniciarGPS(s.id);
+            if (s.estado === "inactiva") detenerGPS();
+          }
+        })
+      .subscribe();
 
     return () => {
-      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-      if (intervalo) clearInterval(intervalo);
+      detenerGPS();
+      supabase.removeChannel(ch);
     };
-  }, [stage, pilotoData?.id, geocerca]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
 
   // ── Detección de orientación ──
   useEffect(() => {

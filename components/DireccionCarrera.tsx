@@ -208,6 +208,7 @@ export default function DireccionCarrera() {
             const next = new Map(prev);
             const p    = next.get(u.piloto_id);
             if (p) {
+              // Piloto ya conocido → actualizar posición
               next.set(u.piloto_id, {
                 ...p,
                 lat:                  u.lat,
@@ -216,6 +217,10 @@ export default function DireccionCarrera() {
                 dentro_geocerca:      u.dentro_geocerca,
                 ultima_actualizacion: new Date(),
               });
+            } else {
+              // Piloto no estaba en el mapa aún → recargar sesiones
+              // (puede pasar si la ubicación llegó antes que el INSERT de sesión)
+              loadSessions();
             }
             return next;
           });
