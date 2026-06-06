@@ -18,6 +18,15 @@ type Stage = "login" | "registro" | "prueba" | "app";
 type SecView = "main" | "perfil" | "saldo" | "reglamento";
 type EstadoPiloto = "deshabilitado" | "pendiente" | "habilitado";
 
+interface Sector {
+  id: string;
+  nombre: string;
+  orden: number;
+  punto_inicio: number;
+  punto_fin: number;
+  bandera: string;
+}
+
 // ── Cuestionario ──────────────────────────────────────────────
 const PREGUNTAS = [
   { pregunta: "¿Por qué lado debes sobrepasar a otro vehículo en pista?", opciones: ["Por el lado izquierdo", "Por el lado derecho", "Por cualquier lado si hay espacio", "Solo en la recta principal"], correcta: 1 },
@@ -116,11 +125,13 @@ function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
 function TrackSVG({
   trazado,
   bandera,
+  sectores = [],
   height = 160,
   onTap,
 }: {
   trazado: Coordenada[];
   bandera: string;
+  sectores?: Sector[];
   height?: number;
   onTap?: () => void;
 }) {
@@ -134,6 +145,10 @@ function TrackSVG({
   };
   const stroke = strokeColor[bandera] || strokeColor.verde;
   const glow   = glowColor[bandera]   || glowColor.verde;
+
+  // Flag global tiene prioridad sobre sectores
+  const globalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "amarilla_doble";
+  const usarSectores   = sectores.length > 0 && !globalOverride;
 
   if (!trazado.length) {
     return (
@@ -165,9 +180,14 @@ function TrackSVG({
   const toX = (lng: number) => offX + (lng - minLng) * scale;
   const toY = (lat: number) => H - offY - (lat - minLat) * scale;
 
-  const d = trazado
+  const fullPath = trazado
     .map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`)
     .join(" ");
+
+  const sectorPath = (inicio: number, fin: number) =>
+    trazado.slice(inicio, fin + 1)
+      .map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`)
+      .join(" ");
 
   const sx = toX(trazado[0].lng);
   const sy = toY(trazado[0].lat);
@@ -182,11 +202,31 @@ function TrackSVG({
         {onTap && <span className="text-xs text-gray-700">Toca para ampliar →</span>}
       </div>
       <svg viewBox={`0 0 ${W} ${H}`} className="w-full" style={{ height }}>
-        {/* glow */}
-        <path d={d} fill="none" stroke={glow}   strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
-        {/* main line */}
-        <path d={d} fill="none" stroke={stroke} strokeWidth="3"  strokeLinecap="round" strokeLinejoin="round" />
-        {/* meta */}
+        {/* Fondo oscuro del trazado */}
+        <path d={fullPath} fill="none" stroke="#1f2937" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round" />
+
+        {usarSectores ? (
+          /* Sectores coloreados individualmente */
+          sectores.map(s => {
+            const sc = strokeColor[s.bandera] || strokeColor.verde;
+            const gc = glowColor[s.bandera]   || glowColor.verde;
+            const sp = sectorPath(s.punto_inicio, s.punto_fin);
+            return (
+              <g key={s.id}>
+                <path d={sp} fill="none" stroke={gc} strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+                <path d={sp} fill="none" stroke={sc} strokeWidth="3"  strokeLinecap="round" strokeLinejoin="round" />
+              </g>
+            );
+          })
+        ) : (
+          /* Trazado completo con color global */
+          <>
+            <path d={fullPath} fill="none" stroke={glow}   strokeWidth="10" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={fullPath} fill="none" stroke={stroke} strokeWidth="3"  strokeLinecap="round" strokeLinejoin="round" />
+          </>
+        )}
+
+        {/* Meta */}
         <circle cx={sx.toFixed(1)} cy={sy.toFixed(1)} r="5" fill={stroke} />
         <circle cx={sx.toFixed(1)} cy={sy.toFixed(1)} r="9" fill="none" stroke={stroke} strokeWidth="1.5" opacity="0.4" />
       </svg>
@@ -296,6 +336,7 @@ export default function Home() {
   const [estadoPista, setEstadoPista] = useState<{ bandera: string; sector?: string; mensaje?: string }>({ bandera: "verde" });
   const [trazado, setTrazado]         = useState<Coordenada[]>([]);
   const [geocerca, setGeocerca]       = useState<Coordenada[]>([]);
+  const [sectores, setSectores]       = useState<Sector[]>([]);
   const [isLandscape, setIsLandscape] = useState(false);
   const [viewportH, setViewportH]     = useState(600);
 
@@ -326,11 +367,25 @@ export default function Home() {
         if (data) setEstadoPista({ bandera: data.bandera || "verde", sector: data.sector, mensaje: data.mensaje });
       });
 
+    // Cargar sectores
+    supabase
+      .from("sectores_pista")
+      .select("*")
+      .order("orden")
+      .then(({ data }) => { if (data) setSectores(data); });
+
     const channel = supabase
       .channel("flag-main")
       .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" }, (payload) => {
         const n = payload.new as any;
         if (n) setEstadoPista({ bandera: n.bandera || "verde", sector: n.sector, mensaje: n.mensaje });
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" }, () => {
+        supabase
+          .from("sectores_pista")
+          .select("*")
+          .order("orden")
+          .then(({ data }) => { if (data) setSectores(data); });
       })
       .subscribe();
 
@@ -690,6 +745,7 @@ export default function Home() {
                 <TrackSVG
                   trazado={trazado}
                   bandera={estadoPista.bandera}
+                  sectores={sectores}
                   height={viewportH - 32}
                   onTap={() => {}}
                 />
@@ -762,6 +818,7 @@ export default function Home() {
                 <TrackSVG
                   trazado={trazado}
                   bandera={estadoPista.bandera}
+                  sectores={sectores}
                   height={230}
                   onTap={() => setShowFullTrack(true)}
                 />
@@ -988,7 +1045,7 @@ export default function Home() {
                 </button>
               </div>
               <div className="flex-1 flex items-center justify-center p-4">
-                <TrackSVG trazado={trazado} bandera={estadoPista.bandera} height={300} />
+                <TrackSVG trazado={trazado} bandera={estadoPista.bandera} sectores={sectores} height={300} />
               </div>
               <div className={`mx-4 mb-6 rounded-2xl border p-5 ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}>
                 <div className="flex items-center gap-3">
