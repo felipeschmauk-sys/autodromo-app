@@ -318,6 +318,14 @@ function QRIcon({ size = 26, color = "black" }: { size?: number; color?: string 
   );
 }
 
+// ── Tipos de mensajes del director ───────────────────────────
+interface MensajePiloto {
+  id: string;
+  tipo: "info" | "warning" | "danger";
+  texto: string;
+  created_at: string;
+}
+
 // ── Componente principal ──────────────────────────────────────
 export default function Home() {
 
@@ -352,6 +360,10 @@ export default function Home() {
   const [sectores, setSectores]       = useState<Sector[]>([]);
   const [isLandscape, setIsLandscape] = useState(false);
   const [viewportH, setViewportH]     = useState(600);
+
+  // ── Estados de mensajes del director ──
+  const [mensajeActivo, setMensajeActivo] = useState<MensajePiloto | null>(null);
+  const mensajeDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Cargar sesión al montar ──
   useEffect(() => {
@@ -423,10 +435,50 @@ export default function Home() {
     };
   }, [stage]);
 
+  // ── Mensajes del director de carrera (Realtime) ──────────────
+  useEffect(() => {
+    if (stage !== "app" || !pilotoData?.id) return;
+
+    const mostrarMensaje = (m: MensajePiloto) => {
+      setMensajeActivo(m);
+      // Vibrar: patrón diferente por tipo
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        if (m.tipo === "danger")       navigator.vibrate([300, 100, 300, 100, 300]);
+        else if (m.tipo === "warning") navigator.vibrate([200, 80, 200]);
+        else                           navigator.vibrate(150);
+      }
+      // Auto-dismiss según tipo
+      if (mensajeDismissRef.current) clearTimeout(mensajeDismissRef.current);
+      const delay = m.tipo === "danger" ? 12000 : m.tipo === "warning" ? 9000 : 7000;
+      mensajeDismissRef.current = setTimeout(() => setMensajeActivo(null), delay);
+    };
+
+    const ch = supabase
+      .channel("piloto-mensajes")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "mensajes_piloto" },
+        payload => {
+          const m = payload.new as any;
+          // Solo mostrar si es para este piloto o broadcast (null)
+          if (m.piloto_id === null || m.piloto_id === pilotoData.id) {
+            mostrarMensaje(m as MensajePiloto);
+          }
+        })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(ch);
+      if (mensajeDismissRef.current) clearTimeout(mensajeDismissRef.current);
+    };
+  }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Detección de orientación ──
   useEffect(() => {
     const update = () => {
-      const landscape = window.innerWidth > window.innerHeight;
+      // Solo activar landscape en dispositivos móviles/táctiles reales.
+      // En PC el ancho siempre supera al alto, pero no queremos el modo cockpit ahí.
+      const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+      const landscape = isMobile && window.innerWidth > window.innerHeight;
       setIsLandscape(landscape);
       setViewportH(window.innerHeight);
       if (landscape) setSecView("main");
@@ -766,6 +818,44 @@ export default function Home() {
       ══════════════════════════════════════════════════════ */}
       {stage === "app" && (
         <div className="min-h-screen bg-gray-100 text-gray-900 flex flex-col" style={{ maxWidth: 480, margin: "0 auto" }}>
+
+          {/* Animaciones globales para notificaciones */}
+          <style>{`
+            @keyframes slideDownFade {
+              from { transform: translateY(-100%); opacity: 0; }
+              to   { transform: translateY(0);     opacity: 1; }
+            }
+          `}</style>
+
+          {/* ══ NOTIFICACIÓN DEL DIRECTOR ══ */}
+          {mensajeActivo && (() => {
+            const BANNER_CFG = {
+              info:    { bg: "bg-blue-600",   border: "border-blue-400",   emoji: "💬", label: "Dirección de Carrera" },
+              warning: { bg: "bg-yellow-500", border: "border-yellow-300", emoji: "⚠️", label: "Aviso de pista" },
+              danger:  { bg: "bg-red-600",    border: "border-red-400",    emoji: "🚨", label: "URGENTE" },
+            };
+            const bc = BANNER_CFG[mensajeActivo.tipo] || BANNER_CFG.info;
+            return (
+              <div
+                className={`fixed top-0 left-0 right-0 ${bc.bg} border-b-2 ${bc.border} px-4 py-3 flex items-start gap-3 shadow-2xl`}
+                style={{ zIndex: 3000, maxWidth: 480, margin: "0 auto", animation: "slideDownFade 0.35s ease" }}
+                onClick={() => setMensajeActivo(null)}
+              >
+                <span className="text-2xl leading-none flex-shrink-0 mt-0.5">{bc.emoji}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-white/70 uppercase tracking-wider">{bc.label}</p>
+                  <p className="text-sm font-bold text-white leading-snug mt-0.5">{mensajeActivo.texto}</p>
+                </div>
+                <button
+                  className="text-white/60 hover:text-white text-lg leading-none flex-shrink-0 mt-0.5"
+                  onClick={e => { e.stopPropagation(); setMensajeActivo(null); }}
+                  aria-label="Cerrar"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })()}
 
           {/* ══ LANDSCAPE — MODO CONDUCCIÓN ══ */}
           {isLandscape && (
