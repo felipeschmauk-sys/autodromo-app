@@ -62,7 +62,8 @@ export default function AdminPage() {
   const [loadingPilotos, setLoadingPilotos] = useState(false);
   const [maxPilotos, setMaxPilotos] = useState(MAX_PILOTOS_DEFAULT);
   const [minSaldo, setMinSaldo] = useState(MIN_SALDO_DEFAULT);
-  const [banderaRoja, setBanderaRoja] = useState(false);
+  const [bandera, setBandera]           = useState("verde");
+  const [cargandoBandera, setCargandoBandera] = useState(false);
   const [autodromo, setAutodromo] = useState(AUTODROMO_OPTIONS[0]);
   const [busqueda, setBusqueda] = useState("");
   const [alertas, setAlertas] = useState<string[]>([]);
@@ -103,10 +104,39 @@ export default function AdminPage() {
       setSesiones([]);
     }
   }, []);
-   useEffect(() => {
+  // ── Banderas ─────────────────────────────────────────────────────────────
+  const cargarBandera = useCallback(async () => {
+    const { data } = await supabase
+      .from("estado_pista")
+      .select("bandera")
+      .eq("activo", true)
+      .single();
+    if (data?.bandera) setBandera(data.bandera);
+  }, []);
+
+  const aplicarBandera = useCallback(async (nuevaBandera: string) => {
+    setCargandoBandera(true);
+    setBandera(nuevaBandera); // optimistic
+    try {
+      const { error } = await supabase
+        .from("estado_pista")
+        .update({ bandera: nuevaBandera })
+        .eq("activo", true);
+      if (error) {
+        console.error("Error actualizando bandera:", error);
+        // Revertir si falla
+        cargarBandera();
+      }
+    } finally {
+      setCargandoBandera(false);
+    }
+  }, [cargarBandera]);
+
+  useEffect(() => {
     if (!autenticado) return;
     cargarPilotos();
     cargarSesiones();
+    cargarBandera();
     const channel = supabase
       .channel("admin-sesiones-live")
       .on(
@@ -119,6 +149,14 @@ export default function AdminPage() {
         { event: "*", schema: "public", table: "pilotos" },
         () => { cargarPilotos(); }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "estado_pista" },
+        (payload) => {
+          const n = payload.new as any;
+          if (n?.bandera) setBandera(n.bandera);
+        }
+      )
       .subscribe((status) => {
         setRealtimeConectado(status === "SUBSCRIBED");
       });
@@ -126,7 +164,7 @@ export default function AdminPage() {
       supabase.removeChannel(channel);
       setRealtimeConectado(false);
     };
-  }, [autenticado, cargarPilotos, cargarSesiones]);
+  }, [autenticado, cargarPilotos, cargarSesiones, cargarBandera]);
   // ── QR ───────────────────────────────────────────────────────────────────
   const iniciarScanner = useCallback(() => {
     setScanError("");
@@ -278,34 +316,76 @@ export default function AdminPage() {
         {/* ── DIRECCIÓN ──────────────────────────────────────────────── */}
         {tab === "direccion" && (
           <>
-            <div className={`rounded-2xl border-2 px-5 py-4 flex items-center justify-between ${
-              banderaRoja
-                ? "bg-red-50 border-red-300"
-                : "bg-green-50 border-green-300"
+            {/* ── Estado de pista + control de banderas ── */}
+            <div className={`rounded-2xl border-2 px-5 py-4 space-y-4 transition-colors duration-500 ${
+              bandera === "roja"             ? "bg-red-50    border-red-300"
+              : bandera === "amarilla"       ? "bg-yellow-50 border-yellow-300"
+              : bandera === "amarilla_doble" ? "bg-yellow-50 border-yellow-400"
+              : "bg-green-50 border-green-300"
             }`}>
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
-                  banderaRoja ? "bg-red-500" : "bg-green-500 animate-pulse"
-                }`} />
-                <div>
-                  <p className={`font-bold text-base leading-tight ${banderaRoja ? "text-red-700" : "text-green-700"}`}>
-                    {banderaRoja ? "Bandera roja activa" : "Pista habilitada"}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {sesiones.length} de {maxPilotos} cupos ocupados · {nombreAutodromo}
-                  </p>
+              {/* Estado actual */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                    bandera === "roja"              ? "bg-red-500 animate-pulse"
+                    : bandera.startsWith("amarilla") ? "bg-yellow-500 animate-pulse"
+                    : "bg-green-500 animate-pulse"
+                  }`} />
+                  <div>
+                    <p className={`font-bold text-base leading-tight ${
+                      bandera === "roja"              ? "text-red-700"
+                      : bandera.startsWith("amarilla") ? "text-yellow-700"
+                      : "text-green-700"
+                    }`}>
+                      {bandera === "roja"              ? "🚩 BANDERA ROJA — Detención inmediata"
+                       : bandera === "amarilla"        ? "🟡 BANDERA AMARILLA — Reducir velocidad"
+                       : bandera === "amarilla_doble"  ? "🟡🟡 DOBLE AMARILLA — Peligro grave"
+                       : "🟢 PISTA HABILITADA"}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      {sesiones.length} de {maxPilotos} cupos · {nombreAutodromo}
+                      {cargandoBandera && <span className="ml-2 text-xs text-gray-400">Enviando...</span>}
+                    </p>
+                  </div>
                 </div>
               </div>
-              <button
-                onClick={() => setBanderaRoja(!banderaRoja)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-sm transition-all ${
-                  banderaRoja
-                    ? "bg-gray-900 text-white hover:bg-gray-700"
-                    : "bg-red-600 hover:bg-red-700 text-white"
-                }`}
-              >
-                🚩 {banderaRoja ? "Desactivar" : "Bandera roja"}
-              </button>
+
+              {/* Botones de control */}
+              <div className="flex gap-2 flex-wrap">
+                <button
+                  onClick={() => aplicarBandera("verde")}
+                  disabled={bandera === "verde" || cargandoBandera}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                    bandera === "verde"
+                      ? "bg-green-600 border-green-600 text-white shadow-lg shadow-green-200"
+                      : "bg-white border-green-300 text-green-700 hover:bg-green-50 disabled:opacity-40"
+                  }`}
+                >
+                  🟢 Verde
+                </button>
+                <button
+                  onClick={() => aplicarBandera("amarilla")}
+                  disabled={bandera === "amarilla" || cargandoBandera}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                    bandera === "amarilla"
+                      ? "bg-yellow-500 border-yellow-500 text-white shadow-lg shadow-yellow-200 animate-pulse"
+                      : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-50 disabled:opacity-40"
+                  }`}
+                >
+                  🟡 Amarilla
+                </button>
+                <button
+                  onClick={() => aplicarBandera("roja")}
+                  disabled={bandera === "roja" || cargandoBandera}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                    bandera === "roja"
+                      ? "bg-red-600 border-red-600 text-white shadow-lg shadow-red-200 animate-pulse"
+                      : "bg-white border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-40"
+                  }`}
+                >
+                  🔴 Roja
+                </button>
+              </div>
             </div>
             {/* ── MAPA EN TIEMPO REAL ── */}
             <DireccionCarrera />
@@ -680,7 +760,7 @@ export default function AdminPage() {
                   { label: "Pilotos registrados", value: pilotos.length },
                   { label: "Sesiones activas", value: sesiones.length },
                   { label: "Capacidad disponible", value: `${Math.max(0, maxPilotos - sesiones.length)} lugares` },
-                  { label: "Bandera roja", value: banderaRoja ? "ACTIVA" : "Inactiva", color: banderaRoja ? "text-red-600 font-bold" : "text-green-600" },
+                  { label: "Estado de pista", value: bandera === "roja" ? "🔴 ROJA" : bandera === "amarilla" ? "🟡 AMARILLA" : "🟢 Verde", color: bandera === "roja" ? "text-red-600 font-bold" : bandera === "amarilla" ? "text-yellow-600 font-bold" : "text-green-600" },
                 ].map((row, i) => (
                   <div key={i} className="px-5 py-3 flex justify-between items-center text-sm">
                     <span className="text-gray-500">{row.label}</span>
