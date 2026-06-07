@@ -39,12 +39,12 @@ const PREGUNTAS = [
   },
   {
     pregunta: "Al mostrarse la bandera roja en pista, ¿qué debe hacer todo piloto según el reglamento TCC?",
-    opciones: ["Acelerar para salir rápido de la zona peligrosa", "Reducir velocidad, no adelantar y dirigirse a donde indique Dirección de Carrera", "Solo se detienen los vehículos cercanos al incidente", "Puede continuar si se encuentra en la recta principal"],
+    opciones: ["Acelerar para salir rápido de la zona peligrosa", "Reducir velocidad, no adelantar y dirigirse a boxes", "Solo se detienen los vehículos cercanos al incidente", "Puede continuar si se encuentra en la recta principal"],
     correcta: 1,
   },
   {
-    pregunta: "Según el reglamento, ¿en qué caso se permite adelantar en una zona de bandera amarilla?",
-    opciones: ["Nunca está permitido adelantar bajo bandera amarilla", "Si el piloto a adelantar comete un error en curva", "Solo si el vehículo adelantado está detenido o con falla evidente fuera de condición de carrera", "Cuando el safety car ya regresó a boxes"],
+    pregunta: "Bajo bandera amarilla en un sector de pista, ¿se permite adelantar a otro vehículo?",
+    opciones: ["Sí, si se hace con precaución y reduciendo velocidad", "Sí, solo si el auto adelantado circula muy lento", "No está permitido adelantar a ningún auto mientras se esté en sector de bandera amarilla", "Solo si el safety car ya regresó a boxes"],
     correcta: 2,
   },
   {
@@ -58,9 +58,9 @@ const PREGUNTAS = [
     correcta: 1,
   },
   {
-    pregunta: "¿Cuáles son las tres categorías oficiales del Campeonato Turismo Carretera Chileno 2026?",
-    opciones: ["Elite, Senior y Junior", "PRO, AM y GT", "Clase A, Clase B y Clase C", "Open, Semi-Pro y Amateur"],
-    correcta: 1,
+    pregunta: "Según el Reglamento TCC, ¿qué obligación tiene el piloto respecto a la cámara de video a bordo?",
+    opciones: ["Es recomendada pero no obligatoria", "Solo es obligatoria en carreras, no en entrenamientos", "Debe estar correctamente instalada, encendida y operativa durante clasificación y carreras", "Solo la exige el autódromo, no el reglamento TCC"],
+    correcta: 2,
   },
   {
     pregunta: "Según el Reglamento Deportivo TCC, ¿cuál de las siguientes conductas es considerada FALTA GRAVE?",
