@@ -194,10 +194,10 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
       });
 
       if (markersRef.current[p.piloto_id]) {
-        markersRef.current[p.piloto_id].setLatLng([p.lat, p.lng]);
+        markersRef.current[p.piloto_id].setLatLng([p.lat!, p.lng!]);
         markersRef.current[p.piloto_id].setIcon(icon);
       } else {
-        markersRef.current[p.piloto_id] = L.marker([p.lat, p.lng], {
+        markersRef.current[p.piloto_id] = L.marker([p.lat!, p.lng!], {
           icon, zIndexOffset: 700,
         }).addTo(map);
       }
