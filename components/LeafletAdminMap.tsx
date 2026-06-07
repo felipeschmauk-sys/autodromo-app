@@ -126,14 +126,6 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
       );
     }
 
-    // Marcador de largada
-    trackRef.current.push(
-      (L.circleMarker as any)(latlngs[0], {
-        radius: 8, fillColor: "#22c55e",
-        color: "#fff", weight: 2, fillOpacity: 1,
-      }).addTo(map)
-    );
-
     map.fitBounds(L.polyline(latlngs).getBounds(), { padding: [36, 36] });
   }, [trazado, sectores, bandera]);
 
@@ -145,7 +137,12 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
     const activeIds = new Set(pilotos.map(p => p.piloto_id));
 
     pilotos.forEach(p => {
-      if (p.lat === null || p.lng === null) {
+      // Solo mostrar pilotos con GPS válido y dentro de la geocerca
+      // (dentro_geocerca === null = sin geocerca configurada → mostrar igual)
+      const sinGps    = p.lat === null || p.lng === null;
+      const fueraGeo  = p.dentro_geocerca === false;
+
+      if (sinGps || fueraGeo) {
         if (markersRef.current[p.piloto_id]) {
           map.removeLayer(markersRef.current[p.piloto_id]);
           delete markersRef.current[p.piloto_id];

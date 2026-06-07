@@ -528,17 +528,31 @@ export default function Home() {
       }, 3000);
     };
 
-    // 1. Verificar si ya hay sesión activa al montar
-    supabase
-      .from("sesiones")
-      .select("id")
-      .eq("piloto_id", pilotoId)
-      .eq("estado", "activa")
-      .single()
-      .then(({ data }) => { if (data?.id) iniciarGPS(data.id); });
+    // ── Función central: consultar sesión activa ──────────────
+    const checkSession = async () => {
+      const { data } = await supabase
+        .from("sesiones")
+        .select("id, estado")
+        .eq("piloto_id", pilotoId)
+        .eq("estado", "activa")
+        .maybeSingle();
+      if (data?.id) {
+        iniciarGPS(data.id);
+      } else if (!data && sesionId) {
+        // sesión cerrada remotamente
+        detenerGPS();
+      }
+    };
 
-    // 2. Escuchar nuevas sesiones creadas por el admin (INSERT)
-    //    Esto activa el GPS sin necesidad de recargar la app.
+    // 1. Verificar sesión activa al montar (inmediato)
+    checkSession();
+
+    // 2. Polling cada 8s como backup — garantiza arranque aunque
+    //    Realtime falle o sesiones no esté en la publicación.
+    const pollInterval = setInterval(checkSession, 8000);
+
+    // 3. Suscripción Realtime (arranque instantáneo cuando sesiones
+    //    está habilitado en supabase_realtime).
     const ch = supabase
       .channel("piloto-sesion-watch")
       .on("postgres_changes",
@@ -561,6 +575,7 @@ export default function Home() {
       .subscribe();
 
     return () => {
+      clearInterval(pollInterval);
       detenerGPS();
       supabase.removeChannel(ch);
     };

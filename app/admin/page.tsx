@@ -18,7 +18,8 @@ const QrScanner = dynamic(() => import("@/components/QrScanner"), {
 });
 const DireccionCarrera = dynamic(() => import('@/components/DireccionCarrera'), { ssr: false });
 const SectoresEditor   = dynamic(() => import('@/components/SectoresEditor'),   { ssr: false });
-const AdminMensajes    = dynamic(() => import('@/components/AdminMensajes'),    { ssr: false });
+// AdminMensajes desactivado temporalmente
+// const AdminMensajes = dynamic(() => import('@/components/AdminMensajes'), { ssr: false });
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface Sector {
   id: string;
@@ -488,8 +489,7 @@ export default function AdminPage() {
             {/* ── MAPA EN TIEMPO REAL ── */}
             <DireccionCarrera />
 
-            {/* ── MENSAJES A PILOTOS ── */}
-            <AdminMensajes />
+            {/* ── MENSAJES A PILOTOS — desactivado temporalmente ── */}
 
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
