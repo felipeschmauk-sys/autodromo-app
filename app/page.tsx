@@ -30,15 +30,58 @@ interface Sector {
 }
 
 // ── Cuestionario ──────────────────────────────────────────────
+// Preguntas basadas en el Reglamento Deportivo y Técnico TCC 2026
 const PREGUNTAS = [
-  { pregunta: "¿Por qué lado debes sobrepasar a otro vehículo en pista?", opciones: ["Por el lado izquierdo", "Por el lado derecho", "Por cualquier lado si hay espacio", "Solo en la recta principal"], correcta: 1 },
-  { pregunta: "Si eres el vehículo adelantado, ¿qué debes hacer?", opciones: ["Acelerar para que no te pasen", "Cerrar la trayectoria para defenderte", "Mantener tu línea y facilitar el paso", "Frenarte bruscamente"], correcta: 2 },
-  { pregunta: "¿Qué significa la bandera roja?", opciones: ["Acelera para salir de la zona", "Detención inmediata de todos los vehículos", "Solo se detienen los vehículos Sport", "El piloto puede continuar si está lejos"], correcta: 1 },
-  { pregunta: "¿Qué indica la bandera amarilla?", opciones: ["Peligro, reducir velocidad y no adelantar", "Acelerar para salir rápido", "Puedes adelantar con precaución", "Fin de sesión, volver a boxes"], correcta: 0 },
-  { pregunta: "¿Qué significa la bandera amarilla doble?", opciones: ["Adelantamiento permitido a baja velocidad", "Peligro grave. Velocidad máxima reducida. Adelantar prohibido.", "Dos zonas de peligro, puedes esquivarlas", "Advertencia menor, mantén el ritmo"], correcta: 1 },
-  { pregunta: "¿Qué ocurre con el cobro si el vehículo se detiene dentro de pista?", opciones: ["El cobro se detiene automáticamente", "El cobro continúa mientras esté dentro de la geocerca", "El cobro se pausa tras 5 minutos detenido", "El piloto puede detenerlo desde la app"], correcta: 1 },
-  { pregunta: "¿Quién puede pausar el cobro dentro de la pista?", opciones: ["El piloto desde su celular", "Solo el director de pista, con bandera roja o cerrando la sesión", "El cobro no puede pausarse", "Cualquier administrador"], correcta: 1 },
-  { pregunta: "¿Qué ocurre al salir de la geocerca de pista?", opciones: ["El sistema cierra la tanda y detiene el cobro automáticamente", "Debes llamar al director para cerrar tu sesión", "Debes cerrar la sesión manualmente", "La tanda se cierra sola tras 10 minutos"], correcta: 0 },
+  {
+    pregunta: "Según el Reglamento Deportivo TCC, ¿cuántos cambios de línea puede realizar un piloto para defender su posición?",
+    opciones: ["Dos cambios de línea antes del frenado", "Un solo cambio de línea antes de la zona de frenado", "Los que necesite, siempre que evite contacto", "Ninguno, la defensa activa no está permitida"],
+    correcta: 1,
+  },
+  {
+    pregunta: "Al mostrarse la bandera roja en pista, ¿qué debe hacer todo piloto según el reglamento TCC?",
+    opciones: ["Acelerar para salir rápido de la zona peligrosa", "Reducir velocidad, no adelantar y dirigirse a donde indique Dirección de Carrera", "Solo se detienen los vehículos cercanos al incidente", "Puede continuar si se encuentra en la recta principal"],
+    correcta: 1,
+  },
+  {
+    pregunta: "Según el reglamento, ¿en qué caso se permite adelantar en una zona de bandera amarilla?",
+    opciones: ["Nunca está permitido adelantar bajo bandera amarilla", "Si el piloto a adelantar comete un error en curva", "Solo si el vehículo adelantado está detenido o con falla evidente fuera de condición de carrera", "Cuando el safety car ya regresó a boxes"],
+    correcta: 2,
+  },
+  {
+    pregunta: "Durante el procedimiento de Safety Car, ¿qué conducta está estrictamente prohibida?",
+    opciones: ["Mantener distancia prudente con el auto de adelante", "Adelantar a otro competidor", "Reducir la velocidad al mínimo seguro", "Obedecer las instrucciones de Dirección de Carrera"],
+    correcta: 1,
+  },
+  {
+    pregunta: "¿Cuál de los siguientes elementos de seguridad personal es OBLIGATORIO para todo piloto según el Reglamento Técnico TCC 2026?",
+    opciones: ["Intercomunicador de radio con el equipo", "HANS o sistema equivalente de protección cervical", "Guantes de cuero sin certificación específica", "Casco de motociclismo con visera integrada"],
+    correcta: 1,
+  },
+  {
+    pregunta: "¿Cuáles son las tres categorías oficiales del Campeonato Turismo Carretera Chileno 2026?",
+    opciones: ["Elite, Senior y Junior", "PRO, AM y GT", "Clase A, Clase B y Clase C", "Open, Semi-Pro y Amateur"],
+    correcta: 1,
+  },
+  {
+    pregunta: "Según el Reglamento Deportivo TCC, ¿cuál de las siguientes conductas es considerada FALTA GRAVE?",
+    opciones: ["Retraso menor al formarse en la grilla de salida", "Sobrepaso bajo Safety Car o bajo bandera amarilla", "Exceder levemente los límites de pista sin obtener ventaja", "Primera infracción operativa menor sin consecuencias"],
+    correcta: 1,
+  },
+  {
+    pregunta: "Cuando un piloto se salta una chicana y obtiene ventaja deportiva, ¿qué establece el reglamento TCC como primera consecuencia?",
+    opciones: ["Nada, si no hay reclamo formal no se actúa", "Devolver la posición o exponerse a penalidad de 10 segundos", "Solo se sanciona a partir de la segunda infracción", "El piloto debe reportarlo voluntariamente al terminar la carrera"],
+    correcta: 1,
+  },
+  {
+    pregunta: "¿Qué puede ocurrir si un piloto no asiste a la reunión obligatoria de pilotos antes de una fecha TCC?",
+    opciones: ["Nada, la asistencia es solo recomendada", "Puede ser sancionado, largar desde el último lugar o quedar impedido de participar", "Solo pierde el punto extra de qualy", "Debe pagar una multa económica establecida en el reglamento"],
+    correcta: 1,
+  },
+  {
+    pregunta: "Si una carrera TCC es detenida definitivamente habiendo completado el 50% o más de su duración programada, ¿qué establece el reglamento?",
+    opciones: ["No se asigna puntaje en ningún caso", "La organización puede asignar puntaje completo según el último orden oficial determinado", "La carrera se reprograma obligatoriamente en otra fecha", "Solo se asigna puntaje a los tres primeros clasificados"],
+    correcta: 1,
+  },
 ];
 
 // Para la sección Reglamento
@@ -50,6 +93,88 @@ const BANDERAS_INFO = [
   { color: "bg-orange-500", nombre: "Safety Car",              desc: "Vehículo de seguridad en pista. Todos los pilotos deben seguirlo sin adelantar." },
   { color: "bg-white border border-gray-600", nombre: "Bandera blanca", desc: "Vehículo lento en pista (ambulancia, grúa, seguridad). Precaución máxima." },
   { color: "bg-gray-900 border border-gray-600",  nombre: "Bandera negra", desc: "El piloto señalado debe ingresar a boxes inmediatamente." },
+];
+
+// ── Secciones del reglamento TCC 2026 (para mostrar en la app) ──
+const REGLAMENTO_TCC = [
+  {
+    titulo: "Espíritu de la categoría",
+    icono: "🏎️",
+    items: [
+      "TCC es una categoría competitiva, amateur y formativa basada en el respeto, caballerosidad y seguridad.",
+      "La competencia en pista NO autoriza maniobras temerarias, agresivas o antideportivas.",
+      "Todo piloto debe mantener autocontrol, respeto por los demás y por las autoridades de carrera.",
+    ],
+  },
+  {
+    titulo: "Conducta en pista",
+    icono: "⚠️",
+    items: [
+      "Defensa de posición: solo UN cambio de línea antes de la zona de frenado. No se permite zigzaguear.",
+      "Derecho al espacio: si el auto atacante tiene superposición suficiente antes del frenado, ambos deben dejar espacio.",
+      "Sobrepaso: respetar siempre el espacio del adversario. El atacante sin superposición debe levantar.",
+      "Reincorporación: al volver a pista luego de una salida, hacerlo de forma segura sin interferir con los que vienen.",
+      "Conductas prohibidas: contacto evitable, frenadas injustificadas, más de un cambio de línea para defender, sobrepasos bajo bandera amarilla o safety car.",
+    ],
+  },
+  {
+    titulo: "Protocolo de banderas",
+    icono: "🚩",
+    items: [
+      "🔴 Bandera Roja: detención INMEDIATA. Reducir velocidad, no adelantar, dirigirse a boxes según instrucción.",
+      "🟡 Bandera Amarilla: peligro en la zona. Reducir velocidad, NO adelantar (salvo auto detenido con falla).",
+      "🟡🟡 Doble Amarilla: peligro grave. Velocidad máxima reducida. Adelantar estrictamente prohibido.",
+      "🟢 Bandera Verde: pista libre, circulación normal habilitada.",
+      "🚗 Safety Car: seguir al vehículo de seguridad, mantener orden, NO adelantar.",
+      "⬜ Bandera Blanca: vehículo lento en pista (ambulancia, grúa). Máxima precaución.",
+      "⬛ Bandera Negra: el piloto señalado debe ingresar a boxes inmediatamente.",
+    ],
+  },
+  {
+    titulo: "Seguridad del piloto — Obligatorio",
+    icono: "🛡️",
+    items: [
+      "Casco apto para automovilismo deportivo, en buen estado, correctamente ajustado.",
+      "HANS o sistema equivalente de protección cervical homologado. Su uso es OBLIGATORIO.",
+      "Buzo ignífugo apto para automovilismo deportivo, sin roturas ni modificaciones.",
+      "Balaclava ignífuga bajo el casco durante toda la actividad en pista.",
+      "Guantes ignífugos aptos para automovilismo deportivo.",
+      "Zapatos o botas ignífugas. No se permiten zapatillas ni calzado de calle.",
+      "Todo el equipamiento debe usarse correctamente durante: entrenamientos, clasificación y carreras.",
+    ],
+  },
+  {
+    titulo: "Safety Car y neutralizaciones",
+    icono: "🚨",
+    items: [
+      "Bajo Safety Car: mantener posición, velocidad controlada y fila ordenada. NO adelantar.",
+      "El puntero es responsable de mantener velocidad pareja y constante durante el procedimiento.",
+      "Relanzamiento: no adelantar hasta la señal oficial de reinicio dada por Dirección de Carrera.",
+      "Si la carrera se suspende antes del 50%: posible medio puntaje o sin puntaje.",
+      "Si la carrera se suspende con 50% o más completado: se puede asignar puntaje completo según el último orden oficial.",
+    ],
+  },
+  {
+    titulo: "Sanciones — Tabla base TCC",
+    icono: "⚖️",
+    items: [
+      "Falta Leve: advertencia o penalidad de 0 a 10 seg. (ej: exceso menor de límites sin ventaja, retraso en grilla).",
+      "Falta Media: 5 a 20 seg. o pérdida de grilla (ej: saltarse chicana, defensa irregular, exceso de velocidad en pits).",
+      "Falta Grave: 20 seg., exclusión o suspensión (ej: sobrepaso bajo amarilla/safety car, desobedecer bandera roja, maniobra temeraria).",
+      "Chicana: 1ª infracción → devolver posición o 10 seg. | 2ª → 20 seg. | 3ª → exclusión de carrera.",
+      "Falsa largada: penalidad de tiempo, pérdida de posición o exclusión según gravedad.",
+      "La organización puede agravar o reducir cualquier sanción según los antecedentes del caso.",
+    ],
+  },
+  {
+    titulo: "Reunión de pilotos",
+    icono: "📋",
+    items: [
+      "La reunión de pilotos es OBLIGATORIA para todos los participantes de cada fecha.",
+      "El piloto que no asista puede ser sancionado, largar desde el último lugar o quedar impedido de participar.",
+      "En la reunión se informan: horarios, límites de pista, chicanas, banderas, largada, safety car, sanciones especiales.",
+    ],
+  },
 ];
 
 // Config visual para la pizarra de banderas
@@ -840,15 +965,27 @@ export default function Home() {
 
                   {subTab === "reglamento" && (
                     <div className="space-y-4">
-                      <div className="text-sm text-gray-500">Lee el reglamento antes de rendir la prueba. Necesitas 100% para habilitar tu cuenta.</div>
-                      <div className="space-y-2">
-                        {BANDERAS_INFO.map((b, i) => (
-                          <div key={i} className="flex gap-3 items-start bg-gray-50 rounded-xl p-3 text-sm">
-                            <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0`} />
-                            <div><strong>{b.nombre}:</strong> {b.desc}</div>
-                          </div>
-                        ))}
+                      <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-sm text-indigo-700 font-medium">
+                        📖 Lee el reglamento TCC 2026 antes de rendir la prueba. Necesitas 100% para habilitar tu cuenta.
                       </div>
+
+                      {/* Secciones del reglamento TCC */}
+                      {REGLAMENTO_TCC.map((sec, si) => (
+                        <div key={si} className="border border-gray-200 rounded-xl overflow-hidden">
+                          <div className="bg-gray-50 px-4 py-2.5 flex items-center gap-2">
+                            <span className="text-base">{sec.icono}</span>
+                            <span className="text-sm font-semibold text-gray-800">{sec.titulo}</span>
+                          </div>
+                          <div className="divide-y divide-gray-100">
+                            {sec.items.map((item, ii) => (
+                              <div key={ii} className="px-4 py-2.5 text-xs text-gray-600 leading-relaxed">
+                                {item}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
                       <button onClick={() => setSubTab("prueba")} className="w-full bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
                         Ir a la prueba →
                       </button>
@@ -1125,19 +1262,51 @@ export default function Home() {
 
             {/* ── VISTA REGLAMENTO ── */}
             {secView === "reglamento" && (
-              <div className="px-4 py-4 space-y-3">
-                <p className="text-gray-500 text-sm">Consulta el protocolo de banderas y reglamento en cualquier momento.</p>
-                {BANDERAS_INFO.map((b, i) => (
-                  <div key={i} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 flex gap-3">
-                    <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0`} />
-                    <div>
-                      <p className="text-white text-sm font-semibold">{b.nombre}</p>
-                      <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{b.desc}</p>
+              <div className="px-4 py-4 space-y-3 pb-8">
+                {/* Header */}
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3">
+                  <p className="text-white text-xs font-bold uppercase tracking-widest mb-0.5">Reglamento TCC 2026</p>
+                  <p className="text-gray-500 text-xs">Turismo Carretera Chileno · Documento oficial de temporada</p>
+                </div>
+
+                {/* Protocolo de banderas — mantiene diseño original */}
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
+                    <span className="text-sm">🚩</span>
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Protocolo de Banderas</span>
+                  </div>
+                  <div className="divide-y divide-gray-800">
+                    {BANDERAS_INFO.map((b, i) => (
+                      <div key={i} className="p-4 flex gap-3 items-start">
+                        <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0`} />
+                        <div>
+                          <p className="text-white text-xs font-semibold">{b.nombre}</p>
+                          <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{b.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Resto del reglamento TCC */}
+                {REGLAMENTO_TCC.filter(s => s.titulo !== "Protocolo de banderas").map((sec, si) => (
+                  <div key={si} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
+                      <span className="text-sm">{sec.icono}</span>
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">{sec.titulo}</span>
+                    </div>
+                    <div className="divide-y divide-gray-800/60">
+                      {sec.items.map((item, ii) => (
+                        <div key={ii} className="px-4 py-2.5 text-xs text-gray-400 leading-relaxed">
+                          {item}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-xs text-gray-500">
-                  📋 La prueba de conocimientos se rinde una sola vez. Una vez aprobada quedas habilitado permanentemente.
+
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-xs text-gray-600">
+                  📋 Reglamento Deportivo y Técnico TCC 2026 · Documento final de trabajo
                 </div>
               </div>
             )}
