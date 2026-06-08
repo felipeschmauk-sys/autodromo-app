@@ -18,6 +18,7 @@ const QrScanner = dynamic(() => import("@/components/QrScanner"), {
 });
 const DireccionCarrera = dynamic(() => import('@/components/DireccionCarrera'), { ssr: false });
 const SectoresEditor   = dynamic(() => import('@/components/SectoresEditor'),   { ssr: false });
+const AdminEventos     = dynamic(() => import('@/components/AdminEventos'),     { ssr: false });
 // AdminMensajes desactivado temporalmente
 // const AdminMensajes = dynamic(() => import('@/components/AdminMensajes'), { ssr: false });
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -51,7 +52,7 @@ interface ValidacionResult {
   qr_id?: string;
   advertencia?: string;
 }
-type PanelTab = "direccion" | "qr" | "pilotos" | "config" | "revision";
+type PanelTab = "direccion" | "qr" | "pilotos" | "config" | "revision" | "eventos";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
 const MAX_PILOTOS_DEFAULT = 10;
 const MIN_SALDO_DEFAULT = 5;
@@ -309,6 +310,7 @@ export default function AdminPage() {
           { id: "direccion", label: "Dirección",  emoji: "🏎"  },
           { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
           { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
+          { id: "eventos",   label: "Eventos",    emoji: "📅"  },
           { id: "revision",  label: "Rev. Técnica", emoji: "🔧" },
           { id: "config",    label: "Config",     emoji: "⚙️"  },
         ] as const).map(t => (
@@ -781,6 +783,11 @@ export default function AdminPage() {
             </div>
           </>
         )}
+        {/* ── EVENTOS / CAMPEONATOS ───────────────────────────────────── */}
+        {tab === "eventos" && (
+          <AdminEventos />
+        )}
+
         {/* ── REVISIÓN TÉCNICA ────────────────────────────────────────── */}
         {tab === "revision" && (
           <div style={{
