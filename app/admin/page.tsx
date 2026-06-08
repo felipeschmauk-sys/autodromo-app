@@ -51,7 +51,7 @@ interface ValidacionResult {
   qr_id?: string;
   advertencia?: string;
 }
-type PanelTab = "direccion" | "qr" | "pilotos" | "config";
+type PanelTab = "direccion" | "qr" | "pilotos" | "config" | "revision";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
 const MAX_PILOTOS_DEFAULT = 10;
 const MIN_SALDO_DEFAULT = 5;
@@ -309,6 +309,7 @@ export default function AdminPage() {
           { id: "direccion", label: "Dirección",  emoji: "🏎"  },
           { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
           { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
+          { id: "revision",  label: "Rev. Técnica", emoji: "🔧" },
           { id: "config",    label: "Config",     emoji: "⚙️"  },
         ] as const).map(t => (
           <button
@@ -780,6 +781,22 @@ export default function AdminPage() {
             </div>
           </>
         )}
+        {/* ── REVISIÓN TÉCNICA ────────────────────────────────────────── */}
+        {tab === "revision" && (
+          <div style={{
+            position: "fixed",
+            inset: 0,
+            top: 112,
+            zIndex: 10,
+          }}>
+            <iframe
+              src="/revision-tecnica.html"
+              style={{ width: "100%", height: "100%", border: "none", display: "block" }}
+              title="Revisión Técnica TCC 2026"
+            />
+          </div>
+        )}
+
         {/* ── CONFIG ─────────────────────────────────────────────────── */}
         {tab === "config" && (
           <>

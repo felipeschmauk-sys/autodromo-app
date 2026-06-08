@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Race Control — Revisión Técnica TCC 2026</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0f0f0f;
+  --surface: #181818;
+  --surface2: #212121;
+  --surface3: #2a2a2a;
+  --border: rgba(255,255,255,0.08);
+  --border2: rgba(255,255,255,0.14);
+  --text: #f0f0f0;
+  --muted: #888;
+  --muted2: #555;
+  --accent: #e8e020;
+  --red: #e03030;
+  --red-bg: rgba(224,48,48,0.1);
+  --red-border: rgba(224,48,48,0.25);
+  --green: #2db870;
+  --green-bg: rgba(45,184,112,0.1);
+  --green-border: rgba(45,184,112,0.25);
+  --orange: #e87820;
+  --orange-bg: rgba(232,120,32,0.1);
+  --orange-border: rgba(232,120,32,0.25);
+  --blue: #3a8fe8;
+  --blue-bg: rgba(58,143,232,0.1);
+  --blue-border: rgba(58,143,232,0.25);
+  --yellow-bg: rgba(232,224,32,0.08);
+  --yellow-border: rgba(232,224,32,0.2);
+  --font: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); font-size: 14px; min-height: 100vh; }
+
+/* ── LAYOUT ── */
+.app { display: grid; grid-template-rows: 48px 1fr; height: 100vh; overflow: hidden; }
+.topbar { display: flex; align-items: center; justify-content: space-between; padding: 0 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
+.tb-left { display: flex; align-items: center; gap: 12px; }
+.brand { font-family: var(--mono); font-size: 11px; font-weight: 500; letter-spacing: .1em; color: var(--muted); text-transform: uppercase; }
+.sep { color: var(--muted2); }
+.module-name { font-size: 13px; font-weight: 500; }
+.event-chip { background: var(--accent); color: #000; font-size: 10px; font-weight: 600; padding: 2px 8px; border-radius: 3px; letter-spacing: .04em; }
+.inspector-tag { font-size: 11px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.dot-online { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+.main { display: grid; grid-template-columns: 320px 1fr; overflow: hidden; }
+
+/* ── SIDEBAR ── */
+.sidebar { border-right: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; background: var(--surface); }
+.sidebar-head { padding: 14px 16px 10px; border-bottom: 1px solid var(--border); }
+.sidebar-title { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+.stats-mini { display: grid; grid-template-columns: repeat(4,1fr); gap: 6px; margin-bottom: 10px; }
+.sm { background: var(--surface2); border-radius: 6px; padding: 7px 6px; text-align: center; }
+.sm-n { font-size: 18px; font-weight: 600; font-family: var(--mono); line-height: 1; }
+.sm-l { font-size: 9px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .04em; }
+.search-box { position: relative; }
+.search-box input { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 7px 10px 7px 30px; font-size: 12px; color: var(--text); font-family: var(--font); }
+.search-box input::placeholder { color: var(--muted2); }
+.search-box input:focus { outline: none; border-color: var(--border2); }
+.search-icon { position: absolute; left: 9px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 13px; }
+.filter-tabs { display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.ft { font-size: 10px; padding: 3px 8px; border-radius: 12px; border: 1px solid var(--border); cursor: pointer; color: var(--muted); background: transparent; transition: all .12s; }
+.ft.active, .ft:hover { border-color: var(--border2); color: var(--text); background: var(--surface2); }
+.ft.active { background: var(--surface3); }
+.vehicle-list { flex: 1; overflow-y: auto; }
+.vehicle-list::-webkit-scrollbar { width: 4px; }
+.vehicle-list::-webkit-scrollbar-track { background: transparent; }
+.vehicle-list::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+.vcard { padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .1s; display: flex; gap: 12px; align-items: center; }
+.vcard:hover { background: var(--surface2); }
+.vcard.active { background: var(--surface2); border-left: 2px solid var(--accent); }
+.vcard-num { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--accent); min-width: 36px; text-align: center; }
+.vcard-info { flex: 1; min-width: 0; }
+.vcard-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vcard-car { font-size: 11px; color: var(--muted); margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vcard-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.sd-pending { background: var(--orange); }
+.sd-approved { background: var(--green); }
+.sd-observed { background: #e8b820; }
+.sd-rejected { background: var(--red); }
+.reinsp-tag { font-size: 9px; color: var(--orange); border: 1px solid var(--orange-border); padding: 1px 5px; border-radius: 3px; white-space: nowrap; }
+
+/* ── PANEL DERECHO ── */
+.panel { display: flex; flex-direction: column; overflow: hidden; background: var(--bg); }
+.panel-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; color: var(--muted2); }
+.panel-empty-icon { font-size: 40px; opacity: .3; }
+
+/* ── FICHA HEADER ── */
+.ficha-header { padding: 16px 20px 14px; border-bottom: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+.fh-left { display: flex; align-items: center; gap: 14px; }
+.fh-num { font-family: var(--mono); font-size: 32px; font-weight: 500; color: var(--accent); line-height: 1; }
+.fh-info { }
+.fh-pilot { font-size: 16px; font-weight: 600; }
+.fh-car { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.fh-right { display: flex; align-items: center; gap: 8px; }
+.pill { font-size: 11px; padding: 4px 10px; border-radius: 20px; font-weight: 500; display: flex; align-items: center; gap: 4px; }
+.pill-pending { background: var(--orange-bg); color: var(--orange); border: 1px solid var(--orange-border); }
+.pill-approved { background: var(--green-bg); color: var(--green); border: 1px solid var(--green-border); }
+.pill-observed { background: rgba(232,184,32,0.1); color: #e8b820; border: 1px solid rgba(232,184,32,0.25); }
+.pill-rejected { background: var(--red-bg); color: var(--red); border: 1px solid var(--red-border); }
+.btn { padding: 7px 13px; font-size: 12px; font-weight: 500; border-radius: 7px; border: 1px solid var(--border2); background: transparent; color: var(--text); cursor: pointer; display: inline-flex; align-items: center; gap: 5px; transition: all .12s; font-family: var(--font); }
+.btn:hover { background: var(--surface2); border-color: var(--border2); }
+.btn-accent { background: var(--accent); color: #000; border-color: var(--accent); }
+.btn-accent:hover { opacity: .88; background: var(--accent); }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+
+/* ── META ROW ── */
+.meta-row { display: grid; grid-template-columns: repeat(5,1fr); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.meta-item { padding: 10px 16px; border-right: 1px solid var(--border); }
+.meta-item:last-child { border-right: none; }
+.meta-label { font-size: 9px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-bottom: 3px; }
+.meta-val { font-size: 12px; font-weight: 500; }
+
+/* ── PROGRESS BAR ── */
+.progress-bar-wrap { height: 3px; background: var(--surface2); flex-shrink: 0; }
+.progress-bar { height: 3px; background: var(--accent); transition: width .4s; }
+
+/* ── CHECKLIST BODY ── */
+.checklist-body { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.checklist-body::-webkit-scrollbar { width: 4px; }
+.checklist-body::-webkit-scrollbar-thumb { background: var(--surface3); border-radius: 4px; }
+
+.reinsp-banner { background: var(--orange-bg); border: 1px solid var(--orange-border); border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 12px; color: var(--orange); display: flex; align-items: flex-start; gap: 8px; }
+.reinsp-banner-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+
+.section-block { margin-bottom: 16px; }
+.section-title { font-size: 10px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .08em; padding: 6px 0 8px; border-bottom: 1px solid var(--border); margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.section-count { background: var(--surface2); padding: 1px 7px; border-radius: 10px; font-size: 9px; color: var(--muted2); }
+
+.cl-item { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--border); }
+.cl-item:last-child { border-bottom: none; }
+.cl-item.disabled { opacity: .35; pointer-events: none; }
+.cl-item.highlighted { background: var(--yellow-bg); border-radius: 6px; padding: 10px 8px; border: 1px solid var(--yellow-border); margin-bottom: 2px; }
+.cl-name { font-size: 13px; font-weight: 500; line-height: 1.3; }
+.cl-sub { font-size: 11px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+.cl-art { font-family: var(--mono); font-size: 10px; color: var(--muted2); margin-top: 3px; }
+.cl-obs-open { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.obs-chip { font-size: 10px; padding: 3px 7px; border-radius: 4px; background: var(--surface2); border: 1px solid var(--border); cursor: pointer; color: var(--muted); transition: all .1s; }
+.obs-chip:hover, .obs-chip.selected { background: var(--surface3); border-color: var(--border2); color: var(--text); }
+.obs-input { margin-top: 5px; width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 5px 8px; font-size: 11px; color: var(--text); font-family: var(--font); }
+.obs-input:focus { outline: none; border-color: var(--border2); }
+.cl-controls { display: flex; gap: 5px; align-items: center; flex-shrink: 0; }
+.ctrl { width: 34px; height: 34px; border-radius: 7px; border: 1px solid var(--border); background: var(--surface2); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 14px; transition: all .12s; color: var(--muted); font-family: var(--font); font-weight: 600; }
+.ctrl:hover { border-color: var(--border2); color: var(--text); }
+.ctrl.ok { background: var(--green-bg); border-color: var(--green-border); color: var(--green); }
+.ctrl.fail { background: var(--red-bg); border-color: var(--red-border); color: var(--red); }
+.ctrl.na { background: var(--surface3); border-color: var(--border2); color: var(--muted); }
+
+/* ── FOOTER ── */
+.ficha-footer { padding: 12px 20px; border-top: 1px solid var(--border); background: var(--surface); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; gap: 12px; }
+.footer-summary { display: flex; gap: 16px; }
+.fs-item { font-size: 11px; display: flex; align-items: center; gap: 5px; }
+.verdict-btns { display: flex; gap: 8px; }
+.vbtn { padding: 8px 16px; font-size: 12px; font-weight: 600; border-radius: 7px; border: 1px solid; cursor: pointer; transition: all .12s; display: flex; align-items: center; gap: 5px; font-family: var(--font); }
+.vbtn-approve { border-color: var(--green-border); color: var(--green); background: var(--green-bg); }
+.vbtn-approve:hover { background: rgba(45,184,112,0.2); }
+.vbtn-observe { border-color: rgba(232,184,32,0.3); color: #e8b820; background: rgba(232,184,32,0.08); }
+.vbtn-observe:hover { background: rgba(232,184,32,0.16); }
+.vbtn-reject { border-color: var(--red-border); color: var(--red); background: var(--red-bg); }
+.vbtn-reject:hover { background: rgba(224,48,48,0.2); }
+
+/* ── MODAL ── */
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.75); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.modal { background: var(--surface); border: 1px solid var(--border2); border-radius: 12px; padding: 24px; width: 440px; }
+.modal-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+.modal-sub { font-size: 12px; color: var(--muted); margin-bottom: 16px; }
+.modal-label { font-size: 11px; color: var(--muted); margin-bottom: 5px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
+.modal textarea { width: 100%; background: var(--surface2); border: 1px solid var(--border); border-radius: 7px; padding: 10px; font-size: 13px; color: var(--text); font-family: var(--font); resize: vertical; min-height: 80px; margin-bottom: 16px; }
+.modal textarea:focus { outline: none; border-color: var(--border2); }
+.modal-fail-list { background: var(--red-bg); border: 1px solid var(--red-border); border-radius: 7px; padding: 10px 12px; margin-bottom: 14px; font-size: 12px; color: var(--muted); }
+.modal-fail-list li { margin-left: 14px; margin-top: 3px; color: var(--text); }
+.modal-btns { display: flex; gap: 8px; justify-content: flex-end; }
+
+/* ── HISTORIAL ── */
+.history-panel { flex: 1; overflow-y: auto; padding: 16px 20px; }
+.hist-event { display: flex; gap: 12px; margin-bottom: 16px; }
+.hist-line { display: flex; flex-direction: column; align-items: center; gap: 0; }
+.hist-dot2 { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+.hist-connector { width: 1px; flex: 1; background: var(--border); min-height: 20px; margin-top: 4px; }
+.hist-content { flex: 1; padding-bottom: 12px; }
+.hist-title2 { font-size: 13px; font-weight: 500; }
+.hist-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.hist-obs { font-size: 11px; color: var(--muted); margin-top: 5px; background: var(--surface2); border-radius: 5px; padding: 6px 8px; line-height: 1.5; }
+
+/* ── RESULTADO VISUAL ── */
+.result-card { margin: 20px; border-radius: 10px; padding: 20px; display: flex; align-items: center; gap: 16px; }
+.rc-approved { background: var(--green-bg); border: 1px solid var(--green-border); }
+.rc-observed { background: rgba(232,184,32,0.08); border: 1px solid rgba(232,184,32,0.2); }
+.rc-rejected { background: var(--red-bg); border: 1px solid var(--red-border); }
+.rc-icon { font-size: 32px; }
+.rc-title { font-size: 16px; font-weight: 600; }
+.rc-sub { font-size: 12px; color: var(--muted); margin-top: 3px; }
+
+/* ── UTILS ── */
+.hidden { display: none !important; }
+.tag-tcc { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); font-size: 10px; padding: 2px 7px; border-radius: 4px; font-weight: 500; }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="tb-left">
+    <span class="brand">Race Control</span>
+    <span class="sep">/</span>
+    <span class="module-name">Revisión Técnica</span>
+    <span class="event-chip">TCC · Fecha 3 · 2026</span>
+  </div>
+  <div class="inspector-tag">
+    <span class="dot-online"></span>
+    Inspector: M. González
+  </div>
+</div>
+
+<div class="main">
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+  <div class="sidebar-head">
+    <div class="sidebar-title">Participantes</div>
+    <div class="stats-mini" id="statsRow"></div>
+    <div class="search-box">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="searchInput" placeholder="Buscar piloto, número..." oninput="renderList()">
+    </div>
+  </div>
+  <div class="filter-tabs" id="filterTabs">
+    <button class="ft active" onclick="setFilter('all',this)">Todos</button>
+    <button class="ft" onclick="setFilter('pending',this)">Pendientes</button>
+    <button class="ft" onclick="setFilter('approved',this)">Aprobados</button>
+    <button class="ft" onclick="setFilter('observed',this)">Observados</button>
+    <button class="ft" onclick="setFilter('rejected',this)">Rechazados</button>
+  </div>
+  <div class="vehicle-list" id="vehicleList"></div>
+</div>
+
+<!-- PANEL DERECHO -->
+<div class="panel" id="panel">
+  <div class="panel-empty" id="emptyState">
+    <div class="panel-empty-icon">🏁</div>
+    <div style="font-size:13px;font-weight:500">Selecciona un vehículo</div>
+    <div style="font-size:11px">Elige un participante de la lista para iniciar la revisión técnica</div>
+  </div>
+
+  <!-- VISTA INSPECCIÓN -->
+  <div id="viewInspection" class="hidden" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+    <div class="ficha-header">
+      <div class="fh-left">
+        <div class="fh-num" id="fichaNum">#12</div>
+        <div class="fh-info">
+          <div class="fh-pilot" id="fichaPilot">Rodrigo Fuentes</div>
+          <div class="fh-car" id="fichaCarInfo">Honda Civic FK8 · <span class="tag-tcc">TCC Pro</span></div>
+        </div>
+      </div>
+      <div class="fh-right">
+        <span id="fichaStatus"></span>
+        <button class="btn btn-sm" onclick="showHistory()">📋 Historial</button>
+        <button class="btn btn-sm">📷 Foto</button>
+      </div>
+    </div>
+    <div class="meta-row">
+      <div class="meta-item"><div class="meta-label">Evento</div><div class="meta-val">TCC · Fecha 3</div></div>
+      <div class="meta-item"><div class="meta-label">Inspector</div><div class="meta-val">M. González</div></div>
+      <div class="meta-item"><div class="meta-label">Fecha</div><div class="meta-val" id="fichaDate"></div></div>
+      <div class="meta-item"><div class="meta-label">Hora inicio</div><div class="meta-val" id="fichaTime"></div></div>
+      <div class="meta-item"><div class="meta-label">Progreso</div><div class="meta-val" id="fichaProgress">0 / 0</div></div>
+    </div>
+    <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
+    <div class="checklist-body" id="checklistBody"></div>
+    <div class="ficha-footer">
+      <div class="footer-summary" id="footerSummary"></div>
+      <div class="verdict-btns">
+        <button class="vbtn vbtn-approve" onclick="openVerdict('approved')">✓ Aprobar</button>
+        <button class="vbtn vbtn-observe" onclick="openVerdict('observed')">⚠ Con observaciones</button>
+        <button class="vbtn vbtn-reject" onclick="openVerdict('rejected')">✕ Rechazar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- VISTA RESULTADO -->
+  <div id="viewResult" class="hidden" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+    <div class="ficha-header">
+      <div class="fh-left">
+        <div class="fh-num" id="resNum">#12</div>
+        <div class="fh-info">
+          <div class="fh-pilot" id="resPilot"></div>
+          <div class="fh-car" id="resCar"></div>
+        </div>
+      </div>
+      <div class="fh-right">
+        <button class="btn btn-sm" onclick="showHistory()">📋 Historial</button>
+        <button class="btn btn-sm btn-accent" onclick="startReinspection()">🔄 Crear reinspección</button>
+        <button class="btn btn-sm" onclick="openVehicle(activeVehicle)">✏ Editar</button>
+      </div>
+    </div>
+    <div id="resultCard"></div>
+    <div style="padding:0 20px;flex:1;overflow-y:auto">
+      <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:10px">Resumen de revisión</div>
+      <div id="resultSummary"></div>
+      <div style="margin-top:14px;font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Comentario del inspector</div>
+      <div id="resultComment" style="font-size:13px;background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:10px 12px;color:var(--muted)"></div>
+    </div>
+  </div>
+
+  <!-- VISTA HISTORIAL -->
+  <div id="viewHistory" class="hidden" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+    <div class="ficha-header">
+      <div class="fh-left">
+        <div class="fh-num" id="histNum"></div>
+        <div class="fh-info">
+          <div class="fh-pilot" id="histPilot"></div>
+          <div class="fh-car" id="histCar"></div>
+        </div>
+      </div>
+      <div class="fh-right">
+        <button class="btn btn-sm" onclick="backFromHistory()">← Volver</button>
+        <button class="btn btn-sm">⬇ Exportar PDF</button>
+      </div>
+    </div>
+    <div class="history-panel" id="historyPanel"></div>
+  </div>
+</div>
+
+</div>
+</div>
+
+<!-- MODAL VEREDICTO -->
+<div class="modal-overlay hidden" id="verdictModal">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">Confirmar aprobación</div>
+    <div class="modal-sub" id="modalSub">Revisa los ítems antes de confirmar el resultado.</div>
+    <div id="modalFailList"></div>
+    <div class="modal-label">Comentario del inspector (obligatorio)</div>
+    <textarea id="verdictComment" placeholder="Describe el estado general del vehículo y cualquier observación relevante..."></textarea>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-accent" id="modalConfirmBtn" onclick="confirmVerdict()">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── DATA ──
+const VEHICLES = [
+  { id:0, num:'3',  pilot:'Valentina Torres',   car:'Renault Clio RS',    cat:'TCC Pro', status:'pending',  reinsp:false, history:[] },
+  { id:1, num:'5',  pilot:'Camila Ríos',         car:'Subaru WRX STi',     cat:'TCC Pro', status:'approved', reinsp:false, history:[
+    {date:'15/04/2026',event:'Fecha 2',result:'approved',inspector:'R. Díaz',comment:'Vehículo en excelentes condiciones. Todo en orden.',fails:[]}
+  ]},
+  { id:2, num:'7',  pilot:'Pablo Herrera',       car:'Mazda MX-5',         cat:'Track Day',status:'pending', reinsp:false, history:[] },
+  { id:3, num:'12', pilot:'Rodrigo Fuentes',     car:'Honda Civic FK8',    cat:'TCC Pro', status:'rejected', reinsp:true,  history:[
+    {date:'10/03/2026',event:'Fecha 1',result:'approved',inspector:'R. Díaz',comment:'Sin observaciones.',fails:[]},
+    {date:'06/06/2026',event:'Fecha 3',result:'rejected',inspector:'M. González',comment:'Extintor con fecha vencida Mayo 2026. No puede salir a pista hasta reemplazarlo.',fails:['Sistema de extinción de incendios']}
+  ]},
+  { id:4, num:'18', pilot:'Diego Salinas',       car:'VW Golf GTI',        cat:'TCC Pro', status:'pending',  reinsp:false, history:[] },
+  { id:5, num:'27', pilot:'Felipe Mora',         car:'Toyota GR86',        cat:'TCC Pro', status:'approved', reinsp:false, history:[
+    {date:'06/06/2026',event:'Fecha 3',result:'approved',inspector:'M. González',comment:'Todo en orden. Buen estado general.',fails:[]}
+  ]},
+  { id:6, num:'44', pilot:'Marcela Vega',        car:'BMW M4',             cat:'TCC Pro', status:'observed', reinsp:false, history:[
+    {date:'06/06/2026',event:'Fecha 3',result:'observed',inspector:'R. Díaz',comment:'Alerón trasero con fijación débil en tornillo derecho. Se autoriza participación bajo condición de corrección antes de carrera.',fails:['Elementos sueltos / fijación general']}
+  ]},
+  { id:7, num:'91', pilot:'Andrea Muñoz',        car:'Porsche Cayman',     cat:'TCC Pro', status:'approved', reinsp:false, history:[
+    {date:'06/06/2026',event:'Fecha 3',result:'approved',inspector:'M. González',comment:'Perfecto estado. Sin observaciones.',fails:[]}
+  ]},
+];
+
+const CHECKLIST = [
+  { section:'Seguridad del vehículo', art:'Arts. 3.1–3.12', items:[
+    {name:'Jaula de seguridad',         sub:'Completa, firme, con arco principal, barras laterales, refuerzos y acolchado.', art:'Art. 3.1',  obs:['Sin jaula','Soldadura deficiente','Corrosión/fisuras','Mal fijada','Sin acolchado','Otro']},
+    {name:'Butaca de competición',      sub:'Firmemente instalada, anclajes seguros, compatible con arnés.',                  art:'Art. 3.2',  obs:['Suelta','Dañada','Mal fijada','Incompatible con arnés','Otro']},
+    {name:'Arnés de seguridad (mín. 5 puntos)',sub:'Anclado a chasis o jaula, compatible con HANS.',                          art:'Art. 3.3',  obs:['Roto/cortado','Vencido','Hebillas defectuosas','Mal anclado','Incompatible con HANS','Otro']},
+    {name:'Sistema de extinción',       sub:'Vigente, cargado, operativo, accesible, soportes seguros.',                      art:'Art. 3.4',  obs:['Vencido','Descargado','Mal fijado','Inaccesible','Ausente','Otro']},
+    {name:'Cortacorriente',             sub:'Funcional, interrumpe corriente principal, accesible para piloto.',               art:'Art. 3.5',  obs:['Ausente','No funciona','Inaccesible','Sin señalización exterior','Otro']},
+    {name:'Luces de freno',             sub:'Operativas y visibles para vehículos detrás.',                                    art:'Art. 3.6',  obs:['Ausentes','No funcionan','Visibilidad insuficiente','Otro']},
+    {name:'Argollas/tiras de remolque', sub:'Sistema delantero Y trasero, visibles y accesibles para rescate.',               art:'Art. 3.7',  obs:['Ausente frontal','Ausente trasero','Mal instalado','No visible','Otro']},
+    {name:'Cámara frontal a bordo',     sub:'Mínimo 1 cámara apuntando al frente, instalada con seguridad, operativa.',       art:'Art. 3.8',  obs:['Ausente','Apagada','Mal fijada','No apunta al frente','Otro']},
+    {name:'Neumáticos',                 sub:'Sin telas, cortes, deformaciones, desgaste extremo o presión insegura.',         art:'Art. 3.9',  obs:['Telas visibles','Corte profundo','Deformación/bulto','Desgaste límite','Presión insegura','Otro']},
+    {name:'Sistema de frenos',          sub:'Pedal firme, sin fugas, pastillas y discos en condición segura.',                 art:'Art. 3.10', obs:['Pedal inseguro','Fuga de líquido','Pastillas agotadas','Disco crítico','Pérdida de presión','Otro']},
+    {name:'Fugas de fluidos',           sub:'Sin fugas de combustible, aceite, refrigerante, hidráulico o frenos.',            art:'Art. 3.11', obs:['Fuga combustible','Fuga aceite','Fuga refrigerante','Fuga hidráulico','Fuga frenos','Otro']},
+    {name:'Elementos sueltos / fijación',sub:'Sin parachoques, capó, maletero, puertas, alerones, cámaras o batería sueltos.', art:'Art. 3.12', obs:['Parachoques suelto','Capó sin cierre','Puerta deficiente','Alerón mal fijado','Batería suelta','Objetos en habitáculo','Otro']},
+    {name:'Dirección y suspensión',     sub:'Sin juego excesivo ni falla evidente.',                                           art:'Art. 2.3',  obs:['Juego excesivo','Suspensión dañada','Rótula dañada','Otro']},
+    {name:'Parabrisas y vidrios',       sub:'Sin quiebre ni condición peligrosa.',                                             art:'Art. 6.2',  obs:['Quiebre estructural','Visibilidad comprometida','Mal fijado','Otro']},
+  ]},
+  { section:'Equipamiento del piloto', art:'Arts. 4.2–4.7', items:[
+    {name:'Casco',                      sub:'Apto para automovilismo, sin daños estructurales, cierre operativo.',             art:'Art. 4.2',  obs:['Dañado','Fisura visible','Cierre deficiente','Mal ajustado','No apto','Otro']},
+    {name:'HANS (o equivalente homologado)',sub:'Compatible con casco, arnés y posición de manejo.',                           art:'Art. 4.3',  obs:['Ausente','Mal instalado','Incompatible casco','Incompatible arnés','Otro']},
+    {name:'Buzo ignífugo',              sub:'Apto para automovilismo, sin roturas relevantes ni zonas quemadas.',               art:'Art. 4.4',  obs:['Zonas quemadas','Roturas relevantes','No apto','Otro']},
+    {name:'Balaclava ignífuga',         sub:'Cubre cabeza y cuello, se usa bajo el casco.',                                    art:'Art. 4.5',  obs:['Ausente','No ignífuga','No cubre cuello','Deteriorada','Otro']},
+    {name:'Guantes ignífugos',          sub:'Aptos para automovilismo, buen estado.',                                          art:'Art. 4.6',  obs:['Ausentes','No ignífugos','Deteriorados','Otro']},
+    {name:'Zapatos/botas ignífugas',    sub:'Aptos para automovilismo. No se permite zapatillas comunes.',                    art:'Art. 4.7',  obs:['Zapatillas comunes','Zapatos de calle','No ignífugos','Otro']},
+  ]},
+  { section:'Administrativo y deportivo', art:'Art. 6.4', items:[
+    {name:'Inscripción vigente',        sub:'Inscrito dentro de plazo y pago realizado.',                                     art:'Art. 6.4',  obs:['No inscrito','Fuera de plazo','Pago pendiente','Otro']},
+    {name:'Documentos firmados',        sub:'Carta de responsabilidad y aceptación del reglamento.',                           art:'Art. 6.4',  obs:['Carta sin firmar','Reglamento no aceptado','Documento faltante','Otro']},
+    {name:'Sin sanción o suspensión vigente',sub:'Sin sanciones pendientes ni suspensiones activas.',                          art:'Art. 6.4',  obs:['Sanción pendiente','Suspensión vigente','Otro']},
+  ]},
+];
+
+// ── STATE ──
+let activeVehicle = null;
+let activeView = 'empty'; // 'inspection' | 'result' | 'history'
+let prevView = null;
+let currentFilter = 'all';
+let itemStates = {}; // { 'sectionName:itemName': { result: 'ok'|'fail'|'na'|null, obs: string } }
+let pendingVerdict = null;
+let isReinspection = false;
+let reinspPendingItems = [];
+
+// ── INIT ──
+const now = new Date();
+document.getElementById('fichaDate').textContent = now.toLocaleDateString('es-CL');
+document.getElementById('fichaTime').textContent = now.toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'});
+renderStats();
+renderList();
+
+// ── STATS ──
+function renderStats() {
+  const counts = { total: VEHICLES.length, pending:0, approved:0, rejected:0 };
+  VEHICLES.forEach(v => {
+    if(v.status === 'pending') counts.pending++;
+    else if(v.status === 'approved' || v.status === 'observed') counts.approved++;
+    else if(v.status === 'rejected') counts.rejected++;
+  });
+  document.getElementById('statsRow').innerHTML = `
+    <div class="sm"><div class="sm-n" style="color:var(--text)">${counts.total}</div><div class="sm-l">Total</div></div>
+    <div class="sm"><div class="sm-n" style="color:var(--orange)">${counts.pending}</div><div class="sm-l">Pendiente</div></div>
+    <div class="sm"><div class="sm-n" style="color:var(--green)">${counts.approved}</div><div class="sm-l">Ok</div></div>
+    <div class="sm"><div class="sm-n" style="color:var(--red)">${counts.rejected}</div><div class="sm-l">Rechazado</div></div>
+  `;
+}
+
+// ── LIST ──
+function renderList() {
+  const q = document.getElementById('searchInput').value.toLowerCase();
+  const filtered = VEHICLES.filter(v => {
+    if(currentFilter !== 'all' && v.status !== currentFilter) return false;
+    if(q && !v.num.includes(q) && !v.pilot.toLowerCase().includes(q) && !v.car.toLowerCase().includes(q)) return false;
+    return true;
+  });
+  const statusDot = { pending:'sd-pending', approved:'sd-approved', observed:'sd-observed', rejected:'sd-rejected' };
+  document.getElementById('vehicleList').innerHTML = filtered.map(v => `
+    <div class="vcard${activeVehicle===v.id?' active':''}" onclick="openVehicle(${v.id})">
+      <div class="vcard-num">${v.num}</div>
+      <div class="vcard-info">
+        <div class="vcard-name">${v.pilot}</div>
+        <div class="vcard-car">${v.car} · ${v.cat}</div>
+      </div>
+      <div class="vcard-right">
+        <div class="status-dot ${statusDot[v.status]}"></div>
+        ${v.reinsp ? '<div class="reinsp-tag">Reinsp.</div>' : ''}
+      </div>
+    </div>
+  `).join('');
+}
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.ft').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderList();
+}
+
+// ── OPEN VEHICLE ──
+function openVehicle(id) {
+  activeVehicle = id;
+  const v = VEHICLES[id];
+  isReinspection = v.reinsp;
+
+  // populate header
+  document.getElementById('fichaNum').textContent = '#' + v.num;
+  document.getElementById('fichaPilot').textContent = v.pilot;
+  document.getElementById('fichaCarInfo').innerHTML = v.car + ' · <span class="tag-tcc">' + v.cat + '</span>';
+  document.getElementById('resNum').textContent = '#' + v.num;
+  document.getElementById('resPilot').textContent = v.pilot;
+  document.getElementById('resCar').textContent = v.car + ' · ' + v.cat;
+  document.getElementById('histNum').textContent = '#' + v.num;
+  document.getElementById('histPilot').textContent = v.pilot;
+  document.getElementById('histCar').textContent = v.car + ' · ' + v.cat;
+
+  // status pill
+  const pillMap = {
+    pending: '<span class="pill pill-pending">⏳ Pendiente</span>',
+    approved: '<span class="pill pill-approved">✓ Aprobado</span>',
+    observed: '<span class="pill pill-observed">⚠ Con observaciones</span>',
+    rejected: '<span class="pill pill-rejected">✕ Rechazado</span>',
+  };
+  document.getElementById('fichaStatus').innerHTML = pillMap[v.status];
+
+  // if has result, show result view; else inspection
+  if(v.status !== 'pending' && v.history.length > 0 && !v.reinsp) {
+    showResultView(v);
+  } else {
+    initInspection(v);
+    showView('inspection');
+  }
+  renderList();
+}
+
+// ── INIT INSPECTION ──
+function initInspection(v) {
+  itemStates = {};
+  reinspPendingItems = [];
+
+  if(isReinspection && v.history.length > 0) {
+    const lastInsp = v.history[v.history.length - 1];
+    reinspPendingItems = lastInsp.fails || [];
+  }
+
+  renderChecklist();
+  updateProgress();
+}
+
+// ── RENDER CHECKLIST ──
+function renderChecklist() {
+  const v = VEHICLES[activeVehicle];
+  let html = '';
+
+  if(isReinspection && reinspPendingItems.length > 0) {
+    html += `<div class="reinsp-banner">
+      <div class="reinsp-banner-icon">🔄</div>
+      <div><strong>Reinspección activa</strong> — Solo se muestran los ítems que fallaron en la inspección anterior. Los demás quedan como aprobados automáticamente.<br><span style="margin-top:4px;display:block">Ítems pendientes: <strong>${reinspPendingItems.join(', ')}</strong></span></div>
+    </div>`;
+  }
+
+  CHECKLIST.forEach(sec => {
+    const visibleItems = isReinspection
+      ? sec.items.filter(it => reinspPendingItems.includes(it.name))
+      : sec.items;
+
+    if(isReinspection && visibleItems.length === 0) return;
+
+    html += `<div class="section-block">
+      <div class="section-title">${sec.section} <span class="section-count">${visibleItems.length}</span> <span style="color:var(--muted2);font-weight:400;text-transform:none;letter-spacing:0">${sec.art}</span></div>`;
+
+    visibleItems.forEach(item => {
+      const key = sec.section + ':' + item.name;
+      const st = itemStates[key] || { result: null, obs: '' };
+      const isHighlighted = reinspPendingItems.includes(item.name);
+      const showObs = st.result === 'fail';
+
+      html += `<div class="cl-item${isHighlighted ? ' highlighted' : ''}" id="item-${encodeURIComponent(key)}">
+        <div>
+          <div class="cl-name">${item.name}</div>
+          <div class="cl-sub">${item.sub}</div>
+          <div class="cl-art">${item.art}</div>
+          ${showObs ? `<div class="cl-obs-open">
+            ${item.obs.map(o => `<span class="obs-chip${st.obs===o?' selected':''}" onclick="selectObs('${encodeURIComponent(key)}','${o}')">${o}</span>`).join('')}
+          </div>
+          <input class="obs-input" placeholder="Observación libre..." value="${st.obsText||''}" oninput="setObsText('${encodeURIComponent(key)}',this.value)">` : ''}
+        </div>
+        <div class="cl-controls">
+          <button class="ctrl${st.result==='ok'?' ok':''}" onclick="setResult('${encodeURIComponent(key)}','ok')" title="Cumple">✓</button>
+          <button class="ctrl${st.result==='fail'?' fail':''}" onclick="setResult('${encodeURIComponent(key)}','fail')" title="No cumple">✕</button>
+          <button class="ctrl${st.result==='na'?' na':''}" onclick="setResult('${encodeURIComponent(key)}','na')" title="No aplica" style="font-size:10px;font-weight:600">N/A</button>
+        </div>
+      </div>`;
+    });
+    html += '</div>';
+  });
+
+  document.getElementById('checklistBody').innerHTML = html;
+  updateProgress();
+}
+
+// ── ITEM INTERACTION ──
+function setResult(encKey, val) {
+  const key = decodeURIComponent(encKey);
+  if(!itemStates[key]) itemStates[key] = { result: null, obs: '', obsText: '' };
+  itemStates[key].result = itemStates[key].result === val ? null : val;
+  if(itemStates[key].result !== 'fail') { itemStates[key].obs = ''; itemStates[key].obsText = ''; }
+  renderChecklist();
+}
+
+function selectObs(encKey, obs) {
+  const key = decodeURIComponent(encKey);
+  if(!itemStates[key]) itemStates[key] = { result: 'fail', obs: '', obsText: '' };
+  itemStates[key].obs = itemStates[key].obs === obs ? '' : obs;
+  renderChecklist();
+}
+
+function setObsText(encKey, val) {
+  const key = decodeURIComponent(encKey);
+  if(!itemStates[key]) itemStates[key] = { result: 'fail', obs: '', obsText: '' };
+  itemStates[key].obsText = val;
+}
+
+// ── PROGRESS ──
+function updateProgress() {
+  const allItems = getAllItems();
+  const total = allItems.length;
+  const done = Object.values(itemStates).filter(s => s.result !== null).length;
+  const pct = total ? Math.round((done / total) * 100) : 0;
+  document.getElementById('fichaProgress').textContent = done + ' / ' + total;
+  document.getElementById('progressBar').style.width = pct + '%';
+
+  const ok = Object.values(itemStates).filter(s => s.result === 'ok').length;
+  const fail = Object.values(itemStates).filter(s => s.result === 'fail').length;
+  const na = Object.values(itemStates).filter(s => s.result === 'na').length;
+  document.getElementById('footerSummary').innerHTML = `
+    <div class="fs-item" style="color:var(--green)">✓ Cumple: ${ok}</div>
+    <div class="fs-item" style="color:var(--red)">✕ No cumple: ${fail}</div>
+    <div class="fs-item" style="color:var(--muted)">N/A: ${na}</div>
+    <div class="fs-item" style="color:var(--muted)">Progreso: ${pct}%</div>
+  `;
+}
+
+function getAllItems() {
+  let items = [];
+  CHECKLIST.forEach(sec => {
+    const visible = isReinspection ? sec.items.filter(it => reinspPendingItems.includes(it.name)) : sec.items;
+    visible.forEach(it => items.push(sec.section + ':' + it.name));
+  });
+  return items;
+}
+
+// ── VERDICT ──
+function openVerdict(type) {
+  pendingVerdict = type;
+  const fails = Object.entries(itemStates)
+    .filter(([k,v]) => v.result === 'fail')
+    .map(([k]) => k.split(':')[1]);
+
+  const titles = { approved:'Confirmar aprobación', observed:'Aprobar con observaciones', rejected:'Confirmar rechazo' };
+  const subs = {
+    approved: 'El vehículo quedará habilitado para competir.',
+    observed: 'El vehículo quedará habilitado bajo condición de corrección.',
+    rejected: 'El vehículo quedará bloqueado. Se podrá crear una reinspección tras corregir los defectos.'
+  };
+  document.getElementById('modalTitle').textContent = titles[type];
+  document.getElementById('modalSub').textContent = subs[type];
+  document.getElementById('verdictComment').value = '';
+
+  let failHtml = '';
+  if(fails.length > 0) {
+    failHtml = `<div class="modal-fail-list"><strong style="color:var(--red)">Ítems con No cumple (${fails.length}):</strong><ul>${fails.map(f => `<li>${f}</li>`).join('')}</ul></div>`;
+  }
+  document.getElementById('modalFailList').innerHTML = failHtml;
+  document.getElementById('verdictModal').classList.remove('hidden');
+}
+
+function closeModal() {
+  document.getElementById('verdictModal').classList.add('hidden');
+  pendingVerdict = null;
+}
+
+function confirmVerdict() {
+  const comment = document.getElementById('verdictComment').value.trim();
+  if(!comment) { document.getElementById('verdictComment').style.borderColor = 'var(--red)'; return; }
+
+  const v = VEHICLES[activeVehicle];
+  const fails = Object.entries(itemStates).filter(([k,s]) => s.result === 'fail').map(([k]) => k.split(':')[1]);
+
+  v.status = pendingVerdict;
+  v.reinsp = false;
+  v.history.push({
+    date: new Date().toLocaleDateString('es-CL'),
+    event: 'TCC · Fecha 3',
+    result: pendingVerdict,
+    inspector: 'M. González',
+    comment,
+    fails
+  });
+
+  closeModal();
+  renderStats();
+  renderList();
+  showResultView(v);
+}
+
+// ── RESULT VIEW ──
+function showResultView(v) {
+  const lastH = v.history[v.history.length - 1];
+  const cardMap = {
+    approved: { cls:'rc-approved', icon:'✅', title:'Aprobado', sub:'El vehículo está habilitado para competir.' },
+    observed: { cls:'rc-observed', icon:'⚠️', title:'Aprobado con observaciones', sub:'Habilitado bajo condición de corrección.' },
+    rejected: { cls:'rc-rejected', icon:'🚫', title:'Rechazado', sub:'El vehículo NO puede salir a pista.' },
+  };
+  const c = cardMap[v.status];
+  document.getElementById('resultCard').innerHTML = `
+    <div class="result-card ${c.cls}">
+      <div class="rc-icon">${c.icon}</div>
+      <div><div class="rc-title">${c.title}</div><div class="rc-sub">${c.sub}</div></div>
+      <div style="margin-left:auto;font-family:var(--mono);font-size:11px;color:var(--muted)">${lastH ? lastH.date : ''}</div>
+    </div>`;
+
+  // summary table
+  let sumHtml = '';
+  CHECKLIST.forEach(sec => {
+    const hasItems = sec.items.some(it => itemStates[sec.section+':'+it.name]);
+    if(!hasItems && !isReinspection) return;
+    sec.items.forEach(it => {
+      const st = itemStates[sec.section+':'+it.name];
+      if(!st) return;
+      const icon = st.result==='ok'?'<span style="color:var(--green)">✓</span>':st.result==='fail'?'<span style="color:var(--red)">✕</span>':'<span style="color:var(--muted)">—</span>';
+      sumHtml += `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px">
+        <span>${it.name}</span>
+        <span>${icon} ${st.obs ? '<span style="color:var(--muted);font-size:11px">'+st.obs+'</span>' : ''}</span>
+      </div>`;
+    });
+  });
+  document.getElementById('resultSummary').innerHTML = sumHtml || '<div style="font-size:12px;color:var(--muted)">Revisión sin ítems registrados.</div>';
+  document.getElementById('resultComment').textContent = lastH ? lastH.comment : '';
+  showView('result');
+}
+
+// ── REINSPECTION ──
+function startReinspection() {
+  const v = VEHICLES[activeVehicle];
+  const lastH = v.history[v.history.length - 1];
+  v.reinsp = true;
+  v.status = 'pending';
+  isReinspection = true;
+  reinspPendingItems = lastH ? (lastH.fails || []) : [];
+  itemStates = {};
+  renderList();
+  renderChecklist();
+  updateProgress();
+  document.getElementById('fichaStatus').innerHTML = '<span class="pill pill-pending">⏳ Reinspección</span>';
+  showView('inspection');
+}
+
+// ── HISTORY ──
+function showHistory() {
+  prevView = activeView;
+  const v = VEHICLES[activeVehicle];
+  const statusLabel = { approved:'✓ Aprobado', observed:'⚠ Con observaciones', rejected:'✕ Rechazado', pending:'⏳ Pendiente' };
+  const dotColor = { approved:'var(--green)', observed:'#e8b820', rejected:'var(--red)', pending:'var(--orange)' };
+
+  let html = '';
+  if(v.history.length === 0) {
+    html = '<div style="font-size:13px;color:var(--muted);padding:20px 0">Sin historial de inspecciones anteriores.</div>';
+  } else {
+    v.history.forEach((h, i) => {
+      html += `<div class="hist-event">
+        <div class="hist-line">
+          <div class="hist-dot2" style="background:${dotColor[h.result]}"></div>
+          ${i < v.history.length - 1 ? '<div class="hist-connector"></div>' : ''}
+        </div>
+        <div class="hist-content">
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="hist-title2">${h.event}</div>
+            <span class="pill ${h.result==='approved'?'pill-approved':h.result==='observed'?'pill-observed':'pill-rejected'}" style="font-size:10px;padding:2px 8px">${statusLabel[h.result]}</span>
+          </div>
+          <div class="hist-meta">${h.date} · Inspector: ${h.inspector}</div>
+          ${h.fails.length > 0 ? `<div class="hist-obs">No cumple: ${h.fails.join(' · ')}</div>` : ''}
+          <div class="hist-obs" style="margin-top:4px">${h.comment}</div>
+        </div>
+      </div>`;
+    });
+  }
+  document.getElementById('historyPanel').innerHTML = html;
+  showView('history');
+}
+
+function backFromHistory() {
+  if(prevView === 'result') showResultView(VEHICLES[activeVehicle]);
+  else showView('inspection');
+}
+
+// ── SHOW VIEW ──
+function showView(v) {
+  activeView = v;
+  document.getElementById('emptyState').classList.add('hidden');
+  document.getElementById('viewInspection').classList.add('hidden');
+  document.getElementById('viewResult').classList.add('hidden');
+  document.getElementById('viewHistory').classList.add('hidden');
+  if(v === 'inspection') { document.getElementById('viewInspection').classList.remove('hidden'); document.getElementById('viewInspection').style.display='flex'; }
+  else if(v === 'result') { document.getElementById('viewResult').classList.remove('hidden'); document.getElementById('viewResult').style.display='flex'; }
+  else if(v === 'history') { document.getElementById('viewHistory').classList.remove('hidden'); document.getElementById('viewHistory').style.display='flex'; }
+  else { document.getElementById('emptyState').classList.remove('hidden'); }
+}
+</script>
+</body>
+</html>
