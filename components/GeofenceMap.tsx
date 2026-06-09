@@ -256,7 +256,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
       ubicacionActualRef.current = L.marker([lat, lng], { icon })
         .bindPopup(`<div style="background:#111;color:#fff;padding:6px 10px;border-radius:8px;font-size:11px;border:1px solid #333">📍 Tu ubicación</div>`)
         .addTo(map);
-      if (centrar && !geocercaLayerRef.current) map.setView([lat, lng], 16);
+      if (centrar && !pistaLayerRef.current) map.setView([lat, lng], 16);
     }, () => {}, { enableHighAccuracy: true, timeout: 10000 });
   }
 
