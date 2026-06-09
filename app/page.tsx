@@ -587,7 +587,7 @@ export default function Home() {
       .from("fechas_evento")
       .select("id, nombre, fecha_evento, autodromo, trazado, cupos_max, estado, tipo, campeonato_id")
       .eq("campeonato_id", campId)
-      .eq("estado", "abierto")
+      .in("estado", ["borrador", "abierto"])
       .order("fecha_evento");
     setFechasDisp((data || []) as FechaItem[]);
   };
@@ -1282,16 +1282,21 @@ export default function Home() {
                   {fechasDisp.length === 0 ? (
                     <div className="text-center py-16 text-gray-600 text-sm">
                       <p className="text-3xl mb-3">📅</p>
-                      <p>No hay fechas abiertas en este campeonato</p>
+                      <p>No hay fechas disponibles en este campeonato</p>
                     </div>
                   ) : fechasDisp.map(fecha => {
+                    const esBorrador = fecha.estado === "borrador";
                     const insc = misInscripciones.find(i => i.fecha_id === fecha.id);
                     const puedeEntrar = insc && ["confirmado","en_pista"].includes(insc.estado);
                     const badge = insc ? INSC_BADGE[insc.estado] : null;
                     const tipo = fecha.tipo as keyof typeof TIPO_LABEL;
 
                     return (
-                      <div key={fecha.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+                      <div key={fecha.id} className={`border rounded-2xl p-4 space-y-3 ${
+                        esBorrador
+                          ? "bg-gray-900/50 border-gray-800/60 opacity-75"
+                          : "bg-gray-900 border-gray-800"
+                      }`}>
                         {/* Info fecha */}
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex-1 min-w-0">
@@ -1300,6 +1305,11 @@ export default function Home() {
                               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIPO_COLOR[tipo]}`}>
                                 {TIPO_LABEL[tipo]}
                               </span>
+                              {esBorrador && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-800 text-gray-500 border border-gray-700">
+                                  Próximamente
+                                </span>
+                              )}
                             </div>
                             <p className="text-xs text-gray-400 mt-1">
                               📅 {new Date(fecha.fecha_evento + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
@@ -1309,43 +1319,48 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Estado de inscripción */}
-                        {badge && insc?.estado !== "inscrito" && (
-                          <div className={`border rounded-xl px-3 py-2 text-xs font-medium ${badge.cls}`}>
-                            {badge.label}
-                          </div>
-                        )}
+                        {/* Si es borrador: solo info, sin acciones */}
+                        {!esBorrador && (
+                          <>
+                            {/* Estado de inscripción */}
+                            {badge && insc?.estado !== "inscrito" && (
+                              <div className={`border rounded-xl px-3 py-2 text-xs font-medium ${badge.cls}`}>
+                                {badge.label}
+                              </div>
+                            )}
 
-                        {/* Estado inscrito: botón de pago */}
-                        {insc?.estado === "inscrito" && (
-                          <button
-                            onClick={() => setModalPago({ fechaNombre: fecha.nombre })}
-                            className="w-full border border-blue-500 bg-blue-950 text-blue-300 rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-blue-900 active:scale-[0.98] transition">
-                            <span>✓ Aprobado · Pago pendiente</span>
-                            <span className="text-blue-400 text-xs font-bold">Pagar →</span>
-                          </button>
-                        )}
+                            {/* Estado inscrito: botón de pago */}
+                            {insc?.estado === "inscrito" && (
+                              <button
+                                onClick={() => setModalPago({ fechaNombre: fecha.nombre })}
+                                className="w-full border border-blue-500 bg-blue-950 text-blue-300 rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-blue-900 active:scale-[0.98] transition">
+                                <span>✓ Aprobado · Pago pendiente</span>
+                                <span className="text-blue-400 text-xs font-bold">Pagar →</span>
+                              </button>
+                            )}
 
-                        <div className="flex gap-2">
-                          {puedeEntrar && (
-                            <button
-                              onClick={() => entrarAlEvento(insc!, fecha, campSeleccionado?.nombre || "")}
-                              className="flex-1 bg-white text-gray-900 font-bold py-3 rounded-xl text-sm hover:bg-gray-100 active:scale-[0.98] transition">
-                              Entrar al evento →
-                            </button>
-                          )}
-                          {!insc && (
-                            <button
-                              onClick={() => inscribirseEnFecha(fecha, campSeleccionado?.nombre || "")}
-                              disabled={inscribiendo === fecha.id}
-                              className="flex-1 border border-gray-600 text-white font-semibold py-3 rounded-xl text-sm hover:border-gray-400 disabled:opacity-50 active:scale-[0.98] transition">
-                              {inscribiendo === fecha.id ? "Enviando…" : "Inscribirme"}
-                            </button>
-                          )}
-                          {insc && insc.estado === "rechazado" && (
-                            <p className="text-xs text-gray-600 py-2">Contactá al organizador para más información.</p>
-                          )}
-                        </div>
+                            <div className="flex gap-2">
+                              {puedeEntrar && (
+                                <button
+                                  onClick={() => entrarAlEvento(insc!, fecha, campSeleccionado?.nombre || "")}
+                                  className="flex-1 bg-white text-gray-900 font-bold py-3 rounded-xl text-sm hover:bg-gray-100 active:scale-[0.98] transition">
+                                  Entrar al evento →
+                                </button>
+                              )}
+                              {!insc && (
+                                <button
+                                  onClick={() => inscribirseEnFecha(fecha, campSeleccionado?.nombre || "")}
+                                  disabled={inscribiendo === fecha.id}
+                                  className="flex-1 border border-gray-600 text-white font-semibold py-3 rounded-xl text-sm hover:border-gray-400 disabled:opacity-50 active:scale-[0.98] transition">
+                                  {inscribiendo === fecha.id ? "Enviando…" : "Inscribirme"}
+                                </button>
+                              )}
+                              {insc && insc.estado === "rechazado" && (
+                                <p className="text-xs text-gray-600 py-2">Contactá al organizador para más información.</p>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </div>
                     );
                   })}
