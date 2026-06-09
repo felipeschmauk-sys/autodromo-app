@@ -104,7 +104,6 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
   ],
   sin_contexto: [
     { id: "eventos",   label: "Eventos",    emoji: "📅"  },
-    { id: "config",    label: "Config",     emoji: "⚙️"  },
   ],
 };
 
@@ -175,6 +174,41 @@ export default function AdminPage() {
       setSesiones([]);
     }
   }, []);
+  // ── Pilotos del evento (por inscripción) ─────────────────────────────────
+  interface PilotoEvento {
+    inscripcion_id: string;
+    piloto_id: string;
+    nombre: string;
+    telefono: string;
+    rut: string;
+    bloqueado: boolean;
+    estado_insc: string;
+    pago_estado: string;
+  }
+  const [pilotosEvento, setPilotosEvento] = useState<PilotoEvento[]>([]);
+  const [loadingPilotosEvento, setLoadingPilotosEvento] = useState(false);
+
+  const cargarPilotosEvento = useCallback(async (fechaId: string) => {
+    setLoadingPilotosEvento(true);
+    const { data } = await supabase
+      .from("inscripciones")
+      .select("id, estado, pago_estado, piloto_id, pilotos(nombre, telefono, rut, bloqueado)")
+      .eq("fecha_id", fechaId)
+      .order("created_at");
+    const mapped: PilotoEvento[] = (data || []).map((row: any) => ({
+      inscripcion_id: row.id,
+      piloto_id:      row.piloto_id,
+      nombre:         row.pilotos?.nombre   || "—",
+      telefono:       row.pilotos?.telefono || "",
+      rut:            row.pilotos?.rut      || "",
+      bloqueado:      row.pilotos?.bloqueado ?? false,
+      estado_insc:    row.estado,
+      pago_estado:    row.pago_estado,
+    }));
+    setPilotosEvento(mapped);
+    setLoadingPilotosEvento(false);
+  }, []);
+
   // ── Contexto: carga campeonatos y fechas ─────────────────────────────────
   const cargarCampeonatos = useCallback(async () => {
     const { data } = await supabase
@@ -206,10 +240,11 @@ export default function AdminPage() {
     const fecha = fechasOpt.find(f => f.id === fechaId);
     if (!fecha) return;
     setContexto(prev => ({ ...prev, fechaId: fecha.id, fechaNombre: fecha.nombre, tipo: fecha.tipo }));
+    cargarPilotosEvento(fecha.id);
     // Si el tab actual no está disponible para este tipo, ir al primero disponible
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
-  }, [fechasOpt]);
+  }, [fechasOpt, cargarPilotosEvento]);
 
   // ── Banderas ─────────────────────────────────────────────────────────────
   const cargarBandera = useCallback(async () => {
@@ -877,67 +912,105 @@ export default function AdminPage() {
           </>
         )}
         {/* ── PILOTOS ────────────────────────────────────────────────── */}
-        {tab === "pilotos" && (
-          <>
-            <div className="flex items-center justify-between">
-              <h2 className="text-base font-bold text-gray-900">Pilotos registrados</h2>
-              <input
-                type="text"
-                placeholder="Buscar..."
-                value={busqueda}
-                onChange={e => setBusqueda(e.target.value)}
-                className="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 w-40"
-              />
-            </div>
-            {loadingPilotos ? (
-              <div className="bg-white rounded-2xl border border-gray-200 py-12 flex justify-center">
-                <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-                <div className="divide-y divide-gray-50">
-                  {pilotosFiltrados.map(p => {
-                    const enPista = sesiones.some(s => s.piloto_id === p.id);
-                    const iniciales = p.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                    const colors = ["bg-indigo-500", "bg-teal-500", "bg-orange-500", "bg-pink-500", "bg-purple-500"];
-                    const color = colors[p.nombre.charCodeAt(0) % colors.length];
-                    return (
-                      <div key={p.id} className="px-5 py-3.5 flex items-center gap-4">
-                        <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
-                          {iniciales}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
-                          <p className="text-xs text-gray-400">{p.rut}</p>
-                        </div>
-                        <div className="text-right flex-shrink-0 flex items-center gap-3">
-                          {p.bloqueado ? (
-                            <span className="text-xs bg-red-100 text-red-600 font-medium px-2.5 py-1 rounded-full">🔴 Bloqueado</span>
-                          ) : enPista ? (
-                            <span className="text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">🟢 En pista</span>
-                          ) : (
-                            <span className="text-xs bg-gray-100 text-gray-500 font-medium px-2.5 py-1 rounded-full">Fuera</span>
-                          )}
-                          <button className="text-xs border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors">
-                            Ver
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  {pilotosFiltrados.length === 0 && (
-                    <div className="py-10 text-center text-gray-400 text-sm">No hay pilotos</div>
+        {tab === "pilotos" && (() => {
+          const ESTADO_BADGE: Record<string, { label: string; cls: string }> = {
+            solicitado:    { label: "Solicitado",    cls: "bg-amber-100 text-amber-700"  },
+            inscrito:      { label: "Inscrito",      cls: "bg-blue-100 text-blue-700"    },
+            confirmado:    { label: "Confirmado",    cls: "bg-green-100 text-green-700"  },
+            en_pista:      { label: "En pista",      cls: "bg-green-200 text-green-800"  },
+            rechazado:     { label: "Rechazado",     cls: "bg-red-100 text-red-600"      },
+            no_presentado: { label: "No se presentó",cls: "bg-gray-100 text-gray-500"   },
+          };
+          const filtrados = pilotosEvento.filter(p =>
+            p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
+            p.rut.includes(busqueda)
+          );
+          return (
+            <>
+              {/* Header: título evento + buscador */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-base font-bold text-gray-900">Pilotos del evento</h2>
+                  {contexto.fechaNombre && (
+                    <p className="text-xs text-gray-400 mt-0.5">{contexto.fechaNombre}</p>
                   )}
                 </div>
+                <input
+                  type="text"
+                  placeholder="Buscar..."
+                  value={busqueda}
+                  onChange={e => setBusqueda(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 w-36"
+                />
               </div>
-            )}
-            <div className="flex gap-2 flex-wrap">
-              <button className="text-xs border border-orange-200 text-orange-700 bg-orange-50 px-4 py-2 rounded-xl font-medium hover:bg-orange-100 transition-colors">
-                🔒 Bloquear piloto
-              </button>
-            </div>
-          </>
-        )}
+
+              {/* Stats rápidas */}
+              {pilotosEvento.length > 0 && (
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { label: "Total",     val: pilotosEvento.length,                                                        cls: "text-gray-900" },
+                    { label: "Pendientes",val: pilotosEvento.filter(p => p.estado_insc === "solicitado").length,            cls: "text-amber-600" },
+                    { label: "Confirmados",val: pilotosEvento.filter(p => ["confirmado","en_pista"].includes(p.estado_insc)).length, cls: "text-green-700" },
+                    { label: "En pista",  val: pilotosEvento.filter(p => sesiones.some(s => s.piloto_id === p.piloto_id)).length, cls: "text-green-600" },
+                  ].map((s, i) => (
+                    <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
+                      <p className={`text-lg font-bold ${s.cls}`}>{s.val}</p>
+                      <p className="text-xs text-gray-400">{s.label}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Lista */}
+              {loadingPilotosEvento ? (
+                <div className="bg-white rounded-2xl border border-gray-200 py-12 flex justify-center">
+                  <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
+                </div>
+              ) : filtrados.length === 0 ? (
+                <div className="bg-white rounded-2xl border border-gray-200 py-10 text-center text-gray-400 text-sm">
+                  {pilotosEvento.length === 0
+                    ? "Aún no hay pilotos inscritos en este evento"
+                    : "No se encontraron resultados"
+                  }
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="divide-y divide-gray-50">
+                    {filtrados.map(p => {
+                      const enPista  = sesiones.some(s => s.piloto_id === p.piloto_id);
+                      const badge    = ESTADO_BADGE[p.estado_insc] || { label: p.estado_insc, cls: "bg-gray-100 text-gray-600" };
+                      const iniciales= p.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+                      const colors   = ["bg-indigo-500","bg-teal-500","bg-orange-500","bg-pink-500","bg-purple-500"];
+                      const color    = colors[p.nombre.charCodeAt(0) % colors.length];
+                      return (
+                        <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-4">
+                          <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
+                            {iniciales}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                            <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {p.bloqueado && (
+                              <span className="text-xs bg-red-100 text-red-600 font-medium px-2 py-0.5 rounded-full">🔴</span>
+                            )}
+                            {enPista && (
+                              <span className="text-xs bg-green-200 text-green-800 font-bold px-2 py-0.5 rounded-full">En pista</span>
+                            )}
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          );
+        })()}
         {/* ── EVENTOS / CAMPEONATOS ───────────────────────────────────── */}
         {tab === "eventos" && (
           <AdminEventos
