@@ -920,7 +920,7 @@ export default function AdminPage() {
             {(() => {
               // Pilotos confirmados en el evento que aún no tienen sesión activa
               const pilotosElegibles = pilotosEvento.filter(p =>
-                p.estado === "confirmado" &&
+                p.estado_insc === "confirmado" &&
                 !sesiones.some(s => s.piloto_id === p.piloto_id)
               );
               const pilotosFiltrados = busquedaManual.trim()
