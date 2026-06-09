@@ -135,6 +135,7 @@ export default function AdminPage() {
   const [busquedaManual, setBusquedaManual] = useState("");
   const [ingresandoManualId, setIngresandoManualId] = useState<string | null>(null);
   const [ingresoManualOkId, setIngresoManualOkId] = useState<string | null>(null);
+  const [accionandoInscId, setAccionandoInscId] = useState<string | null>(null);
   const [alertas, setAlertas] = useState<string[]>([]);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
   const [qrStep, setQrStep] = useState<QRStep>("idle");
@@ -373,6 +374,23 @@ export default function AdminPage() {
       setTimeout(() => setIngresoManualOkId(null), 3000);
     }
     setIngresandoManualId(null);
+  };
+
+  const cambiarEstadoInsc = async (inscripcionId: string, estado: string) => {
+    setAccionandoInscId(inscripcionId);
+    await supabase.from("inscripciones").update({ estado }).eq("id", inscripcionId);
+    if (contexto.fechaId) await cargarPilotosEvento(contexto.fechaId);
+    setAccionandoInscId(null);
+  };
+
+  const confirmarPagoAdmin = async (inscripcionId: string) => {
+    setAccionandoInscId(inscripcionId);
+    await supabase.from("inscripciones").update({
+      pago_estado: "confirmado_admin",
+      pago_confirmado_at: new Date().toISOString(),
+    }).eq("id", inscripcionId);
+    if (contexto.fechaId) await cargarPilotosEvento(contexto.fechaId);
+    setAccionandoInscId(null);
   };
 
   useEffect(() => {
@@ -1011,98 +1029,225 @@ export default function AdminPage() {
         )}
         {/* ── PILOTOS ────────────────────────────────────────────────── */}
         {tab === "pilotos" && (() => {
-          const ESTADO_BADGE: Record<string, { label: string; cls: string }> = {
-            solicitado:    { label: "Solicitado",    cls: "bg-amber-100 text-amber-700"  },
-            inscrito:      { label: "Inscrito",      cls: "bg-blue-100 text-blue-700"    },
-            confirmado:    { label: "Confirmado",    cls: "bg-green-100 text-green-700"  },
-            en_pista:      { label: "En pista",      cls: "bg-green-200 text-green-800"  },
-            rechazado:     { label: "Rechazado",     cls: "bg-red-100 text-red-600"      },
-            no_presentado: { label: "No se presentó",cls: "bg-gray-100 text-gray-500"   },
-          };
-          const filtrados = pilotosEvento.filter(p =>
-            p.nombre.toLowerCase().includes(busqueda.toLowerCase()) ||
-            p.rut.includes(busqueda)
+          if (!contexto.fechaId) return (
+            <div className="bg-gray-50 border border-gray-200 rounded-2xl px-6 py-14 text-center">
+              <p className="text-4xl mb-4">👥</p>
+              <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
+              <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
+                Seleccioná un campeonato y una fecha arriba para ver los pilotos del evento.
+              </p>
+            </div>
           );
+
+          if (loadingPilotosEvento) return (
+            <div className="bg-white rounded-2xl border border-gray-200 py-12 flex justify-center">
+              <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
+            </div>
+          );
+
+          // Grupos por etapa del proceso
+          const porAprobar   = pilotosEvento.filter(p => p.estado_insc === "solicitado");
+          const porPago      = pilotosEvento.filter(p => p.estado_insc === "inscrito" && p.pago_estado === "pendiente");
+          const porHabilitar = pilotosEvento.filter(p => p.estado_insc === "inscrito" && p.pago_estado === "confirmado_admin");
+          const confirmados  = pilotosEvento.filter(p => p.estado_insc === "confirmado");
+          const enPistaArr   = pilotosEvento.filter(p => sesiones.some(s => s.piloto_id === p.piloto_id));
+          const rechazados   = pilotosEvento.filter(p => p.estado_insc === "rechazado");
+
+          const totalPendientes = porAprobar.length + porPago.length + porHabilitar.length;
+
+          const Avatar = ({ nombre }: { nombre: string }) => {
+            const iniciales = nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+            const colors = ["bg-indigo-500","bg-teal-500","bg-orange-500","bg-pink-500","bg-purple-500"];
+            const color = colors[nombre.charCodeAt(0) % colors.length];
+            return (
+              <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
+                {iniciales}
+              </div>
+            );
+          };
+
           return (
             <>
-              {/* Header: título evento + buscador */}
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-bold text-gray-900">Pilotos del evento</h2>
-                  {contexto.fechaNombre && (
-                    <p className="text-xs text-gray-400 mt-0.5">{contexto.fechaNombre}</p>
-                  )}
-                </div>
-                <input
-                  type="text"
-                  placeholder="Buscar..."
-                  value={busqueda}
-                  onChange={e => setBusqueda(e.target.value)}
-                  className="border border-gray-200 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 w-36"
-                />
+              {/* Stats */}
+              <div className="grid grid-cols-4 gap-2">
+                {[
+                  { label: "Total",      val: pilotosEvento.length,  cls: "text-gray-900"  },
+                  { label: "Por revisar",val: totalPendientes,        cls: "text-amber-600" },
+                  { label: "Listos",     val: confirmados.length,     cls: "text-green-700" },
+                  { label: "En pista",   val: enPistaArr.length,      cls: "text-green-600" },
+                ].map((s, i) => (
+                  <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
+                    <p className={`text-lg font-bold ${s.cls}`}>{s.val}</p>
+                    <p className="text-xs text-gray-400 leading-tight mt-0.5">{s.label}</p>
+                  </div>
+                ))}
               </div>
 
-              {/* Stats rápidas */}
-              {pilotosEvento.length > 0 && (
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { label: "Total",     val: pilotosEvento.length,                                                        cls: "text-gray-900" },
-                    { label: "Pendientes",val: pilotosEvento.filter(p => p.estado_insc === "solicitado").length,            cls: "text-amber-600" },
-                    { label: "Confirmados",val: pilotosEvento.filter(p => ["confirmado","en_pista"].includes(p.estado_insc)).length, cls: "text-green-700" },
-                    { label: "En pista",  val: pilotosEvento.filter(p => sesiones.some(s => s.piloto_id === p.piloto_id)).length, cls: "text-green-600" },
-                  ].map((s, i) => (
-                    <div key={i} className="bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-center">
-                      <p className={`text-lg font-bold ${s.cls}`}>{s.val}</p>
-                      <p className="text-xs text-gray-400">{s.label}</p>
-                    </div>
-                  ))}
+              {pilotosEvento.length === 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200 py-10 text-center text-gray-400 text-sm">
+                  Aún no hay pilotos inscritos en este evento
                 </div>
               )}
 
-              {/* Lista */}
-              {loadingPilotosEvento ? (
-                <div className="bg-white rounded-2xl border border-gray-200 py-12 flex justify-center">
-                  <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
-                </div>
-              ) : filtrados.length === 0 ? (
-                <div className="bg-white rounded-2xl border border-gray-200 py-10 text-center text-gray-400 text-sm">
-                  {pilotosEvento.length === 0
-                    ? "Aún no hay pilotos inscritos en este evento"
-                    : "No se encontraron resultados"
-                  }
-                </div>
-              ) : (
-                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              {/* ── SECCIÓN 1: Por aprobar (solicitado) ── */}
+              {porAprobar.length > 0 && (
+                <div className="bg-white rounded-2xl border border-amber-200 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-amber-100 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                    <p className="text-xs font-semibold text-amber-700 uppercase tracking-wider">
+                      Solicitudes pendientes — {porAprobar.length}
+                    </p>
+                  </div>
                   <div className="divide-y divide-gray-50">
-                    {filtrados.map(p => {
-                      const enPista  = sesiones.some(s => s.piloto_id === p.piloto_id);
-                      const badge    = ESTADO_BADGE[p.estado_insc] || { label: p.estado_insc, cls: "bg-gray-100 text-gray-600" };
-                      const iniciales= p.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
-                      const colors   = ["bg-indigo-500","bg-teal-500","bg-orange-500","bg-pink-500","bg-purple-500"];
-                      const color    = colors[p.nombre.charCodeAt(0) % colors.length];
+                    {porAprobar.map(p => (
+                      <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
+                        <Avatar nombre={p.nombre} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                          <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
+                        </div>
+                        <div className="flex gap-2 flex-shrink-0">
+                          <button
+                            onClick={() => cambiarEstadoInsc(p.inscripcion_id, "inscrito")}
+                            disabled={accionandoInscId === p.inscripcion_id}
+                            className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-semibold transition"
+                          >
+                            {accionandoInscId === p.inscripcion_id ? "…" : "✓ Aprobar"}
+                          </button>
+                          <button
+                            onClick={() => cambiarEstadoInsc(p.inscripcion_id, "rechazado")}
+                            disabled={accionandoInscId === p.inscripcion_id}
+                            className="text-xs border border-red-200 hover:bg-red-50 disabled:opacity-50 text-red-600 px-3 py-1.5 rounded-lg font-semibold transition"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── SECCIÓN 2: Inscrito, esperando pago ── */}
+              {porPago.length > 0 && (
+                <div className="bg-white rounded-2xl border border-blue-200 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-blue-100 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-blue-500" />
+                    <p className="text-xs font-semibold text-blue-700 uppercase tracking-wider">
+                      Esperando pago — {porPago.length}
+                    </p>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {porPago.map(p => (
+                      <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
+                        <Avatar nombre={p.nombre} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                          <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
+                        </div>
+                        <button
+                          onClick={() => confirmarPagoAdmin(p.inscripcion_id)}
+                          disabled={accionandoInscId === p.inscripcion_id}
+                          className="flex-shrink-0 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-semibold transition"
+                        >
+                          {accionandoInscId === p.inscripcion_id ? "…" : "💳 Confirmar pago"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── SECCIÓN 3: Pago confirmado, por habilitar ── */}
+              {porHabilitar.length > 0 && (
+                <div className="bg-white rounded-2xl border border-indigo-200 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-indigo-100 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-indigo-500" />
+                    <p className="text-xs font-semibold text-indigo-700 uppercase tracking-wider">
+                      Pago confirmado, por habilitar — {porHabilitar.length}
+                    </p>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {porHabilitar.map(p => (
+                      <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
+                        <Avatar nombre={p.nombre} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                          <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
+                        </div>
+                        <button
+                          onClick={() => cambiarEstadoInsc(p.inscripcion_id, "confirmado")}
+                          disabled={accionandoInscId === p.inscripcion_id}
+                          className="flex-shrink-0 text-xs bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-semibold transition"
+                        >
+                          {accionandoInscId === p.inscripcion_id ? "…" : "✓ Habilitar"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* ── SECCIÓN 4: Confirmados (listos para pista) ── */}
+              {confirmados.length > 0 && (
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-5 py-3 border-b border-gray-100 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500" />
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Confirmados — {confirmados.length}
+                    </p>
+                  </div>
+                  <div className="divide-y divide-gray-50">
+                    {confirmados.map(p => {
+                      const enPista = sesiones.some(s => s.piloto_id === p.piloto_id);
                       return (
-                        <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-4">
-                          <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
-                            {iniciales}
-                          </div>
+                        <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
+                          <Avatar nombre={p.nombre} />
                           <div className="flex-1 min-w-0">
                             <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
                             <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                           </div>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            {p.bloqueado && (
-                              <span className="text-xs bg-red-100 text-red-600 font-medium px-2 py-0.5 rounded-full">🔴</span>
-                            )}
-                            {enPista && (
-                              <span className="text-xs bg-green-200 text-green-800 font-bold px-2 py-0.5 rounded-full">En pista</span>
-                            )}
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${badge.cls}`}>
-                              {badge.label}
+                          {enPista ? (
+                            <span className="flex-shrink-0 text-xs bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
+                              🟢 En pista
                             </span>
-                          </div>
+                          ) : (
+                            <span className="flex-shrink-0 text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">
+                              Listo · QR pendiente
+                            </span>
+                          )}
                         </div>
                       );
                     })}
+                  </div>
+                </div>
+              )}
+
+              {/* ── SECCIÓN 5: Rechazados (colapsado) ── */}
+              {rechazados.length > 0 && (
+                <div className="bg-gray-50 rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-5 py-3 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-gray-400" />
+                    <p className="text-xs font-medium text-gray-400 uppercase tracking-wider">
+                      Rechazados — {rechazados.length}
+                    </p>
+                  </div>
+                  <div className="divide-y divide-gray-100 px-5 pb-3">
+                    {rechazados.map(p => (
+                      <div key={p.inscripcion_id} className="py-2.5 flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-500">{p.nombre}</p>
+                          <p className="text-xs text-gray-400">{p.rut}</p>
+                        </div>
+                        <button
+                          onClick={() => cambiarEstadoInsc(p.inscripcion_id, "solicitado")}
+                          disabled={accionandoInscId === p.inscripcion_id}
+                          className="text-xs text-gray-500 hover:text-gray-800 border border-gray-200 px-2.5 py-1 rounded-lg transition"
+                        >
+                          Restaurar
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
