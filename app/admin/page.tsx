@@ -225,7 +225,7 @@ export default function AdminPage() {
       .from("fechas_evento")
       .select("id, nombre, tipo, estado")
       .eq("campeonato_id", campeonatoId)
-      .in("estado", ["abierto", "cerrado", "finalizado"])
+      .in("estado", ["abierto", "finalizado"])
       .order("fecha_evento");
     setFechasOpt((data || []) as FechaOpt[]);
   }, []);

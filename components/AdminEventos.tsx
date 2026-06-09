@@ -28,7 +28,7 @@ interface FechaEvento {
   autodromo: string | null;
   trazado: string | null;
   cupos_max: number;
-  estado: "borrador" | "abierto" | "cerrado" | "finalizado";
+  estado: "borrador" | "abierto" | "finalizado";
   tipo: "racing" | "time_attack" | "entrenamiento";
   descripcion: string | null;
 }
@@ -56,10 +56,9 @@ const ESTADO_INSC: Record<string, { label: string; color: string; bg: string }> 
 };
 
 const ESTADO_FECHA: Record<string, { label: string; dot: string }> = {
-  borrador:   { label: "Borrador",    dot: "bg-gray-400"   },
+  borrador:   { label: "Borrador",             dot: "bg-gray-400"  },
   abierto:    { label: "Inscripciones abiertas", dot: "bg-green-500" },
-  cerrado:    { label: "Cerrado",     dot: "bg-amber-500"  },
-  finalizado: { label: "Finalizado",  dot: "bg-gray-600"   },
+  finalizado: { label: "Finalizado",           dot: "bg-gray-600"  },
 };
 
 const PAGO_BADGE: Record<string, { label: string; color: string }> = {
@@ -476,7 +475,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                     </div>
                     {/* Cambio de estado rápido */}
                     <div className="flex gap-1.5 flex-wrap">
-                      {(["borrador","abierto","cerrado","finalizado"] as const).map(est => (
+                      {(["borrador","abierto","finalizado"] as const).map(est => (
                         <button key={est} onClick={() => cambiarEstadoFecha(f.id, est)}
                           className={`text-xs px-2.5 py-1 rounded-lg border transition font-medium ${
                             f.estado === est
