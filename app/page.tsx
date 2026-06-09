@@ -938,6 +938,16 @@ export default function Home() {
     habilitado:    { label: "Habilitado",     bg: "bg-green-600",  text: "text-white", dot: "🟢" },
   }[estadoPiloto];
 
+  // Semáforo GPS — indica posición relativa a geocercas
+  const semaforoGPS =
+    dentro === true
+      ? { label: "En pista",     bg: "bg-green-600",  text: "text-white",    dot: "🟢" }
+      : dentroRecinto === true
+      ? { label: "En recinto",   bg: "bg-orange-500", text: "text-white",    dot: "🟠" }
+      : (dentro === false || dentroRecinto === false)
+      ? { label: "Fuera",        bg: "bg-red-600",    text: "text-white",    dot: "🔴" }
+      : { label: "GPS…",         bg: "bg-gray-700",   text: "text-gray-300", dot: "⚪" };
+
   const flag = FLAG_CONFIG[estadoPista.bandera] || FLAG_CONFIG.verde;
   const habilitado = estadoPiloto === "habilitado";
 
@@ -1530,9 +1540,9 @@ export default function Home() {
                 {estadoPista.mensaje && (
                   <p className="text-xs text-gray-600 mt-1">{estadoPista.mensaje}</p>
                 )}
-                {/* Mini indicador habilitado */}
-                <div className={`mt-6 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${semaforo.bg} ${semaforo.text}`}>
-                  {semaforo.dot} {semaforo.label}
+                {/* Semáforo GPS */}
+                <div className={`mt-6 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${semaforoGPS.bg} ${semaforoGPS.text}`}>
+                  {semaforoGPS.dot} {semaforoGPS.label}
                 </div>
               </div>
 
@@ -1564,8 +1574,8 @@ export default function Home() {
                   Cambiar
                 </button>
               )}
-              <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${semaforo.bg} ${semaforo.text}`}>
-                {semaforo.dot} {semaforo.label}
+              <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${semaforoGPS.bg} ${semaforoGPS.text}`}>
+                {semaforoGPS.dot} {semaforoGPS.label}
               </span>
             </div>
           </div>
