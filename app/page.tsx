@@ -513,6 +513,7 @@ export default function Home() {
   const [selectedCampId, setSelectedCampId]   = useState<string | null>(null);
   const [eventView, setEventView]             = useState<"campeonatos" | "fechas">("campeonatos");
   const [inscribiendo, setInscribiendo]       = useState<string | null>(null); // fechaId en proceso
+  const [modalPago, setModalPago]             = useState<{ fechaNombre: string } | null>(null);
 
   // ── Estados de mensajes del director ──
   const [mensajeActivo, setMensajeActivo] = useState<MensajePiloto | null>(null);
@@ -1279,14 +1280,21 @@ export default function Home() {
                           </div>
                         </div>
 
-                        {/* Estado de inscripción o botón */}
-                        {badge && (
+                        {/* Estado de inscripción */}
+                        {badge && insc?.estado !== "inscrito" && (
                           <div className={`border rounded-xl px-3 py-2 text-xs font-medium ${badge.cls}`}>
                             {badge.label}
-                            {insc?.pago_estado === "pendiente" && insc.estado === "inscrito" && (
-                              <span className="ml-2 opacity-70">· Pago pendiente</span>
-                            )}
                           </div>
+                        )}
+
+                        {/* Estado inscrito: botón de pago */}
+                        {insc?.estado === "inscrito" && (
+                          <button
+                            onClick={() => setModalPago({ fechaNombre: fecha.nombre })}
+                            className="w-full border border-blue-500 bg-blue-950 text-blue-300 rounded-xl px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-blue-900 active:scale-[0.98] transition">
+                            <span>✓ Aprobado · Pago pendiente</span>
+                            <span className="text-blue-400 text-xs font-bold">Pagar →</span>
+                          </button>
                         )}
 
                         <div className="flex gap-2">
@@ -1318,6 +1326,89 @@ export default function Home() {
           </div>
         );
       })()}
+
+      {/* ══════════════════════════════════════════════════════
+          MODAL: PAGO (próximamente)
+      ══════════════════════════════════════════════════════ */}
+      {modalPago && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center" style={{ background: "rgba(0,0,0,0.75)" }}>
+          <div className="w-full max-w-lg bg-gray-950 rounded-t-3xl overflow-hidden">
+
+            {/* Handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full bg-gray-700" />
+            </div>
+
+            {/* Header */}
+            <div className="px-5 pt-3 pb-4 flex items-center justify-between border-b border-gray-800">
+              <div>
+                <p className="text-white font-bold text-base">Pago de inscripción</p>
+                <p className="text-gray-400 text-xs mt-0.5">{modalPago.fechaNombre}</p>
+              </div>
+              <button onClick={() => setModalPago(null)} className="text-gray-500 hover:text-white text-xl transition">✕</button>
+            </div>
+
+            <div className="p-5 space-y-4 relative">
+
+              {/* Formulario de tarjeta — deshabilitado */}
+              <div className="space-y-3 opacity-40 pointer-events-none select-none">
+                <div>
+                  <label className="text-xs text-gray-400 font-medium uppercase tracking-wider">Número de tarjeta</label>
+                  <div className="mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3.5 text-white text-sm font-mono tracking-widest">
+                    •••• •••• •••• ••••
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium uppercase tracking-wider">Vencimiento</label>
+                    <div className="mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3.5 text-white text-sm font-mono">
+                      MM / AA
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 font-medium uppercase tracking-wider">CVV</label>
+                    <div className="mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3.5 text-white text-sm font-mono">
+                      •••
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-400 font-medium uppercase tracking-wider">Nombre en la tarjeta</label>
+                  <div className="mt-1.5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3.5 text-gray-500 text-sm">
+                    {pilotoData?.nombre || "Nombre Apellido"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1">
+                  <div className="w-5 h-5 rounded bg-gray-800 border border-gray-700" />
+                  <span className="text-xs text-gray-500">Recordar tarjeta para futuros pagos</span>
+                </div>
+                <button className="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl text-sm">
+                  Pagar inscripción
+                </button>
+              </div>
+
+              {/* Overlay Próximamente */}
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6">
+                <div className="bg-gray-900 border border-gray-700 rounded-2xl px-6 py-5 text-center shadow-2xl">
+                  <p className="text-3xl mb-2">🔒</p>
+                  <p className="text-white font-bold text-base">Próximamente</p>
+                  <p className="text-gray-400 text-xs mt-1.5 leading-relaxed">
+                    El pago online estará disponible en breve.<br />
+                    Por ahora coordiná el pago con el organizador.
+                  </p>
+                </div>
+              </div>
+
+            </div>
+
+            {/* Seguridad footer */}
+            <div className="px-5 pb-6 pt-1 flex items-center justify-center gap-1.5 text-gray-700 text-xs">
+              <span>🔐</span>
+              <span>Pago seguro con encriptación SSL</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ══════════════════════════════════════════════════════
           STAGE: APP — Vista piloto
