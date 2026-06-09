@@ -16,8 +16,28 @@ import {
 } from "@/lib/auth";
 import QRCode from "react-qr-code";
 
-type Stage = "login" | "registro" | "prueba" | "app";
+type Stage = "login" | "registro" | "prueba" | "eventos" | "app";
 type SecView = "main" | "perfil" | "saldo" | "reglamento";
+
+interface EventoActivo {
+  inscripcionId: string;
+  fechaId: string;
+  campeonatoNombre: string;
+  fechaNombre: string;
+  tipo: "racing" | "time_attack" | "entrenamiento";
+  estadoInsc: string;
+}
+interface CampeonatoItem { id: string; nombre: string; temporada: number; descripcion: string | null; }
+interface FechaItem {
+  id: string; nombre: string; fecha_evento: string;
+  autodromo: string | null; trazado: string | null;
+  cupos_max: number; estado: string;
+  tipo: "racing" | "time_attack" | "entrenamiento";
+  campeonato_id: string;
+}
+interface InscripcionItem {
+  id: string; fecha_id: string; estado: string; pago_estado: string;
+}
 type EstadoPiloto = "deshabilitado" | "pendiente" | "habilitado";
 
 interface Sector {
@@ -485,6 +505,15 @@ export default function Home() {
   const [isLandscape, setIsLandscape] = useState(false);
   const [viewportH, setViewportH]     = useState(600);
 
+  // ── Evento activo ──────────────────────────────────────────────
+  const [eventoActivo, setEventoActivo]       = useState<EventoActivo | null>(null);
+  const [campeonatosDisp, setCampeonatosDisp] = useState<CampeonatoItem[]>([]);
+  const [fechasDisp, setFechasDisp]           = useState<FechaItem[]>([]);
+  const [misInscripciones, setMisInscripciones] = useState<InscripcionItem[]>([]);
+  const [selectedCampId, setSelectedCampId]   = useState<string | null>(null);
+  const [eventView, setEventView]             = useState<"campeonatos" | "fechas">("campeonatos");
+  const [inscribiendo, setInscribiendo]       = useState<string | null>(null); // fechaId en proceso
+
   // ── Estados de mensajes del director ──
   const [mensajeActivo, setMensajeActivo] = useState<MensajePiloto | null>(null);
   const mensajeDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -495,10 +524,66 @@ export default function Home() {
       if (data) {
         setPilotoData(data);
         setEstadoPiloto(data.prueba_aprobada ? "habilitado" : "deshabilitado");
-        setStage("app");
+        // Si no aprobó la prueba va directo a prueba; si sí aprobó va a seleccionar evento
+        if (!data.prueba_aprobada) { setStage("prueba"); }
+        else { setStage("eventos"); cargarCampeonatos(); cargarMisInscripciones(data.id); }
       }
     });
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Carga campeonatos y inscripciones del piloto ───────────────
+  const cargarCampeonatos = async () => {
+    const { data } = await supabase
+      .from("campeonatos").select("id, nombre, temporada, descripcion")
+      .eq("activo", true).order("temporada", { ascending: false });
+    setCampeonatosDisp(data || []);
+  };
+
+  const cargarFechas = async (campId: string) => {
+    const { data } = await supabase
+      .from("fechas_evento")
+      .select("id, nombre, fecha_evento, autodromo, trazado, cupos_max, estado, tipo, campeonato_id")
+      .eq("campeonato_id", campId)
+      .eq("estado", "abierto")
+      .order("fecha_evento");
+    setFechasDisp((data || []) as FechaItem[]);
+  };
+
+  const cargarMisInscripciones = async (pilotoId: string) => {
+    const { data } = await supabase
+      .from("inscripciones")
+      .select("id, fecha_id, estado, pago_estado")
+      .eq("piloto_id", pilotoId);
+    setMisInscripciones(data || []);
+  };
+
+  const inscribirseEnFecha = async (fecha: FechaItem, campNombre: string) => {
+    if (!pilotoData?.id) return;
+    setInscribiendo(fecha.id);
+    const { data, error } = await supabase.from("inscripciones").insert({
+      piloto_id:    pilotoData.id,
+      fecha_id:     fecha.id,
+      campeonato_id: fecha.campeonato_id,
+      estado:       "solicitado",
+      pago_estado:  "pendiente",
+    }).select().single();
+    if (!error && data) {
+      setMisInscripciones(prev => [...prev, { id: data.id, fecha_id: fecha.id, estado: "solicitado", pago_estado: "pendiente" }]);
+    }
+    setInscribiendo(null);
+  };
+
+  const entrarAlEvento = (insc: InscripcionItem, fecha: FechaItem, campNombre: string) => {
+    setEventoActivo({
+      inscripcionId:    insc.id,
+      fechaId:          fecha.id,
+      campeonatoNombre: campNombre,
+      fechaNombre:      fecha.nombre,
+      tipo:             fecha.tipo,
+      estadoInsc:       insc.estado,
+    });
+    setStage("app");
+  };
 
   // ── Cargar trazado y estado de pista al entrar a la app ──
   useEffect(() => {
@@ -746,7 +831,7 @@ export default function Home() {
       setEstadoPiloto("habilitado");
       const piloto = await getPiloto();
       if (piloto) { await aprobarPrueba(piloto.id); setPilotoData({ ...piloto, prueba_aprobada: true }); }
-      setTimeout(() => setStage("app"), 1800);
+      setTimeout(() => { cargarCampeonatos(); if (piloto) cargarMisInscripciones(piloto.id); setStage("eventos"); }, 1800);
     }
   };
   const reintentar = () => {
@@ -762,7 +847,9 @@ export default function Home() {
     const data = await getPiloto();
     setPilotoData(data);
     setEstadoPiloto(data?.prueba_aprobada ? "habilitado" : "deshabilitado");
-    setStage("app"); setLoading(false);
+    if (!data?.prueba_aprobada) { setStage("prueba"); }
+    else { cargarCampeonatos(); if (data?.id) cargarMisInscripciones(data.id); setStage("eventos"); }
+    setLoading(false);
   };
   const handleRegistro = async () => {
     if (!todosChecks) return;
@@ -779,6 +866,17 @@ export default function Home() {
   const handleCerrarSesion = async () => {
     await cerrarSesion(); setPilotoData(null); setStage("login");
     setLoginEmail(""); setLoginPassword(""); setEstadoPiloto("deshabilitado");
+    setEventoActivo(null); setCampeonatosDisp([]); setFechasDisp([]);
+  };
+
+  const volverAEventos = () => {
+    setEventoActivo(null);
+    setEventView("campeonatos");
+    setSelectedCampId(null);
+    setFechasDisp([]);
+    cargarCampeonatos();
+    if (pilotoData?.id) cargarMisInscripciones(pilotoData.id);
+    setStage("eventos");
   };
 
   // ── Valores derivados ──
@@ -806,7 +904,7 @@ export default function Home() {
       {/* ══════════════════════════════════════════════════════
           STAGES: LOGIN / REGISTRO / PRUEBA  (diseño original)
       ══════════════════════════════════════════════════════ */}
-      {stage !== "app" && (
+      {(stage === "login" || stage === "registro" || stage === "prueba") && (
         <div className="min-h-screen bg-gray-100 flex items-start justify-center p-4">
           <div className="w-full max-w-lg bg-white rounded-2xl shadow overflow-hidden">
 
@@ -819,6 +917,7 @@ export default function Home() {
                   {stage === "login"    && "Acceso"}
                   {stage === "registro" && `Registro — Paso ${regPaso} de 2`}
                   {stage === "prueba"   && "Prueba de conocimientos"}
+                  {stage === "eventos"  && "Seleccionar evento"}
                 </div>
               </div>
             </div>
@@ -1061,6 +1160,152 @@ export default function Home() {
       )}
 
       {/* ══════════════════════════════════════════════════════
+          STAGE: EVENTOS — Selector de campeonato y fecha
+      ══════════════════════════════════════════════════════ */}
+      {stage === "eventos" && (() => {
+        const TIPO_LABEL = { racing: "Racing", time_attack: "Time Attack", entrenamiento: "Entreno" };
+        const TIPO_COLOR = {
+          racing:        "bg-red-600 text-white",
+          time_attack:   "bg-blue-600 text-white",
+          entrenamiento: "bg-emerald-600 text-white",
+        };
+        const INSC_BADGE: Record<string, { label: string; cls: string }> = {
+          solicitado:    { label: "Pendiente de aprobación", cls: "bg-amber-100 text-amber-700 border-amber-200" },
+          inscrito:      { label: "Aprobado · pago pendiente", cls: "bg-blue-100 text-blue-700 border-blue-200" },
+          confirmado:    { label: "✓ Confirmado",             cls: "bg-green-100 text-green-700 border-green-200" },
+          en_pista:      { label: "En pista",                 cls: "bg-green-200 text-green-800 border-green-300" },
+          rechazado:     { label: "Solicitud rechazada",      cls: "bg-red-100 text-red-600 border-red-200" },
+        };
+
+        const campSeleccionado = campeonatosDisp.find(c => c.id === selectedCampId);
+
+        return (
+          <div className="min-h-screen bg-gray-950 text-white flex flex-col" style={{ maxWidth: 480, margin: "0 auto" }}>
+
+            {/* Header */}
+            <div className="bg-gray-900 border-b border-gray-800 px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                {eventView === "fechas" ? (
+                  <button onClick={() => { setEventView("campeonatos"); setSelectedCampId(null); setFechasDisp([]); }}
+                    className="text-gray-400 hover:text-white text-lg transition">←</button>
+                ) : (
+                  <span className="text-xl">🏁</span>
+                )}
+                <div>
+                  <p className="font-bold text-sm leading-none">
+                    {eventView === "campeonatos" ? "Eventos disponibles" : campSeleccionado?.nombre}
+                  </p>
+                  <p className="text-xs text-gray-400 mt-0.5 leading-none">
+                    {eventView === "campeonatos"
+                      ? `Hola, ${pilotoData?.nombre?.split(" ")[0] || "Piloto"}`
+                      : `Temporada ${campSeleccionado?.temporada}`}
+                  </p>
+                </div>
+              </div>
+              <button onClick={handleCerrarSesion} className="text-xs text-gray-500 hover:text-gray-300 transition">Salir</button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+
+              {/* ── Vista campeonatos ── */}
+              {eventView === "campeonatos" && (
+                <>
+                  {campeonatosDisp.length === 0 ? (
+                    <div className="text-center py-16 text-gray-600 text-sm">
+                      <p className="text-3xl mb-3">🏎</p>
+                      <p>No hay campeonatos disponibles</p>
+                    </div>
+                  ) : campeonatosDisp.map(camp => (
+                    <button key={camp.id}
+                      onClick={() => { setSelectedCampId(camp.id); cargarFechas(camp.id); setEventView("fechas"); }}
+                      className="w-full text-left bg-gray-900 border border-gray-800 rounded-2xl p-4 hover:border-gray-600 transition-colors active:scale-[0.98]">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-bold text-sm">{camp.nombre}</p>
+                          <p className="text-xs text-gray-400 mt-0.5">Temporada {camp.temporada}</p>
+                          {camp.descripcion && <p className="text-xs text-gray-500 mt-1">{camp.descripcion}</p>}
+                        </div>
+                        <span className="text-gray-600 text-lg">›</span>
+                      </div>
+                    </button>
+                  ))}
+                </>
+              )}
+
+              {/* ── Vista fechas ── */}
+              {eventView === "fechas" && (
+                <>
+                  {fechasDisp.length === 0 ? (
+                    <div className="text-center py-16 text-gray-600 text-sm">
+                      <p className="text-3xl mb-3">📅</p>
+                      <p>No hay fechas abiertas en este campeonato</p>
+                    </div>
+                  ) : fechasDisp.map(fecha => {
+                    const insc = misInscripciones.find(i => i.fecha_id === fecha.id);
+                    const puedeEntrar = insc && ["confirmado","en_pista"].includes(insc.estado);
+                    const badge = insc ? INSC_BADGE[insc.estado] : null;
+                    const tipo = fecha.tipo as keyof typeof TIPO_LABEL;
+
+                    return (
+                      <div key={fecha.id} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
+                        {/* Info fecha */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <p className="font-bold text-sm">{fecha.nombre}</p>
+                              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${TIPO_COLOR[tipo]}`}>
+                                {TIPO_LABEL[tipo]}
+                              </span>
+                            </div>
+                            <p className="text-xs text-gray-400 mt-1">
+                              📅 {new Date(fecha.fecha_evento + "T12:00:00").toLocaleDateString("es-CL", { weekday: "long", day: "numeric", month: "long" })}
+                            </p>
+                            {fecha.autodromo && <p className="text-xs text-gray-500">📍 {fecha.autodromo}{fecha.trazado ? ` · ${fecha.trazado}` : ""}</p>}
+                            <p className="text-xs text-gray-600 mt-0.5">👥 {fecha.cupos_max} cupos máx.</p>
+                          </div>
+                        </div>
+
+                        {/* Estado de inscripción o botón */}
+                        {badge && (
+                          <div className={`border rounded-xl px-3 py-2 text-xs font-medium ${badge.cls}`}>
+                            {badge.label}
+                            {insc?.pago_estado === "pendiente" && insc.estado === "inscrito" && (
+                              <span className="ml-2 opacity-70">· Pago pendiente</span>
+                            )}
+                          </div>
+                        )}
+
+                        <div className="flex gap-2">
+                          {puedeEntrar && (
+                            <button
+                              onClick={() => entrarAlEvento(insc!, fecha, campSeleccionado?.nombre || "")}
+                              className="flex-1 bg-white text-gray-900 font-bold py-3 rounded-xl text-sm hover:bg-gray-100 active:scale-[0.98] transition">
+                              Entrar al evento →
+                            </button>
+                          )}
+                          {!insc && (
+                            <button
+                              onClick={() => inscribirseEnFecha(fecha, campSeleccionado?.nombre || "")}
+                              disabled={inscribiendo === fecha.id}
+                              className="flex-1 border border-gray-600 text-white font-semibold py-3 rounded-xl text-sm hover:border-gray-400 disabled:opacity-50 active:scale-[0.98] transition">
+                              {inscribiendo === fecha.id ? "Enviando…" : "Inscribirme"}
+                            </button>
+                          )}
+                          {insc && insc.estado === "rechazado" && (
+                            <p className="text-xs text-gray-600 py-2">Contactá al organizador para más información.</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ══════════════════════════════════════════════════════
           STAGE: APP — Vista piloto
       ══════════════════════════════════════════════════════ */}
       {stage === "app" && (
@@ -1153,12 +1398,26 @@ export default function Home() {
               </div>
               <div>
                 <p className="text-xs text-indigo-200 leading-none">{nombreMostrar}</p>
-                <p className="text-xs text-indigo-100 leading-none mt-0.5">{vehiculoMostrar}</p>
+                {eventoActivo ? (
+                  <p className="text-xs text-indigo-100 leading-none mt-0.5 truncate max-w-[180px]">
+                    🏁 {eventoActivo.fechaNombre}
+                  </p>
+                ) : (
+                  <p className="text-xs text-indigo-100 leading-none mt-0.5">{vehiculoMostrar}</p>
+                )}
               </div>
             </div>
-            <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${semaforo.bg} ${semaforo.text}`}>
-              {semaforo.dot} {semaforo.label}
-            </span>
+            <div className="flex items-center gap-2">
+              {eventoActivo && (
+                <button onClick={volverAEventos}
+                  className="text-xs text-indigo-200 hover:text-white transition px-2 py-1 rounded-lg hover:bg-indigo-600">
+                  Cambiar
+                </button>
+              )}
+              <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${semaforo.bg} ${semaforo.text}`}>
+                {semaforo.dot} {semaforo.label}
+              </span>
+            </div>
           </div>
 
           {/* ── CONTENIDO PRINCIPAL ── */}
