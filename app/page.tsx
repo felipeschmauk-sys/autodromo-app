@@ -917,7 +917,6 @@ export default function Home() {
                   {stage === "login"    && "Acceso"}
                   {stage === "registro" && `Registro — Paso ${regPaso} de 2`}
                   {stage === "prueba"   && "Prueba de conocimientos"}
-                  {stage === "eventos"  && "Seleccionar evento"}
                 </div>
               </div>
             </div>
