@@ -132,6 +132,9 @@ export default function AdminPage() {
   const [sectores, setSectores]               = useState<Sector[]>([]);
   const [autodromo, setAutodromo] = useState(AUTODROMO_OPTIONS[0]);
   const [busqueda, setBusqueda] = useState("");
+  const [busquedaManual, setBusquedaManual] = useState("");
+  const [ingresandoManualId, setIngresandoManualId] = useState<string | null>(null);
+  const [ingresoManualOkId, setIngresoManualOkId] = useState<string | null>(null);
   const [alertas, setAlertas] = useState<string[]>([]);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
   const [qrStep, setQrStep] = useState<QRStep>("idle");
@@ -357,6 +360,21 @@ export default function AdminPage() {
       setScanError("Error al confirmar el ingreso.");
     }
   };
+  const handleIngresoManual = async (pilotoId: string) => {
+    if (sesiones.length >= maxPilotos) return;
+    setIngresandoManualId(pilotoId);
+    const { error } = await supabase
+      .from("sesiones")
+      .insert({ piloto_id: pilotoId, estado: "activa", inicio: new Date().toISOString() });
+    if (!error) {
+      setIngresoManualOkId(pilotoId);
+      await cargarSesiones();
+      if (contexto.fechaId) await cargarPilotosEvento(contexto.fechaId);
+      setTimeout(() => setIngresoManualOkId(null), 3000);
+    }
+    setIngresandoManualId(null);
+  };
+
   useEffect(() => {
     if (tab !== "qr") detenerScanner();
   }, [tab, detenerScanner]);
@@ -898,27 +916,97 @@ export default function AdminPage() {
                 </div>
               )}
             </div>
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Control manual de tanda</p>
-              </div>
-              <div className="p-4 space-y-3">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="Buscar piloto por nombre o RUT..."
-                    className="flex-1 border border-gray-200 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                  />
-                  <button className="bg-green-600 hover:bg-green-700 text-white font-medium px-4 py-2.5 rounded-xl text-sm flex items-center gap-1.5 transition-colors">
-                    ▶ Iniciar
-                  </button>
-                  <button className="bg-red-600 hover:bg-red-700 text-white font-medium px-4 py-2.5 rounded-xl text-sm flex items-center gap-1.5 transition-colors">
-                    ■ Cerrar
-                  </button>
+            {/* ── Ingreso manual: lista de inscritos confirmados ── */}
+            {(() => {
+              // Pilotos confirmados en el evento que aún no tienen sesión activa
+              const pilotosElegibles = pilotosEvento.filter(p =>
+                p.estado === "confirmado" &&
+                !sesiones.some(s => s.piloto_id === p.piloto_id)
+              );
+              const pilotosFiltrados = busquedaManual.trim()
+                ? pilotosElegibles.filter(p =>
+                    p.nombre.toLowerCase().includes(busquedaManual.toLowerCase()) ||
+                    p.rut.includes(busquedaManual)
+                  )
+                : pilotosElegibles;
+
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                  <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                      Ingreso manual
+                    </p>
+                    {pilotosElegibles.length > 0 && (
+                      <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-medium">
+                        {pilotosElegibles.length} pendiente{pilotosElegibles.length !== 1 ? "s" : ""}
+                      </span>
+                    )}
+                  </div>
+
+                  {!contexto.fechaId ? (
+                    <p className="px-5 py-6 text-sm text-gray-400 text-center">
+                      Seleccioná un evento para ver los pilotos disponibles.
+                    </p>
+                  ) : pilotosElegibles.length === 0 ? (
+                    <p className="px-5 py-6 text-sm text-gray-400 text-center">
+                      Todos los pilotos confirmados ya están en carrera.
+                    </p>
+                  ) : (
+                    <div className="p-4 space-y-3">
+                      {/* Buscador */}
+                      <div className="relative">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-sm">🔍</span>
+                        <input
+                          type="text"
+                          value={busquedaManual}
+                          onChange={e => setBusquedaManual(e.target.value)}
+                          placeholder="Buscar por nombre o RUT..."
+                          className="w-full border border-gray-200 rounded-xl pl-9 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+                        />
+                        {busquedaManual && (
+                          <button
+                            onClick={() => setBusquedaManual("")}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                          >×</button>
+                        )}
+                      </div>
+
+                      {/* Lista de pilotos */}
+                      <div className="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
+                        {pilotosFiltrados.length === 0 ? (
+                          <p className="px-4 py-4 text-sm text-gray-400 text-center">Sin coincidencias</p>
+                        ) : pilotosFiltrados.map(p => {
+                          const okEsteId = ingresoManualOkId === p.piloto_id;
+                          const cargando = ingresandoManualId === p.piloto_id;
+                          return (
+                            <div key={p.piloto_id} className={`px-4 py-3 flex items-center justify-between gap-3 transition-colors ${okEsteId ? "bg-green-50" : "bg-white"}`}>
+                              <div className="min-w-0">
+                                <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                                <p className="text-xs text-gray-400">{p.rut}</p>
+                              </div>
+                              {okEsteId ? (
+                                <span className="text-xs font-bold text-green-600 flex items-center gap-1 flex-shrink-0">
+                                  ✓ En carrera
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => handleIngresoManual(p.piloto_id)}
+                                  disabled={cargando || sesiones.length >= maxPilotos}
+                                  className="flex-shrink-0 bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
+                                >
+                                  {cargando ? "…" : "▶ Agregar"}
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-gray-400">Solo usar si el QR falla. Queda registrado en el log.</p>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-gray-400">Solo usar si el QR falla. Queda registrado en el log.</p>
-              </div>
-            </div>
+              );
+            })()}
           </>
         )}
         {/* ── PILOTOS ────────────────────────────────────────────────── */}
