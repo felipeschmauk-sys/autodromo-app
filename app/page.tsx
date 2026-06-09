@@ -1226,7 +1226,8 @@ export default function Home() {
           <div className="min-h-screen bg-gray-950 text-white flex flex-col" style={{ maxWidth: 480, margin: "0 auto" }}>
 
             {/* Header */}
-            <div className="bg-gray-900 border-b border-gray-800 px-5 py-4 flex items-center justify-between">
+            <div className="bg-gray-900 border-b border-gray-800 px-5 flex items-center justify-between"
+              style={{ paddingTop: "max(1rem, env(safe-area-inset-top))", paddingBottom: "1rem" }}>
               <div className="flex items-center gap-3">
                 {eventView === "fechas" ? (
                   <button onClick={() => { setEventView("campeonatos"); setSelectedCampId(null); setFechasDisp([]); }}
@@ -1524,7 +1525,8 @@ export default function Home() {
           )}
 
           {/* ── HEADER ── */}
-          <div className="bg-indigo-700 text-white px-4 py-3 flex items-center justify-between">
+          <div className="bg-indigo-700 text-white px-4 flex items-center justify-between"
+            style={{ paddingTop: "max(0.75rem, env(safe-area-inset-top))", paddingBottom: "0.75rem" }}>
             <div className="flex items-center gap-3">
               <div className="w-9 h-9 rounded-xl bg-indigo-500 flex items-center justify-center font-bold text-sm text-white flex-shrink-0">
                 {iniciales}

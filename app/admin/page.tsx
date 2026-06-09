@@ -521,7 +521,17 @@ export default function AdminPage() {
         )}
 
         {/* ── DIRECCIÓN ──────────────────────────────────────────────── */}
-        {tab === "direccion" && (
+        {tab === "direccion" && !contexto.fechaId && (
+          <div className="rounded-2xl bg-gray-50 border border-gray-200 px-6 py-14 text-center">
+            <p className="text-4xl mb-4">🏁</p>
+            <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
+            <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
+              Seleccioná un campeonato y una fecha en la parte superior para habilitar el control de pista.
+            </p>
+          </div>
+        )}
+
+        {tab === "direccion" && !!contexto.fechaId && (
           <>
             {/* ── Estado de pista + control de banderas ── */}
             <div className={`rounded-2xl border-2 px-5 py-4 space-y-4 transition-colors duration-500 ${
