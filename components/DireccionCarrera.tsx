@@ -52,7 +52,11 @@ const FLAG_LABEL: Record<string, string> = {
 };
 
 // ── Componente ─────────────────────────────────────────────────
-export default function DireccionCarrera() {
+interface DireccionCarreraProps {
+  fechaId?: string | null;
+}
+
+export default function DireccionCarrera({ fechaId }: DireccionCarreraProps = {}) {
   const [trazado,  setTrazado]  = useState<Coordenada[]>([]);
   const [pilotos,  setPilotos]  = useState<Map<string, PilotoEnPista>>(new Map());
   const [bandera,  setBandera]  = useState("verde");
@@ -159,10 +163,32 @@ export default function DireccionCarrera() {
     let colorIdx = 0;
 
     const loadSessions = async () => {
-      const { data } = await supabase
+      // Si hay un fechaId de evento activo, filtrar solo pilotos inscritos en esa fecha
+      let pilotoIds: string[] | null = null;
+      if (fechaId) {
+        const { data: inscritos } = await supabase
+          .from("inscripciones")
+          .select("piloto_id")
+          .eq("fecha_id", fechaId)
+          .in("estado", ["confirmado", "en_pista"]);
+        pilotoIds = inscritos?.map((i: any) => i.piloto_id) ?? [];
+      }
+
+      let query = supabase
         .from("sesiones")
         .select("piloto_id, pilotos(nombre)")
         .eq("estado", "activa");
+
+      if (pilotoIds !== null) {
+        if (pilotoIds.length === 0) {
+          // No hay inscritos confirmados — no mostrar nadie
+          setPilotos(new Map());
+          return;
+        }
+        query = query.in("piloto_id", pilotoIds);
+      }
+
+      const { data } = await query;
 
       if (!data) return;
 
@@ -236,7 +262,7 @@ export default function DireccionCarrera() {
       supabase.removeChannel(sesCh);
       supabase.removeChannel(locCh);
     };
-  }, []);
+  }, [fechaId]);
 
   // Tick para "hace Xs"
   useEffect(() => {

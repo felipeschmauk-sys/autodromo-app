@@ -39,29 +39,35 @@ export async function guardarTrazado(
 
 // ── GEOCERCA ──────────────────────────────────────────────────
 
-export async function getGeocercaActiva(): Promise<Coordenada[] | null> {
+export async function getGeocercaActiva(
+  tipo: 'pista' | 'recinto' = 'pista'
+): Promise<Coordenada[] | null> {
   const { data } = await supabase
     .from('geocerca')
     .select('coordenadas')
     .eq('activa', true)
-    .single()
+    .eq('tipo', tipo)
+    .maybeSingle()
 
   return data?.coordenadas ?? null
 }
 
 export async function guardarGeocerca(
   coordenadas: Coordenada[],
-  nombre: string = 'Pista Principal'
+  tipo: 'pista' | 'recinto' = 'pista',
+  nombre?: string
 ) {
-  // Desactivar geocercas anteriores
+  const nombreDefault = tipo === 'recinto' ? 'Recinto' : 'Pista Principal'
+  // Desactivar geocerca anterior del mismo tipo
   await supabase
     .from('geocerca')
     .update({ activa: false })
     .eq('activa', true)
+    .eq('tipo', tipo)
 
   const { error } = await supabase
     .from('geocerca')
-    .insert({ nombre, coordenadas, activa: true })
+    .insert({ nombre: nombre ?? nombreDefault, coordenadas, activa: true, tipo })
 
   return { error: error?.message }
 }

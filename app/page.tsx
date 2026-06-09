@@ -212,11 +212,18 @@ const FLAG_CONFIG: Record<string, {
 };
 
 // ── Componente: Speed Card (zona amarilla portrait) ──────────
-function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
-  const [vel, setVel]       = useState(0);
-  const [prec, setPrec]     = useState<number | null>(null);
-  const [gpsOk, setGpsOk]   = useState(false);
-  const [dentro, setDentro] = useState<boolean | null>(null);
+function SpeedCard({
+  geocercaCoords,
+  recintoCoords = [],
+}: {
+  geocercaCoords: Coordenada[];
+  recintoCoords?: Coordenada[];
+}) {
+  const [vel, setVel]             = useState(0);
+  const [prec, setPrec]           = useState<number | null>(null);
+  const [gpsOk, setGpsOk]         = useState(false);
+  const [dentro, setDentro]       = useState<boolean | null>(null);
+  const [dentroRecinto, setDentroRecinto] = useState<boolean | null>(null);
   const gpsHist             = useRef<[number, number][]>([]);
 
   useEffect(() => {
@@ -231,15 +238,19 @@ function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
         if (gpsHist.current.length > 4) gpsHist.current.shift();
         const lat = gpsHist.current.reduce((s, p) => s + p[0], 0) / gpsHist.current.length;
         const lng = gpsHist.current.reduce((s, p) => s + p[1], 0) / gpsHist.current.length;
+        const pos2d = { lat, lng };
         if (geocercaCoords.length >= 3) {
-          setDentro(puntoEnGeocerca({ lat, lng }, geocercaCoords));
+          setDentro(puntoEnGeocerca(pos2d, geocercaCoords));
+        }
+        if (recintoCoords.length >= 3) {
+          setDentroRecinto(puntoEnGeocerca(pos2d, recintoCoords));
         }
       },
       () => setGpsOk(false),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
     );
     return () => navigator.geolocation.clearWatch(id);
-  }, [geocercaCoords]);
+  }, [geocercaCoords, recintoCoords]);
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -257,18 +268,33 @@ function SpeedCard({ geocercaCoords }: { geocercaCoords: Coordenada[] }) {
                 {prec != null ? `GPS ±${prec}m` : "Sin GPS"}
               </span>
             </div>
-            <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
-              dentro === null
-                ? "bg-gray-100 text-gray-500"
-                : dentro
-                ? "bg-green-100 text-green-700"
-                : "bg-red-100 text-red-600"
-            }`}>
-              <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
-                dentro === null ? "bg-gray-400" : dentro ? "bg-green-500" : "bg-red-500"
-              }`} />
-              {dentro === null ? "Verificando..." : dentro ? "En pista" : "Fuera de pista"}
-            </div>
+            {(() => {
+              // 3 niveles: dentro pista > dentro recinto > fuera
+              const enPista   = dentro === true;
+              const enRecinto = !enPista && dentroRecinto === true;
+              const fuera     = dentro === false && (recintoCoords.length < 3 || dentroRecinto === false);
+              const verificando = dentro === null && dentroRecinto === null;
+
+              return (
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+                  verificando ? "bg-gray-100 text-gray-500"
+                  : enPista   ? "bg-green-100 text-green-700"
+                  : enRecinto ? "bg-indigo-100 text-indigo-700"
+                  : "bg-red-100 text-red-600"
+                }`}>
+                  <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
+                    verificando ? "bg-gray-400"
+                    : enPista   ? "bg-green-500"
+                    : enRecinto ? "bg-indigo-500"
+                    : "bg-red-500"
+                  }`} />
+                  {verificando ? "Verificando..."
+                   : enPista   ? "En pista"
+                   : enRecinto ? "En recinto"
+                   : "Fuera del recinto"}
+                </div>
+              );
+            })()}
           </div>
         </div>
       </div>
@@ -500,7 +526,8 @@ export default function Home() {
   const [showFullTrack, setShowFullTrack] = useState(false);
   const [estadoPista, setEstadoPista] = useState<{ bandera: string; sector?: string; mensaje?: string }>({ bandera: "verde" });
   const [trazado, setTrazado]         = useState<Coordenada[]>([]);
-  const [geocerca, setGeocerca]       = useState<Coordenada[]>([]);
+  const [geocerca, setGeocerca]       = useState<Coordenada[]>([]);    // pista
+  const [geocercaRecinto, setGeocercaRecinto] = useState<Coordenada[]>([]); // recinto
   const [sectores, setSectores]       = useState<Sector[]>([]);
   const [isLandscape, setIsLandscape] = useState(false);
   const [viewportH, setViewportH]     = useState(600);
@@ -606,7 +633,8 @@ export default function Home() {
     if (stage !== "app") return;
 
     getTrazadoActivo().then((coords) => { if (coords) setTrazado(coords); });
-    getGeocercaActiva().then((coords) => { if (coords) setGeocerca(coords); });
+    getGeocercaActiva('pista').then((coords) => { if (coords) setGeocerca(coords); });
+    getGeocercaActiva('recinto').then((coords) => { if (coords) setGeocercaRecinto(coords); });
 
     supabase
       .from("estado_pista")
@@ -1570,7 +1598,7 @@ export default function Home() {
                 </div>
 
                 {/* SPEED CARD — Zona Amarilla */}
-                <SpeedCard geocercaCoords={geocerca} />
+                <SpeedCard geocercaCoords={geocerca} recintoCoords={geocercaRecinto} />
 
               </div>
             )}

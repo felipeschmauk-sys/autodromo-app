@@ -53,19 +53,21 @@ function parsearKML(contenido: string): Coordenada[] | null {
   } catch { return null; }
 }
 
-type Modo = "ninguno" | "geocerca" | "trazado";
+type Modo = "ninguno" | "pista" | "recinto" | "trazado";
 
 export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<any>(null);
-  const geocercaLayerRef = useRef<any>(null);
+  const pistaLayerRef = useRef<any>(null);      // geocerca pista (verde)
+  const recintoLayerRef = useRef<any>(null);    // geocerca recinto (azul)
   const trazadoLayerRef = useRef<any>(null);
   const vertexMarkersRef = useRef<any[]>([]);
   const pilotoMarkersRef = useRef<globalThis.Map<string, any>>(new globalThis.Map());
   const ubicacionActualRef = useRef<any>(null);
   const kmlInputRef = useRef<HTMLInputElement>(null);
 
-  const [geocercaCoords, setGeocercaCoords] = useState<Coordenada[]>([]);
+  const [pistaCoords, setPistaCoords] = useState<Coordenada[]>([]);
+  const [recintoCoords, setRecintoCoords] = useState<Coordenada[]>([]);
   const [trazadoCoords, setTrazadoCoords] = useState<Coordenada[]>([]);
   const [modoEdicion, setModoEdicion] = useState<Modo>("ninguno");
   const [puntosActuales, setPuntosActuales] = useState<Coordenada[]>([]);
@@ -87,11 +89,19 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
       ).addTo(map);
       mapInstanceRef.current = map;
 
-      // Cargar geocerca
-      getGeocercaActiva().then((coords) => {
+      // Cargar geocerca pista
+      getGeocercaActiva('pista').then((coords) => {
         if (coords?.length) {
-          setGeocercaCoords(coords);
-          dibujarGeocerca(L, map, coords);
+          setPistaCoords(coords);
+          dibujarPista(L, map, coords);
+        }
+      });
+
+      // Cargar geocerca recinto
+      getGeocercaActiva('recinto').then((coords) => {
+        if (coords?.length) {
+          setRecintoCoords(coords);
+          dibujarRecinto(L, map, coords);
         }
       });
 
@@ -122,7 +132,8 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
       setPuntosActuales((prev) => {
         const nuevos = [...prev, nueva];
         if (L) {
-          if (modoEdicion === "geocerca") dibujarGeocercaTemp(L, map, nuevos);
+          if (modoEdicion === "pista")    dibujarPistaTemp(L, map, nuevos);
+          else if (modoEdicion === "recinto") dibujarRecintoTemp(L, map, nuevos);
           else dibujarTrazadoTemp(L, map, nuevos);
         }
         return nuevos;
@@ -144,26 +155,47 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  function dibujarGeocerca(L: any, map: any, coords: Coordenada[]) {
-    if (geocercaLayerRef.current) { geocercaLayerRef.current.remove(); geocercaLayerRef.current = null; }
+  function dibujarPista(L: any, map: any, coords: Coordenada[]) {
+    if (pistaLayerRef.current) { pistaLayerRef.current.remove(); pistaLayerRef.current = null; }
     if (coords.length < 3) return;
-    geocercaLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
+    pistaLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
       color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.12, weight: 2,
-      dashArray: undefined,
-    }).bindTooltip("Geocerca de cobro", { permanent: false }).addTo(map);
+    }).bindTooltip("Geocerca de pista (cobro)", { permanent: false }).addTo(map);
   }
 
-  function dibujarGeocercaTemp(L: any, map: any, coords: Coordenada[]) {
-    // Limpiar vértices temporales
+  function dibujarPistaTemp(L: any, map: any, coords: Coordenada[]) {
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
-    if (geocercaLayerRef.current) { geocercaLayerRef.current.remove(); geocercaLayerRef.current = null; }
+    if (pistaLayerRef.current) { pistaLayerRef.current.remove(); pistaLayerRef.current = null; }
     if (coords.length < 2) return;
-    geocercaLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
+    pistaLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
       color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.12, weight: 2,
     }).addTo(map);
     coords.forEach((c, i) => {
       const m = L.circleMarker([c.lat, c.lng], { radius: 4, color: "#22c55e", fillColor: "#000", fillOpacity: 1, weight: 2 })
+        .bindTooltip(`${i + 1}`).addTo(map);
+      vertexMarkersRef.current.push(m);
+    });
+  }
+
+  function dibujarRecinto(L: any, map: any, coords: Coordenada[]) {
+    if (recintoLayerRef.current) { recintoLayerRef.current.remove(); recintoLayerRef.current = null; }
+    if (coords.length < 3) return;
+    recintoLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
+      color: "#6366f1", fillColor: "#6366f1", fillOpacity: 0.07, weight: 2, dashArray: "6 4",
+    }).bindTooltip("Geocerca de recinto", { permanent: false }).addTo(map);
+  }
+
+  function dibujarRecintoTemp(L: any, map: any, coords: Coordenada[]) {
+    vertexMarkersRef.current.forEach((m) => m.remove());
+    vertexMarkersRef.current = [];
+    if (recintoLayerRef.current) { recintoLayerRef.current.remove(); recintoLayerRef.current = null; }
+    if (coords.length < 2) return;
+    recintoLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
+      color: "#6366f1", fillColor: "#6366f1", fillOpacity: 0.07, weight: 2, dashArray: "6 4",
+    }).addTo(map);
+    coords.forEach((c, i) => {
+      const m = L.circleMarker([c.lat, c.lng], { radius: 4, color: "#6366f1", fillColor: "#000", fillOpacity: 1, weight: 2 })
         .bindTooltip(`${i + 1}`).addTo(map);
       vertexMarkersRef.current.push(m);
     });
@@ -282,7 +314,8 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     const L = (window as any).L;
     const map = mapInstanceRef.current;
     if (L && map) {
-      if (geocercaCoords.length) dibujarGeocerca(L, map, geocercaCoords);
+      if (pistaCoords.length)   dibujarPista(L, map, pistaCoords);
+      if (recintoCoords.length) dibujarRecinto(L, map, recintoCoords);
       if (trazadoCoords.length) dibujarTrazado(L, map, trazadoCoords);
     }
   };
@@ -295,10 +328,14 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     setGuardando(true);
     let error: string | undefined;
 
-    if (modoEdicion === "geocerca") {
-      const res = await guardarGeocerca(puntosActuales);
+    if (modoEdicion === "pista") {
+      const res = await guardarGeocerca(puntosActuales, 'pista');
       error = res.error;
-      if (!error) setGeocercaCoords(puntosActuales);
+      if (!error) setPistaCoords(puntosActuales);
+    } else if (modoEdicion === "recinto") {
+      const res = await guardarGeocerca(puntosActuales, 'recinto');
+      error = res.error;
+      if (!error) setRecintoCoords(puntosActuales);
     } else {
       const res = await guardarTrazado(puntosActuales);
       error = res.error;
@@ -307,7 +344,8 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
     setGuardando(false);
     if (error) { setMensaje({ tipo: "error", texto: error }); return; }
-    setMensaje({ tipo: "ok", texto: `${modoEdicion === "geocerca" ? "Geocerca" : "Trazado"} guardado.` });
+    const labels: Record<Modo, string> = { ninguno: "", pista: "Geocerca de pista", recinto: "Geocerca de recinto", trazado: "Trazado" };
+    setMensaje({ tipo: "ok", texto: `${labels[modoEdicion]} guardado.` });
     setModoEdicion("ninguno");
     setPuntosActuales([]);
     vertexMarkersRef.current.forEach((m) => m.remove());
@@ -331,10 +369,14 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
       <div className="flex flex-col gap-3">
         {/* Leyenda */}
-        <div className="flex items-center gap-4 text-xs text-gray-500">
+        <div className="flex items-center gap-4 text-xs text-gray-500 flex-wrap">
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-green-500 inline-block rounded" />
-            Geocerca (cobro)
+            Geocerca pista
+          </span>
+          <span className="flex items-center gap-1.5">
+            <span className="w-3 h-0.5 bg-indigo-500 inline-block rounded" style={{ borderTop: "2px dashed #6366f1", background: "transparent" }} />
+            Geocerca recinto
           </span>
           <span className="flex items-center gap-1.5">
             <span className="w-3 h-0.5 bg-amber-400 inline-block rounded" />
@@ -350,9 +392,13 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
         <div className="flex items-center gap-2 flex-wrap">
           {!editando ? (
             <>
-              <button onClick={() => iniciarEdicion("geocerca")}
+              <button onClick={() => iniciarEdicion("pista")}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-900 text-green-300 hover:bg-green-800 border border-green-800 transition">
-                ✏️ Dibujar geocerca
+                ✏️ Dibujar pista
+              </button>
+              <button onClick={() => iniciarEdicion("recinto")}
+                className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-900 text-indigo-300 hover:bg-indigo-800 border border-indigo-800 transition">
+                ✏️ Dibujar recinto
               </button>
               <button onClick={() => kmlInputRef.current?.click()} disabled={guardando}
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-amber-900 text-amber-300 hover:bg-amber-800 border border-amber-800 transition disabled:opacity-60">
@@ -365,8 +411,14 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
             </>
           ) : (
             <>
-              <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${modoEdicion === "geocerca" ? "bg-green-500 text-white" : "bg-amber-500 text-black"}`}>
-                {modoEdicion === "geocerca" ? "✏️ Dibujando geocerca" : "✏️ Dibujando trazado"} — clic en el mapa
+              <span className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${
+                modoEdicion === "pista"   ? "bg-green-500  text-white"
+                : modoEdicion === "recinto" ? "bg-indigo-500 text-white"
+                : "bg-amber-500 text-black"
+              }`}>
+                {modoEdicion === "pista"    ? "✏️ Dibujando geocerca pista"
+                 : modoEdicion === "recinto" ? "✏️ Dibujando geocerca recinto"
+                 : "✏️ Dibujando trazado"} — clic en el mapa
               </span>
               <span className="text-xs text-gray-500">{puntosActuales.length} puntos{puntosActuales.length >= 3 ? " ✓" : " (mín. 3)"}</span>
               {puntosActuales.length >= 3 && (

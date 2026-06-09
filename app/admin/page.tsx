@@ -680,7 +680,7 @@ export default function AdminPage() {
             )}
 
             {/* ── MAPA EN TIEMPO REAL ── */}
-            <DireccionCarrera />
+            <DireccionCarrera fechaId={contexto.fechaId} />
 
             {/* ── MENSAJES A PILOTOS — desactivado temporalmente ── */}
 
