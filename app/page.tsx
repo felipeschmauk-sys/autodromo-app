@@ -215,9 +215,11 @@ const FLAG_CONFIG: Record<string, {
 function SpeedCard({
   geocercaCoords,
   recintoCoords = [],
+  onGPSChange,
 }: {
   geocercaCoords: Coordenada[];
   recintoCoords?: Coordenada[];
+  onGPSChange?: (dentro: boolean | null, dentroRecinto: boolean | null) => void;
 }) {
   const [vel, setVel]             = useState(0);
   const [prec, setPrec]           = useState<number | null>(null);
@@ -239,12 +241,14 @@ function SpeedCard({
         const lat = gpsHist.current.reduce((s, p) => s + p[0], 0) / gpsHist.current.length;
         const lng = gpsHist.current.reduce((s, p) => s + p[1], 0) / gpsHist.current.length;
         const pos2d = { lat, lng };
-        if (geocercaCoords.length >= 3) {
-          setDentro(puntoEnGeocerca(pos2d, geocercaCoords));
-        }
-        if (recintoCoords.length >= 3) {
-          setDentroRecinto(puntoEnGeocerca(pos2d, recintoCoords));
-        }
+        const nuevoDentro = geocercaCoords.length >= 3 ? puntoEnGeocerca(pos2d, geocercaCoords) : null;
+        const nuevoDentroRecinto = recintoCoords.length >= 3 ? puntoEnGeocerca(pos2d, recintoCoords) : null;
+        if (geocercaCoords.length >= 3) setDentro(nuevoDentro);
+        if (recintoCoords.length >= 3)  setDentroRecinto(nuevoDentroRecinto);
+        onGPSChange?.(
+          geocercaCoords.length >= 3 ? nuevoDentro : null,
+          recintoCoords.length  >= 3 ? nuevoDentroRecinto : null
+        );
       },
       () => setGpsOk(false),
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
@@ -541,6 +545,10 @@ export default function Home() {
   const [eventView, setEventView]             = useState<"campeonatos" | "fechas">("campeonatos");
   const [inscribiendo, setInscribiendo]       = useState<string | null>(null); // fechaId en proceso
   const [modalPago, setModalPago]             = useState<{ fechaNombre: string } | null>(null);
+
+  // GPS levantado desde SpeedCard para usarlo en el semáforo del header
+  const [gpsEnPista,    setGpsEnPista]    = useState<boolean | null>(null);
+  const [gpsEnRecinto,  setGpsEnRecinto]  = useState<boolean | null>(null);
 
   // ── Estados de mensajes del director ──
   const [mensajeActivo, setMensajeActivo] = useState<MensajePiloto | null>(null);
@@ -938,13 +946,13 @@ export default function Home() {
     habilitado:    { label: "Habilitado",     bg: "bg-green-600",  text: "text-white", dot: "🟢" },
   }[estadoPiloto];
 
-  // Semáforo GPS — indica posición relativa a geocercas
+  // Semáforo GPS — indica posición relativa a geocercas (usa estados levantados desde SpeedCard)
   const semaforoGPS =
-    dentro === true
+    gpsEnPista === true
       ? { label: "En pista",     bg: "bg-green-600",  text: "text-white",    dot: "🟢" }
-      : dentroRecinto === true
+      : gpsEnRecinto === true
       ? { label: "En recinto",   bg: "bg-orange-500", text: "text-white",    dot: "🟠" }
-      : (dentro === false || dentroRecinto === false)
+      : (gpsEnPista === false || gpsEnRecinto === false)
       ? { label: "Fuera",        bg: "bg-red-600",    text: "text-white",    dot: "🔴" }
       : { label: "GPS…",         bg: "bg-gray-700",   text: "text-gray-300", dot: "⚪" };
 
@@ -1625,7 +1633,11 @@ export default function Home() {
                 </div>
 
                 {/* SPEED CARD — Zona Amarilla */}
-                <SpeedCard geocercaCoords={geocerca} recintoCoords={geocercaRecinto} />
+                <SpeedCard
+                  geocercaCoords={geocerca}
+                  recintoCoords={geocercaRecinto}
+                  onGPSChange={(d, r) => { setGpsEnPista(d); setGpsEnRecinto(r); }}
+                />
 
               </div>
             )}
