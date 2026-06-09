@@ -85,21 +85,18 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
     { id: "qr",        label: "Acceso QR",    emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",      emoji: "👤"  },
     { id: "revision",  label: "Rev. Técnica", emoji: "🔧"  },
-    { id: "eventos",   label: "Eventos",      emoji: "📅"  },
     { id: "config",    label: "Config",       emoji: "⚙️"  },
   ],
   time_attack: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
-    { id: "eventos",   label: "Eventos",    emoji: "📅"  },
     { id: "config",    label: "Config",     emoji: "⚙️"  },
   ],
   entrenamiento: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
-    { id: "eventos",   label: "Eventos",    emoji: "📅"  },
     { id: "config",    label: "Config",     emoji: "⚙️"  },
   ],
   sin_contexto: [
@@ -380,6 +377,21 @@ export default function AdminPage() {
     setAccionandoInscId(inscripcionId);
     await supabase.from("inscripciones").update({ estado }).eq("id", inscripcionId);
     if (contexto.fechaId) await cargarPilotosEvento(contexto.fechaId);
+    setAccionandoInscId(null);
+  };
+
+  const expulsarPiloto = async (pilotoId: string, inscripcionId: string) => {
+    setAccionandoInscId(inscripcionId);
+    // Cerrar sesión activa si tiene una
+    await supabase
+      .from("sesiones")
+      .update({ estado: "cerrada", fin: new Date().toISOString() })
+      .eq("piloto_id", pilotoId)
+      .eq("estado", "activa");
+    // Marcar inscripción como rechazada
+    await supabase.from("inscripciones").update({ estado: "rechazado" }).eq("id", inscripcionId);
+    if (contexto.fechaId) await cargarPilotosEvento(contexto.fechaId);
+    await cargarSesiones();
     setAccionandoInscId(null);
   };
 
@@ -1199,7 +1211,8 @@ export default function AdminPage() {
                   </div>
                   <div className="divide-y divide-gray-50">
                     {confirmados.map(p => {
-                      const enPista = sesiones.some(s => s.piloto_id === p.piloto_id);
+                      const enPista  = sesiones.some(s => s.piloto_id === p.piloto_id);
+                      const cargando = accionandoInscId === p.inscripcion_id;
                       return (
                         <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
                           <Avatar nombre={p.nombre} />
@@ -1207,15 +1220,25 @@ export default function AdminPage() {
                             <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
                             <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                           </div>
-                          {enPista ? (
-                            <span className="flex-shrink-0 text-xs bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
-                              🟢 En pista
-                            </span>
-                          ) : (
-                            <span className="flex-shrink-0 text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">
-                              Listo · QR pendiente
-                            </span>
-                          )}
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            {enPista ? (
+                              <span className="text-xs bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
+                                🟢 En pista
+                              </span>
+                            ) : (
+                              <span className="text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">
+                                Listo · QR pendiente
+                              </span>
+                            )}
+                            <button
+                              onClick={() => expulsarPiloto(p.piloto_id, p.inscripcion_id)}
+                              disabled={cargando}
+                              title="Expulsar del evento"
+                              className="text-xs text-red-400 hover:text-red-600 hover:bg-red-50 disabled:opacity-50 border border-transparent hover:border-red-200 px-2 py-1 rounded-lg transition"
+                            >
+                              {cargando ? "…" : "⊗"}
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
