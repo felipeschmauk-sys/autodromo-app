@@ -531,6 +531,21 @@ export default function Home() {
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Realtime: actualizar inscripciones cuando el admin cambia el estado ──
+  useEffect(() => {
+    if (stage !== "eventos" || !pilotoData?.id) return;
+    const pilotoId = pilotoData.id;
+    // Polling cada 6s como backup al Realtime
+    const poll = setInterval(() => cargarMisInscripciones(pilotoId), 6000);
+    const ch = supabase.channel("piloto-inscripciones-watch")
+      .on("postgres_changes", {
+        event: "UPDATE", schema: "public", table: "inscripciones",
+        filter: `piloto_id=eq.${pilotoId}`,
+      }, () => { cargarMisInscripciones(pilotoId); })
+      .subscribe();
+    return () => { clearInterval(poll); supabase.removeChannel(ch); };
+  }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Carga campeonatos y inscripciones del piloto ───────────────
   const cargarCampeonatos = async () => {
     const { data } = await supabase
