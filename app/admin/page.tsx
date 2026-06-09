@@ -53,7 +53,61 @@ interface ValidacionResult {
   advertencia?: string;
 }
 type PanelTab = "direccion" | "qr" | "pilotos" | "config" | "revision" | "eventos";
+type TipoEvento = "racing" | "time_attack" | "entrenamiento";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
+
+interface Contexto {
+  campeonatoId: string | null;
+  campeonatoNombre: string;
+  fechaId: string | null;
+  fechaNombre: string;
+  tipo: TipoEvento | null;
+}
+
+interface CampeonatoOpt { id: string; nombre: string; temporada: number; }
+interface FechaOpt     { id: string; nombre: string; tipo: TipoEvento; estado: string; }
+
+const TIPO_LABEL: Record<TipoEvento, string> = {
+  racing:        "Racing",
+  time_attack:   "Time Attack",
+  entrenamiento: "Entrenamiento",
+};
+const TIPO_COLOR: Record<TipoEvento, string> = {
+  racing:        "bg-red-600 text-white",
+  time_attack:   "bg-blue-600 text-white",
+  entrenamiento: "bg-emerald-600 text-white",
+};
+
+// Tabs disponibles según tipo de evento
+const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: string }>> = {
+  racing: [
+    { id: "direccion", label: "Dirección",    emoji: "🏎"  },
+    { id: "qr",        label: "Acceso QR",    emoji: "📷"  },
+    { id: "pilotos",   label: "Pilotos",      emoji: "👤"  },
+    { id: "revision",  label: "Rev. Técnica", emoji: "🔧"  },
+    { id: "eventos",   label: "Eventos",      emoji: "📅"  },
+    { id: "config",    label: "Config",       emoji: "⚙️"  },
+  ],
+  time_attack: [
+    { id: "direccion", label: "Dirección",  emoji: "🏎"  },
+    { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
+    { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
+    { id: "eventos",   label: "Eventos",    emoji: "📅"  },
+    { id: "config",    label: "Config",     emoji: "⚙️"  },
+  ],
+  entrenamiento: [
+    { id: "direccion", label: "Dirección",  emoji: "🏎"  },
+    { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
+    { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
+    { id: "eventos",   label: "Eventos",    emoji: "📅"  },
+    { id: "config",    label: "Config",     emoji: "⚙️"  },
+  ],
+  sin_contexto: [
+    { id: "eventos",   label: "Eventos",    emoji: "📅"  },
+    { id: "config",    label: "Config",     emoji: "⚙️"  },
+  ],
+};
+
 const MAX_PILOTOS_DEFAULT = 10;
 const MIN_SALDO_DEFAULT = 5;
 const AUTODROMO_OPTIONS = [
@@ -84,6 +138,14 @@ export default function AdminPage() {
   const [qrStep, setQrStep] = useState<QRStep>("idle");
   const [validacion, setValidacion] = useState<ValidacionResult | null>(null);
   const [scanError, setScanError] = useState("");
+  // ── Contexto activo ───────────────────────────────────────────────────────
+  const [contexto, setContexto] = useState<Contexto>({
+    campeonatoId: null, campeonatoNombre: "",
+    fechaId: null,      fechaNombre: "",
+    tipo: null,
+  });
+  const [campeonatosOpt, setCampeonatosOpt] = useState<CampeonatoOpt[]>([]);
+  const [fechasOpt, setFechasOpt]           = useState<FechaOpt[]>([]);
   // ── Login ────────────────────────────────────────────────────────────────
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -113,6 +175,42 @@ export default function AdminPage() {
       setSesiones([]);
     }
   }, []);
+  // ── Contexto: carga campeonatos y fechas ─────────────────────────────────
+  const cargarCampeonatos = useCallback(async () => {
+    const { data } = await supabase
+      .from("campeonatos")
+      .select("id, nombre, temporada")
+      .eq("activo", true)
+      .order("temporada", { ascending: false });
+    setCampeonatosOpt(data || []);
+  }, []);
+
+  const cargarFechasDeContexto = useCallback(async (campeonatoId: string) => {
+    const { data } = await supabase
+      .from("fechas_evento")
+      .select("id, nombre, tipo, estado")
+      .eq("campeonato_id", campeonatoId)
+      .in("estado", ["abierto", "cerrado", "finalizado"])
+      .order("fecha_evento");
+    setFechasOpt((data || []) as FechaOpt[]);
+  }, []);
+
+  const seleccionarCampeonato = useCallback(async (campId: string) => {
+    const camp = campeonatosOpt.find(c => c.id === campId);
+    setContexto(prev => ({ ...prev, campeonatoId: campId, campeonatoNombre: camp?.nombre || "", fechaId: null, fechaNombre: "", tipo: null }));
+    setFechasOpt([]);
+    if (campId) await cargarFechasDeContexto(campId);
+  }, [campeonatosOpt, cargarFechasDeContexto]);
+
+  const seleccionarFecha = useCallback((fechaId: string) => {
+    const fecha = fechasOpt.find(f => f.id === fechaId);
+    if (!fecha) return;
+    setContexto(prev => ({ ...prev, fechaId: fecha.id, fechaNombre: fecha.nombre, tipo: fecha.tipo }));
+    // Si el tab actual no está disponible para este tipo, ir a direccion o eventos
+    const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
+    setTab(prev => tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id);
+  }, [fechasOpt]);
+
   // ── Banderas ─────────────────────────────────────────────────────────────
   const cargarBandera = useCallback(async () => {
     const { data } = await supabase
@@ -157,6 +255,11 @@ export default function AdminPage() {
       setCargandoBandera(false);
     }
   }, [cargarBandera]);
+
+  useEffect(() => {
+    if (!autenticado) return;
+    cargarCampeonatos();
+  }, [autenticado, cargarCampeonatos]);
 
   useEffect(() => {
     if (!autenticado) return;
@@ -278,42 +381,75 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
-      <header className="bg-gray-900 text-white px-5 py-3 flex items-center justify-between sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <span className="text-xl">🏁</span>
-          <div>
-            <div className="font-bold text-sm leading-none">Panel Maestro</div>
-            <div className="text-xs text-gray-400 leading-none mt-0.5">{nombreAutodromo} · Jornada activa</div>
+      <header className="bg-gray-900 text-white sticky top-0 z-50">
+        {/* Fila 1: título + estado */}
+        <div className="px-5 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-xl">🏁</span>
+            <div>
+              <div className="font-bold text-sm leading-none">Panel Maestro</div>
+              <div className="text-xs text-gray-400 leading-none mt-0.5">{nombreAutodromo}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {alertas.length > 0 && (
+              <div className="flex items-center gap-1.5 bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
+                ⚠ {alertas.length}
+              </div>
+            )}
+            <div className={`flex items-center gap-1.5 text-xs font-medium ${realtimeConectado ? "text-green-400" : "text-yellow-400"}`}>
+              <span className={`w-2 h-2 rounded-full inline-block ${realtimeConectado ? "bg-green-400 animate-pulse" : "bg-yellow-400"}`} />
+              {realtimeConectado ? "En vivo" : "Conectando..."}
+            </div>
+            <button
+              onClick={() => setAutenticado(false)}
+              className="text-gray-400 hover:text-white text-xs transition-colors"
+            >
+              Salir
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          {alertas.length > 0 && (
-            <div className="flex items-center gap-1.5 bg-amber-500 text-white text-xs font-bold px-2.5 py-1 rounded-full">
-              ⚠ {alertas.length}
-            </div>
-          )}
-          <div className={`flex items-center gap-1.5 text-xs font-medium ${realtimeConectado ? "text-green-400" : "text-yellow-400"}`}>
-            <span className={`w-2 h-2 rounded-full inline-block ${realtimeConectado ? "bg-green-400 animate-pulse" : "bg-yellow-400"}`} />
-            {realtimeConectado ? "En vivo" : "Conectando..."}
-          </div>
-          <button
-            onClick={() => setAutenticado(false)}
-            className="text-gray-400 hover:text-white text-xs transition-colors"
+
+        {/* Fila 2: selector de contexto */}
+        <div className="px-4 pb-3 flex items-center gap-2">
+          {/* Selector campeonato */}
+          <select
+            value={contexto.campeonatoId || ""}
+            onChange={e => seleccionarCampeonato(e.target.value)}
+            className="flex-1 min-w-0 bg-gray-800 border border-gray-700 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-gray-500 truncate"
           >
-            Salir
-          </button>
+            <option value="">— Campeonato —</option>
+            {campeonatosOpt.map(c => (
+              <option key={c.id} value={c.id}>{c.nombre} {c.temporada}</option>
+            ))}
+          </select>
+
+          {/* Selector fecha */}
+          <select
+            value={contexto.fechaId || ""}
+            onChange={e => seleccionarFecha(e.target.value)}
+            disabled={!contexto.campeonatoId}
+            className="flex-1 min-w-0 bg-gray-800 border border-gray-700 text-white text-xs rounded-lg px-3 py-1.5 focus:outline-none focus:border-gray-500 disabled:opacity-40 truncate"
+          >
+            <option value="">— Fecha —</option>
+            {fechasOpt.map(f => (
+              <option key={f.id} value={f.id}>{f.nombre}</option>
+            ))}
+          </select>
+
+          {/* Pill tipo evento */}
+          {contexto.tipo ? (
+            <span className={`text-xs font-bold px-2.5 py-1 rounded-full whitespace-nowrap flex-shrink-0 ${TIPO_COLOR[contexto.tipo]}`}>
+              {TIPO_LABEL[contexto.tipo]}
+            </span>
+          ) : (
+            <span className="text-xs text-gray-600 whitespace-nowrap flex-shrink-0">sin evento</span>
+          )}
         </div>
       </header>
 
-      <nav className="bg-white border-b border-gray-200 px-4 flex sticky top-[52px] z-40 overflow-x-auto">
-        {([
-          { id: "direccion", label: "Dirección",  emoji: "🏎"  },
-          { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
-          { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
-          { id: "eventos",   label: "Eventos",    emoji: "📅"  },
-          { id: "revision",  label: "Rev. Técnica", emoji: "🔧" },
-          { id: "config",    label: "Config",     emoji: "⚙️"  },
-        ] as const).map(t => (
+      <nav className="bg-white border-b border-gray-200 px-4 flex sticky top-[100px] z-40 overflow-x-auto">
+        {(TABS_POR_TIPO[contexto.tipo || "sin_contexto"]).map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -330,6 +466,25 @@ export default function AdminPage() {
       </nav>
 
       <main className="max-w-3xl mx-auto p-4 space-y-4">
+
+        {/* ── BANNER: sin evento activo ──────────────────────────────── */}
+        {!contexto.fechaId && tab !== "eventos" && tab !== "config" && (
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl px-5 py-6 text-center space-y-3">
+            <div className="text-3xl">📅</div>
+            <p className="text-white font-semibold text-sm">Sin evento activo</p>
+            <p className="text-gray-400 text-xs leading-relaxed">
+              Seleccioná un campeonato y una fecha en el selector de arriba,<br />
+              o creá uno nuevo desde la pestaña Eventos.
+            </p>
+            <button
+              onClick={() => setTab("eventos")}
+              className="mt-2 bg-white text-gray-900 text-xs font-bold px-5 py-2.5 rounded-xl hover:bg-gray-100 transition-colors"
+            >
+              Ir a Eventos →
+            </button>
+          </div>
+        )}
+
         {/* ── DIRECCIÓN ──────────────────────────────────────────────── */}
         {tab === "direccion" && (
           <>
@@ -785,7 +940,10 @@ export default function AdminPage() {
         )}
         {/* ── EVENTOS / CAMPEONATOS ───────────────────────────────────── */}
         {tab === "eventos" && (
-          <AdminEventos />
+          <AdminEventos
+            contextoFechaId={contexto.fechaId}
+            onContextoCambia={cargarCampeonatos}
+          />
         )}
 
         {/* ── REVISIÓN TÉCNICA ────────────────────────────────────────── */}

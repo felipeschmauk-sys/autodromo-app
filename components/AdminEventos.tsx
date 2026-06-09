@@ -68,8 +68,20 @@ const PAGO_BADGE: Record<string, { label: string; color: string }> = {
   devuelto:         { label: "Devuelto",        color: "text-red-500"   },
 };
 
+// ── Props ──────────────────────────────────────────────────────
+interface AdminEventosProps {
+  contextoFechaId?: string | null;
+  onContextoCambia?: () => void;
+}
+
+const TIPO_EVENTO_OPTS = [
+  { value: "racing",        label: "Racing (carrera)" },
+  { value: "time_attack",   label: "Time Attack" },
+  { value: "entrenamiento", label: "Entrenamiento" },
+];
+
 // ── Componente principal ───────────────────────────────────────
-export default function AdminEventos() {
+export default function AdminEventos({ contextoFechaId, onContextoCambia }: AdminEventosProps) {
   const [campeonatos, setCampeonatos]         = useState<Campeonato[]>([]);
   const [fechas, setFechas]                   = useState<FechaEvento[]>([]);
   const [inscripciones, setInscripciones]     = useState<Inscripcion[]>([]);
@@ -94,6 +106,7 @@ export default function AdminEventos() {
   const [ffTrazado, setFfTrazado]     = useState("");
   const [ffCupos, setFfCupos]         = useState("30");
   const [ffEstado, setFfEstado]       = useState<"borrador" | "abierto">("borrador");
+  const [ffTipo, setFfTipo]           = useState<"racing" | "time_attack" | "entrenamiento">("racing");
   const [ffDesc, setFfDesc]           = useState("");
 
   // ── Loaders ───────────────────────────────────────────────────
@@ -159,11 +172,13 @@ export default function AdminEventos() {
       trazado:       ffTrazado.trim() || null,
       cupos_max:     parseInt(ffCupos) || 30,
       estado:        ffEstado,
+      tipo:          ffTipo,
       descripcion:   ffDesc.trim() || null,
     });
+    if (onContextoCambia) onContextoCambia();
     setShowFormFecha(false);
     setFfNombre(""); setFfNumero(""); setFfFecha("");
-    setFfAutodromo(""); setFfTrazado(""); setFfCupos("30"); setFfDesc("");
+    setFfAutodromo(""); setFfTrazado(""); setFfCupos("30"); setFfTipo("racing"); setFfDesc("");
     await loadFechas(selectedCamp);
     setSaving(false);
   };
@@ -381,6 +396,15 @@ export default function AdminEventos() {
                     className={inputCls} />
                 </div>
                 <div>
+                  <label className={labelCls}>Tipo de evento</label>
+                  <select value={ffTipo} onChange={e => setFfTipo(e.target.value as any)}
+                    className={inputCls}>
+                    {TIPO_EVENTO_OPTS.map(o => (
+                      <option key={o.value} value={o.value}>{o.label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
                   <label className={labelCls}>Estado inicial</label>
                   <select value={ffEstado} onChange={e => setFfEstado(e.target.value as any)}
                     className={inputCls}>
@@ -421,8 +445,17 @@ export default function AdminEventos() {
                   <div key={f.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3.5 space-y-2">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
+                          {f.tipo && (
+                            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                              f.tipo === "racing"        ? "bg-red-100 text-red-700" :
+                              f.tipo === "time_attack"   ? "bg-blue-100 text-blue-700" :
+                                                          "bg-emerald-100 text-emerald-700"
+                            }`}>
+                              {f.tipo === "racing" ? "Racing" : f.tipo === "time_attack" ? "Time Attack" : "Entreno"}
+                            </span>
+                          )}
                           <span className="flex items-center gap-1 text-xs text-gray-500">
                             <span className={`w-1.5 h-1.5 rounded-full ${ef.dot}`} />
                             {ef.label}
