@@ -206,9 +206,9 @@ export default function AdminPage() {
     const fecha = fechasOpt.find(f => f.id === fechaId);
     if (!fecha) return;
     setContexto(prev => ({ ...prev, fechaId: fecha.id, fechaNombre: fecha.nombre, tipo: fecha.tipo }));
-    // Si el tab actual no está disponible para este tipo, ir a direccion o eventos
+    // Si el tab actual no está disponible para este tipo, ir al primero disponible
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
-    setTab(prev => tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id);
+    setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt]);
 
   // ── Banderas ─────────────────────────────────────────────────────────────

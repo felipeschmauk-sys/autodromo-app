@@ -29,6 +29,7 @@ interface FechaEvento {
   trazado: string | null;
   cupos_max: number;
   estado: "borrador" | "abierto" | "cerrado" | "finalizado";
+  tipo: "racing" | "time_attack" | "entrenamiento";
   descripcion: string | null;
 }
 
