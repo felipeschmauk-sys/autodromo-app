@@ -407,6 +407,12 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
         const res = await guardarGeocerca(c.geocerca_recinto, "recinto", c.nombre);
         if (res.error) throw new Error(res.error);
       }
+      // Persistir max_pilotos en estado_pista para que el panel lo lea siempre
+      await supabase
+        .from("estado_pista")
+        .update({ max_pilotos: c.max_pilotos })
+        .eq("activo", true);
+
       setActivoId(c.id);
       onMaxPilotosChange?.(c.max_pilotos);
       showMsg("ok", `✅ "${c.nombre}" activado. Trazado y geocercas aplicados al sistema.`);

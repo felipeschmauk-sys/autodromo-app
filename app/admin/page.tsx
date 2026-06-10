@@ -252,10 +252,11 @@ export default function AdminPage() {
   const cargarBandera = useCallback(async () => {
     const { data } = await supabase
       .from("estado_pista")
-      .select("bandera")
+      .select("bandera, max_pilotos")
       .eq("activo", true)
       .single();
-    if (data?.bandera) setBandera(data.bandera);
+    if (data?.bandera)     setBandera(data.bandera);
+    if (data?.max_pilotos) setMaxPilotos(data.max_pilotos);
   }, []);
 
   const cargarSectores = useCallback(async () => {
@@ -311,7 +312,11 @@ export default function AdminPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "pilotos" },
           () => { cargarPilotos(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" },
-          (payload) => { const n = payload.new as any; if (n?.bandera) setBandera(n.bandera); })
+          (payload) => {
+            const n = payload.new as any;
+            if (n?.bandera)     setBandera(n.bandera);
+            if (n?.max_pilotos) setMaxPilotos(n.max_pilotos);
+          })
       .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" },
           () => { cargarSectores(); })
       .subscribe((status) => { setRealtimeConectado(status === "SUBSCRIBED"); });
