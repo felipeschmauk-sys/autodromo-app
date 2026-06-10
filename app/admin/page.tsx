@@ -1319,12 +1319,12 @@ export default function AdminPage() {
             <CircuitoManager onMaxPilotosChange={setMaxPilotos} />
 
             {/* Sectores de pista */}
-            <div className="bg-gray-950 rounded-2xl border border-gray-800 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-800 flex items-center gap-2">
+            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
                 <span className="text-base">🏁</span>
                 <div>
-                  <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Sectores de pista</p>
-                  <p className="text-xs text-gray-600 mt-0.5">Divisiones del circuito activo para control independiente de banderas</p>
+                  <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Sectores de pista</p>
+                  <p className="text-xs text-gray-400 mt-0.5">Divisiones del circuito activo para control independiente de banderas</p>
                 </div>
               </div>
               <div className="p-5">
