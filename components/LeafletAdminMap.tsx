@@ -69,11 +69,17 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
     const map = L.map(containerRef.current, {
       center:             [-33.5, -70.6],
       zoom:               14,
-      zoomControl:        true,
+      zoomControl:        false,
       attributionControl: false,
+      dragging:           false,
+      scrollWheelZoom:    false,
+      doubleClickZoom:    false,
+      touchZoom:          false,
+      keyboard:           false,
+      boxZoom:            false,
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd",
       maxZoom:    20,
     }).addTo(map);

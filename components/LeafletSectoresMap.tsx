@@ -43,13 +43,16 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
       zoom:               14,
       zoomControl:        false,
       attributionControl: false,
-      // El editor sí permite navegar para ajustar con precisión
-      dragging:        true,
-      scrollWheelZoom: true,
-      touchZoom:       true,
+      // Mapa estático: el arrastre es para los marcadores de límite, no para navegar
+      dragging:        false,
+      scrollWheelZoom: false,
+      doubleClickZoom: false,
+      touchZoom:       false,
+      keyboard:        false,
+      boxZoom:         false,
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       subdomains: "abcd", maxZoom: 20,
     }).addTo(map);
 
@@ -68,10 +71,10 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
     layersRef.current  = [];
     markersRef.current = [];
 
-    // Fondo del trazado completo (gris oscuro)
+    // Fondo del trazado completo (gris claro)
     const allLatlngs = trazado.map(c => [c.lat, c.lng] as [number, number]);
     layersRef.current.push(
-      L.polyline(allLatlngs, { color: "#374151", weight: 8, opacity: 1 }).addTo(map)
+      L.polyline(allLatlngs, { color: "#cbd5e1", weight: 8, opacity: 1 }).addTo(map)
     );
 
     // Sectores coloreados
@@ -96,11 +99,12 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
       if (mc) {
         const label = L.divIcon({
           html: `<div style="
-            background:rgba(5,5,15,.88);color:${r.color};
-            border:1px solid ${r.color}55;border-radius:5px;
+            background:white;color:${r.color};
+            border:1.5px solid ${r.color};border-radius:5px;
             padding:2px 8px;font-size:10px;font-weight:800;
             font-family:monospace;letter-spacing:1px;
             white-space:nowrap;text-transform:uppercase;
+            box-shadow:0 1px 4px rgba(0,0,0,.15);
           ">${r.nombre}</div>`,
           iconSize:   [100, 20],
           iconAnchor: [50, 10],
