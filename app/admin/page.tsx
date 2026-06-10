@@ -531,7 +531,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <nav className="bg-white border-b border-gray-200 px-4 flex sticky top-[100px] z-40 overflow-x-auto">
+      <nav className="border-b border-gray-200 px-4 flex sticky top-[100px] z-40 overflow-x-auto" style={{ backgroundColor: "#ffffff", boxShadow: "0 1px 0 #e5e7eb, 0 -1px 0 #e5e7eb" }}>
         {(TABS_POR_TIPO[contexto.tipo || "sin_contexto"]).map(t => (
           <button
             key={t.id}
@@ -580,10 +580,15 @@ export default function AdminPage() {
         )}
 
         {tab === "direccion" && !!contexto.fechaId && (
-          <div className="lg:grid lg:grid-cols-[380px_1fr] lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+          <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
 
-          {/* ════ COLUMNA IZQUIERDA: CONTROLES ════ */}
-          <div className="space-y-4">
+          {/* ════ COLUMNA IZQUIERDA: MAPA (desktop) ════ */}
+          <div className="lg:sticky lg:top-[116px] order-2 lg:order-1">
+            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} />
+          </div>
+
+          {/* ════ COLUMNA DERECHA: CONTROLES ════ */}
+          <div className="space-y-4 order-1 lg:order-2">
 
             {/* ── Estado de pista + control de banderas ── */}
             <div className={`rounded-2xl border-2 px-5 py-4 space-y-4 transition-colors duration-500 ${
@@ -848,10 +853,6 @@ export default function AdminPage() {
               </div>
             </div>
 
-          </div>
-
-          <div className="lg:sticky lg:top-[116px]">
-            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} />
           </div>
 
           </div>
