@@ -121,6 +121,35 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         trackRef.current.push(
           L.polyline(pts, { color, weight: 4, opacity: 0.92 }).addTo(map)
         );
+
+        // Etiqueta del sector en el punto medio
+        const midIdx = Math.floor((s.punto_inicio + s.punto_fin) / 2);
+        const mc     = trazado[midIdx];
+        if (mc) {
+          const label = L.divIcon({
+            html: `<div style="
+              background:white;
+              color:${color};
+              border:2px solid ${color};
+              border-radius:6px;
+              padding:3px 10px;
+              font-size:11px;
+              font-weight:900;
+              font-family:monospace;
+              letter-spacing:1px;
+              white-space:nowrap;
+              text-transform:uppercase;
+              box-shadow:0 2px 6px rgba(0,0,0,.18);
+              pointer-events:none;
+            ">${s.nombre}</div>`,
+            iconSize:   [120, 24],
+            iconAnchor: [60, 12],
+            className:  "",
+          });
+          trackRef.current.push(
+            L.marker([mc.lat, mc.lng], { icon: label, interactive: false }).addTo(map)
+          );
+        }
       });
     } else {
       const color = STROKE[bandera] || STROKE.verde;
