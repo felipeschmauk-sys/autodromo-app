@@ -3,7 +3,6 @@
  * AdminEventos.tsx — components/AdminEventos.tsx
  *
  * Gestión de campeonatos, fechas e inscripciones.
- * Bloque 1 — sin funcionalidad de pago real aún.
  */
 
 import { useEffect, useState, useCallback } from "react";
@@ -56,9 +55,9 @@ const ESTADO_INSC: Record<string, { label: string; color: string; bg: string }> 
 };
 
 const ESTADO_FECHA: Record<string, { label: string; dot: string }> = {
-  borrador:   { label: "Borrador",             dot: "bg-gray-400"  },
+  borrador:   { label: "Borrador",              dot: "bg-gray-400"  },
   abierto:    { label: "Inscripciones abiertas", dot: "bg-green-500" },
-  finalizado: { label: "Finalizado",           dot: "bg-gray-600"  },
+  finalizado: { label: "Finalizado",            dot: "bg-gray-600"  },
 };
 
 const PAGO_BADGE: Record<string, { label: string; color: string }> = {
@@ -68,7 +67,6 @@ const PAGO_BADGE: Record<string, { label: string; color: string }> = {
   devuelto:         { label: "Devuelto",        color: "text-red-500"   },
 };
 
-// ── Props ──────────────────────────────────────────────────────
 interface AdminEventosProps {
   contextoFechaId?: string | null;
   onContextoCambia?: () => void;
@@ -82,34 +80,40 @@ const TIPO_EVENTO_OPTS = [
 
 // ── Componente principal ───────────────────────────────────────
 export default function AdminEventos({ contextoFechaId, onContextoCambia }: AdminEventosProps) {
-  const [campeonatos, setCampeonatos]         = useState<Campeonato[]>([]);
-  const [fechas, setFechas]                   = useState<FechaEvento[]>([]);
-  const [inscripciones, setInscripciones]     = useState<Inscripcion[]>([]);
-  const [selectedCamp, setSelectedCamp]       = useState<string | null>(null);
-  const [selectedFecha, setSelectedFecha]     = useState<string | null>(null);
-  const [view, setView]                       = useState<"campeonatos" | "fechas" | "inscripciones">("campeonatos");
-  const [showFormCamp, setShowFormCamp]       = useState(false);
-  const [showFormFecha, setShowFormFecha]     = useState(false);
-  const [saving, setSaving]                   = useState(false);
-  const [notasModal, setNotasModal]           = useState<{ id: string; notas: string } | null>(null);
+  const [campeonatos, setCampeonatos]     = useState<Campeonato[]>([]);
+  const [fechas, setFechas]               = useState<FechaEvento[]>([]);
+  const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
+  const [selectedCamp, setSelectedCamp]   = useState<string | null>(null);
+  const [selectedFecha, setSelectedFecha] = useState<string | null>(null);
+  const [view, setView]                   = useState<"campeonatos" | "fechas" | "inscripciones">("campeonatos");
+  const [saving, setSaving]               = useState(false);
+  const [notasModal, setNotasModal]       = useState<{ id: string; notas: string } | null>(null);
 
-  // Formulario campeonato
-  const [fNombre, setFNombre]         = useState("");
-  const [fTemporada, setFTemporada]   = useState(2026);
-  const [fDescCamp, setFDescCamp]     = useState("");
+  // ── Formulario campeonato (nuevo + editar) ─────────────────
+  const [showFormCamp, setShowFormCamp]   = useState(false);
+  const [editingCampId, setEditingCampId] = useState<string | null>(null);
+  const [fNombre, setFNombre]             = useState("");
+  const [fTemporada, setFTemporada]       = useState(2026);
+  const [fDescCamp, setFDescCamp]         = useState("");
 
-  // Formulario fecha
-  const [ffNombre, setFfNombre]       = useState("");
-  const [ffNumero, setFfNumero]       = useState("");
-  const [ffFecha, setFfFecha]         = useState("");
-  const [ffAutodromo, setFfAutodromo] = useState("");
-  const [ffTrazado, setFfTrazado]     = useState("");
-  const [ffCupos, setFfCupos]         = useState("30");
-  const [ffEstado, setFfEstado]       = useState<"borrador" | "abierto">("borrador");
-  const [ffTipo, setFfTipo]           = useState<"racing" | "time_attack" | "entrenamiento">("racing");
-  const [ffDesc, setFfDesc]           = useState("");
+  // ── Confirmación de borrado ────────────────────────────────
+  const [confirmDeleteCampId,  setConfirmDeleteCampId]  = useState<string | null>(null);
+  const [confirmDeleteFechaId, setConfirmDeleteFechaId] = useState<string | null>(null);
 
-  // ── Loaders ───────────────────────────────────────────────────
+  // ── Formulario fecha (nuevo + editar) ──────────────────────
+  const [showFormFecha, setShowFormFecha]   = useState(false);
+  const [editingFechaId, setEditingFechaId] = useState<string | null>(null);
+  const [ffNombre, setFfNombre]             = useState("");
+  const [ffNumero, setFfNumero]             = useState("");
+  const [ffFecha, setFfFecha]               = useState("");
+  const [ffAutodromo, setFfAutodromo]       = useState("");
+  const [ffTrazado, setFfTrazado]           = useState("");
+  const [ffCupos, setFfCupos]               = useState("30");
+  const [ffEstado, setFfEstado]             = useState<"borrador" | "abierto" | "finalizado">("borrador");
+  const [ffTipo, setFfTipo]                 = useState<"racing" | "time_attack" | "entrenamiento">("racing");
+  const [ffDesc, setFfDesc]                 = useState("");
+
+  // ── Loaders ────────────────────────────────────────────────
   const loadCampeonatos = useCallback(async () => {
     const { data } = await supabase
       .from("campeonatos").select("*").order("temporada", { ascending: false });
@@ -135,15 +139,47 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
 
   useEffect(() => { loadCampeonatos(); }, [loadCampeonatos]);
 
-  // ── Acciones campeonato ────────────────────────────────────────
-  const crearCampeonato = async () => {
+  // ── Helpers formulario ─────────────────────────────────────
+  const resetFormCamp = () => {
+    setFNombre(""); setFTemporada(2026); setFDescCamp("");
+    setEditingCampId(null); setShowFormCamp(false);
+  };
+
+  const resetFormFecha = () => {
+    setFfNombre(""); setFfNumero(""); setFfFecha("");
+    setFfAutodromo(""); setFfTrazado(""); setFfCupos("30");
+    setFfTipo("racing"); setFfEstado("borrador"); setFfDesc("");
+    setEditingFechaId(null); setShowFormFecha(false);
+  };
+
+  // ── Acciones campeonato ────────────────────────────────────
+  const abrirNuevoCamp = () => {
+    resetFormCamp();
+    setShowFormCamp(true);
+  };
+
+  const abrirEditarCamp = (c: Campeonato) => {
+    setFNombre(c.nombre);
+    setFTemporada(c.temporada);
+    setFDescCamp(c.descripcion || "");
+    setEditingCampId(c.id);
+    setShowFormCamp(true);
+  };
+
+  const guardarCampeonato = async () => {
     if (!fNombre.trim()) return;
     setSaving(true);
-    await supabase.from("campeonatos").insert({
-      nombre: fNombre.trim(), temporada: fTemporada,
+    const payload = {
+      nombre: fNombre.trim(),
+      temporada: fTemporada,
       descripcion: fDescCamp.trim() || null,
-    });
-    setShowFormCamp(false); setFNombre(""); setFDescCamp("");
+    };
+    if (editingCampId) {
+      await supabase.from("campeonatos").update(payload).eq("id", editingCampId);
+    } else {
+      await supabase.from("campeonatos").insert(payload);
+    }
+    resetFormCamp();
     await loadCampeonatos();
     setSaving(false);
   };
@@ -153,17 +189,43 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
     loadCampeonatos();
   };
 
+  const eliminarCampeonato = async (id: string) => {
+    await supabase.from("campeonatos").delete().eq("id", id);
+    setConfirmDeleteCampId(null);
+    if (selectedCamp === id) { setSelectedCamp(null); setView("campeonatos"); }
+    await loadCampeonatos();
+  };
+
   const abrirFechas = (campId: string) => {
     setSelectedCamp(campId);
     loadFechas(campId);
     setView("fechas");
   };
 
-  // ── Acciones fecha ─────────────────────────────────────────────
-  const crearFecha = async () => {
+  // ── Acciones fecha ─────────────────────────────────────────
+  const abrirNuevaFecha = () => {
+    resetFormFecha();
+    setShowFormFecha(true);
+  };
+
+  const abrirEditarFecha = (f: FechaEvento) => {
+    setFfNombre(f.nombre);
+    setFfNumero(f.numero_fecha?.toString() || "");
+    setFfFecha(f.fecha_evento);
+    setFfAutodromo(f.autodromo || "");
+    setFfTrazado(f.trazado || "");
+    setFfCupos(f.cupos_max.toString());
+    setFfEstado(f.estado === "finalizado" ? "finalizado" : f.estado);
+    setFfTipo(f.tipo);
+    setFfDesc(f.descripcion || "");
+    setEditingFechaId(f.id);
+    setShowFormFecha(true);
+  };
+
+  const guardarFecha = async () => {
     if (!ffNombre.trim() || !ffFecha || !selectedCamp) return;
     setSaving(true);
-    await supabase.from("fechas_evento").insert({
+    const payload = {
       campeonato_id: selectedCamp,
       nombre:        ffNombre.trim(),
       numero_fecha:  ffNumero ? parseInt(ffNumero) : null,
@@ -174,13 +236,23 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
       estado:        ffEstado,
       tipo:          ffTipo,
       descripcion:   ffDesc.trim() || null,
-    });
+    };
+    if (editingFechaId) {
+      await supabase.from("fechas_evento").update(payload).eq("id", editingFechaId);
+    } else {
+      await supabase.from("fechas_evento").insert(payload);
+    }
     if (onContextoCambia) onContextoCambia();
-    setShowFormFecha(false);
-    setFfNombre(""); setFfNumero(""); setFfFecha("");
-    setFfAutodromo(""); setFfTrazado(""); setFfCupos("30"); setFfTipo("racing"); setFfDesc("");
+    resetFormFecha();
     await loadFechas(selectedCamp);
     setSaving(false);
+  };
+
+  const eliminarFecha = async (id: string) => {
+    await supabase.from("fechas_evento").delete().eq("id", id);
+    setConfirmDeleteFechaId(null);
+    if (selectedCamp) loadFechas(selectedCamp);
+    if (onContextoCambia) onContextoCambia();
   };
 
   const cambiarEstadoFecha = async (id: string, estado: string) => {
@@ -194,7 +266,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
     setView("inscripciones");
   };
 
-  // ── Acciones inscripción ───────────────────────────────────────
+  // ── Acciones inscripción ───────────────────────────────────
   const cambiarEstadoInsc = async (id: string, estado: string) => {
     await supabase.from("inscripciones").update({ estado }).eq("id", id);
     if (selectedFecha) loadInscripciones(selectedFecha);
@@ -216,16 +288,127 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
     if (selectedFecha) loadInscripciones(selectedFecha);
   };
 
-  // ── Helpers ────────────────────────────────────────────────────
-  const campActual   = campeonatos.find(c => c.id === selectedCamp);
-  const fechaActual  = fechas.find(f => f.id === selectedFecha);
-  const cuposUsados  = inscripciones.filter(i =>
+  // ── Helpers UI ─────────────────────────────────────────────
+  const campActual  = campeonatos.find(c => c.id === selectedCamp);
+  const fechaActual = fechas.find(f => f.id === selectedFecha);
+  const cuposUsados = inscripciones.filter(i =>
     ["inscrito","confirmado","en_pista"].includes(i.estado)
   ).length;
-  const solicitados  = inscripciones.filter(i => i.estado === "solicitado").length;
+  const solicitados = inscripciones.filter(i => i.estado === "solicitado").length;
 
   const inputCls = "w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white";
   const labelCls = "text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1 block";
+
+  const campsActivos   = campeonatos.filter(c =>  c.activo);
+  const campsInactivos = campeonatos.filter(c => !c.activo);
+
+  // ── Formulario campeonato (nuevo + editar) JSX ─────────────
+  const formCampJSX = showFormCamp && (
+    <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+      <p className="text-sm font-semibold text-indigo-800">
+        {editingCampId ? "Editar campeonato" : "Nuevo campeonato"}
+      </p>
+      <div>
+        <label className={labelCls}>Nombre *</label>
+        <input value={fNombre} onChange={e => setFNombre(e.target.value)}
+          placeholder="ej. Turismo Carretera Chileno" className={inputCls} />
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={labelCls}>Temporada</label>
+          <input type="number" value={fTemporada} onChange={e => setFTemporada(parseInt(e.target.value))}
+            className={inputCls} />
+        </div>
+      </div>
+      <div>
+        <label className={labelCls}>Descripción</label>
+        <input value={fDescCamp} onChange={e => setFDescCamp(e.target.value)}
+          placeholder="Descripción opcional" className={inputCls} />
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={resetFormCamp}
+          className="text-sm border border-gray-200 px-4 py-2 rounded-xl hover:bg-gray-50 transition">
+          Cancelar
+        </button>
+        <button onClick={guardarCampeonato} disabled={saving || !fNombre.trim()}
+          className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition">
+          {saving ? "Guardando…" : editingCampId ? "Guardar cambios" : "Crear campeonato"}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── Formulario fecha (nuevo + editar) JSX ─────────────────
+  const formFechaJSX = showFormFecha && (
+    <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
+      <p className="text-sm font-semibold text-indigo-800">
+        {editingFechaId ? "Editar fecha / evento" : "Nueva fecha / evento"}
+      </p>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <label className={labelCls}>Nombre del evento *</label>
+          <input value={ffNombre} onChange={e => setFfNombre(e.target.value)}
+            placeholder="ej. Fecha 3 – Las Vizcachas" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>N° de fecha</label>
+          <input type="number" value={ffNumero} onChange={e => setFfNumero(e.target.value)}
+            placeholder="3" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Fecha del evento *</label>
+          <input type="date" value={ffFecha} onChange={e => setFfFecha(e.target.value)}
+            className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Autódromo</label>
+          <input value={ffAutodromo} onChange={e => setFfAutodromo(e.target.value)}
+            placeholder="ej. Las Vizcachas" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Trazado</label>
+          <input value={ffTrazado} onChange={e => setFfTrazado(e.target.value)}
+            placeholder="Pista larga / Pista corta" className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Cupos máximos</label>
+          <input type="number" value={ffCupos} onChange={e => setFfCupos(e.target.value)}
+            className={inputCls} />
+        </div>
+        <div>
+          <label className={labelCls}>Tipo de evento</label>
+          <select value={ffTipo} onChange={e => setFfTipo(e.target.value as any)} className={inputCls}>
+            {TIPO_EVENTO_OPTS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className={labelCls}>Estado</label>
+          <select value={ffEstado} onChange={e => setFfEstado(e.target.value as any)} className={inputCls}>
+            <option value="borrador">Borrador</option>
+            <option value="abierto">Inscripciones abiertas</option>
+            <option value="finalizado">Finalizado</option>
+          </select>
+        </div>
+        <div className="col-span-2">
+          <label className={labelCls}>Descripción</label>
+          <input value={ffDesc} onChange={e => setFfDesc(e.target.value)}
+            placeholder="Información adicional del evento" className={inputCls} />
+        </div>
+      </div>
+      <div className="flex gap-2 justify-end">
+        <button onClick={resetFormFecha}
+          className="text-sm border border-gray-200 px-4 py-2 rounded-xl hover:bg-gray-50 transition">
+          Cancelar
+        </button>
+        <button onClick={guardarFecha} disabled={saving || !ffNombre.trim() || !ffFecha}
+          className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition">
+          {saving ? "Guardando…" : editingFechaId ? "Guardar cambios" : "Crear fecha"}
+        </button>
+      </div>
+    </div>
+  );
 
   // ════════════════════════════════════════════════════════════
   return (
@@ -266,82 +449,60 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
               {campeonatos.length} campeonato{campeonatos.length !== 1 ? "s" : ""}
             </p>
             <button
-              onClick={() => setShowFormCamp(!showFormCamp)}
+              onClick={abrirNuevoCamp}
               className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition"
             >
               + Nuevo campeonato
             </button>
           </div>
 
-          {/* Formulario nuevo campeonato */}
-          {showFormCamp && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
-              <p className="text-sm font-semibold text-indigo-800">Nuevo campeonato</p>
-              <div>
-                <label className={labelCls}>Nombre *</label>
-                <input value={fNombre} onChange={e => setFNombre(e.target.value)}
-                  placeholder="ej. Turismo Carretera Chileno" className={inputCls} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className={labelCls}>Temporada</label>
-                  <input type="number" value={fTemporada} onChange={e => setFTemporada(parseInt(e.target.value))}
-                    className={inputCls} />
-                </div>
-              </div>
-              <div>
-                <label className={labelCls}>Descripción</label>
-                <input value={fDescCamp} onChange={e => setFDescCamp(e.target.value)}
-                  placeholder="Descripción opcional" className={inputCls} />
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowFormCamp(false)}
-                  className="text-sm border border-gray-200 px-4 py-2 rounded-xl hover:bg-gray-50 transition">
-                  Cancelar
-                </button>
-                <button onClick={crearCampeonato} disabled={saving || !fNombre.trim()}
-                  className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition">
-                  {saving ? "Guardando…" : "Crear campeonato"}
-                </button>
-              </div>
-            </div>
-          )}
+          {formCampJSX}
 
-          {/* Lista campeonatos */}
           {campeonatos.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <div className="text-3xl mb-2">🏆</div>
               <p className="text-sm">Aún no hay campeonatos creados</p>
             </div>
           ) : (
-            <div className="space-y-2">
-              {campeonatos.map(c => (
-                <div key={c.id}
-                  className="bg-white border border-gray-200 rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-semibold text-gray-900 truncate">{c.nombre}</p>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
-                        c.activo ? "bg-green-50 text-green-700 border-green-200"
-                                 : "bg-gray-100 text-gray-400 border-gray-200"
-                      }`}>
-                        {c.activo ? "Activo" : "Inactivo"}
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-400 mt-0.5">Temporada {c.temporada}{c.descripcion ? ` · ${c.descripcion}` : ""}</p>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <button onClick={() => toggleCampeonato(c.id, c.activo)}
-                      className="text-xs border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 transition text-gray-500">
-                      {c.activo ? "Desactivar" : "Activar"}
-                    </button>
-                    <button onClick={() => abrirFechas(c.id)}
-                      className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition">
-                      Ver fechas →
-                    </button>
-                  </div>
+            <div className="space-y-4">
+
+              {/* Campeonatos activos */}
+              {campsActivos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-1">Activos</p>
+                  {campsActivos.map(c => (
+                    <CampeonatoCard
+                      key={c.id}
+                      c={c}
+                      confirmDeleteId={confirmDeleteCampId}
+                      onEditar={abrirEditarCamp}
+                      onToggle={toggleCampeonato}
+                      onVerFechas={abrirFechas}
+                      onConfirmDelete={setConfirmDeleteCampId}
+                      onEliminar={eliminarCampeonato}
+                    />
+                  ))}
                 </div>
-              ))}
+              )}
+
+              {/* Campeonatos inactivos */}
+              {campsInactivos.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider px-1">Inactivos</p>
+                  {campsInactivos.map(c => (
+                    <CampeonatoCard
+                      key={c.id}
+                      c={c}
+                      confirmDeleteId={confirmDeleteCampId}
+                      onEditar={abrirEditarCamp}
+                      onToggle={toggleCampeonato}
+                      onVerFechas={abrirFechas}
+                      onConfirmDelete={setConfirmDeleteCampId}
+                      onEliminar={eliminarCampeonato}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -354,84 +515,14 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
             <p className="text-xs text-gray-500 font-medium uppercase tracking-wider">
               {fechas.length} fecha{fechas.length !== 1 ? "s" : ""}
             </p>
-            <button onClick={() => setShowFormFecha(!showFormFecha)}
+            <button onClick={abrirNuevaFecha}
               className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition">
               + Nueva fecha
             </button>
           </div>
 
-          {/* Formulario nueva fecha */}
-          {showFormFecha && (
-            <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 space-y-3">
-              <p className="text-sm font-semibold text-indigo-800">Nueva fecha / evento</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="col-span-2">
-                  <label className={labelCls}>Nombre del evento *</label>
-                  <input value={ffNombre} onChange={e => setFfNombre(e.target.value)}
-                    placeholder="ej. Fecha 3 – Las Vizcachas" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>N° de fecha</label>
-                  <input type="number" value={ffNumero} onChange={e => setFfNumero(e.target.value)}
-                    placeholder="3" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Fecha del evento *</label>
-                  <input type="date" value={ffFecha} onChange={e => setFfFecha(e.target.value)}
-                    className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Autódromo</label>
-                  <input value={ffAutodromo} onChange={e => setFfAutodromo(e.target.value)}
-                    placeholder="ej. Las Vizcachas" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Trazado</label>
-                  <input value={ffTrazado} onChange={e => setFfTrazado(e.target.value)}
-                    placeholder="Pista larga / Pista corta" className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Cupos máximos</label>
-                  <input type="number" value={ffCupos} onChange={e => setFfCupos(e.target.value)}
-                    className={inputCls} />
-                </div>
-                <div>
-                  <label className={labelCls}>Tipo de evento</label>
-                  <select value={ffTipo} onChange={e => setFfTipo(e.target.value as any)}
-                    className={inputCls}>
-                    {TIPO_EVENTO_OPTS.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className={labelCls}>Estado inicial</label>
-                  <select value={ffEstado} onChange={e => setFfEstado(e.target.value as any)}
-                    className={inputCls}>
-                    <option value="borrador">Borrador</option>
-                    <option value="abierto">Abrir inscripciones</option>
-                  </select>
-                </div>
-                <div className="col-span-2">
-                  <label className={labelCls}>Descripción</label>
-                  <input value={ffDesc} onChange={e => setFfDesc(e.target.value)}
-                    placeholder="Información adicional del evento" className={inputCls} />
-                </div>
-              </div>
-              <div className="flex gap-2 justify-end">
-                <button onClick={() => setShowFormFecha(false)}
-                  className="text-sm border border-gray-200 px-4 py-2 rounded-xl hover:bg-gray-50 transition">
-                  Cancelar
-                </button>
-                <button onClick={crearFecha} disabled={saving || !ffNombre.trim() || !ffFecha}
-                  className="text-sm bg-indigo-600 text-white px-4 py-2 rounded-xl font-semibold hover:bg-indigo-700 disabled:opacity-50 transition">
-                  {saving ? "Guardando…" : "Crear fecha"}
-                </button>
-              </div>
-            </div>
-          )}
+          {formFechaJSX}
 
-          {/* Lista fechas */}
           {fechas.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <div className="text-3xl mb-2">📅</div>
@@ -441,6 +532,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
             <div className="space-y-2">
               {fechas.map(f => {
                 const ef = ESTADO_FECHA[f.estado];
+                const confirmando = confirmDeleteFechaId === f.id;
                 return (
                   <div key={f.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3.5 space-y-2">
                     <div className="flex items-start justify-between gap-3">
@@ -449,9 +541,9 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                           <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
                           {f.tipo && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              f.tipo === "racing"        ? "bg-red-100 text-red-700" :
-                              f.tipo === "time_attack"   ? "bg-blue-100 text-blue-700" :
-                                                          "bg-emerald-100 text-emerald-700"
+                              f.tipo === "racing"      ? "bg-red-100 text-red-700" :
+                              f.tipo === "time_attack" ? "bg-blue-100 text-blue-700" :
+                                                        "bg-emerald-100 text-emerald-700"
                             }`}>
                               {f.tipo === "racing" ? "Racing" : f.tipo === "time_attack" ? "Time Attack" : "Entreno"}
                             </span>
@@ -468,10 +560,35 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                           {` · ${f.cupos_max} cupos`}
                         </p>
                       </div>
-                      <button onClick={() => abrirInscripciones(f.id)}
-                        className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition flex-shrink-0">
-                        Inscripciones →
-                      </button>
+                      {/* Acciones fecha */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <button onClick={() => abrirEditarFecha(f)}
+                          className="text-xs border border-gray-200 text-gray-500 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 transition">
+                          ✏️
+                        </button>
+                        {confirmando ? (
+                          <div className="flex items-center gap-1">
+                            <span className="text-xs text-red-600 font-medium">¿Eliminar?</span>
+                            <button onClick={() => eliminarFecha(f.id)}
+                              className="text-xs bg-red-600 text-white px-2 py-1 rounded-lg font-semibold hover:bg-red-700 transition">
+                              Sí
+                            </button>
+                            <button onClick={() => setConfirmDeleteFechaId(null)}
+                              className="text-xs border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50 transition">
+                              No
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => setConfirmDeleteFechaId(f.id)}
+                            className="text-xs border border-red-100 text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition">
+                            🗑
+                          </button>
+                        )}
+                        <button onClick={() => abrirInscripciones(f.id)}
+                          className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition">
+                          Inscripciones →
+                        </button>
+                      </div>
                     </div>
                     {/* Cambio de estado rápido */}
                     <div className="flex gap-1.5 flex-wrap">
@@ -497,10 +614,9 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
       {/* ════ VISTA: INSCRIPCIONES ════ */}
       {view === "inscripciones" && selectedFecha && fechaActual && (
         <div className="space-y-3">
-          {/* Resumen */}
           <div className="grid grid-cols-3 gap-2">
             {[
-              { label: "Solicitados", val: solicitados,   color: "text-amber-600" },
+              { label: "Solicitados", val: solicitados, color: "text-amber-600" },
               { label: "Confirmados", val: inscripciones.filter(i => i.estado === "confirmado").length, color: "text-green-700" },
               { label: `Cupos ${cuposUsados}/${fechaActual.cupos_max}`, val: fechaActual.cupos_max - cuposUsados, color: cuposUsados >= fechaActual.cupos_max ? "text-red-600" : "text-gray-700" },
             ].map(s => (
@@ -511,7 +627,6 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
             ))}
           </div>
 
-          {/* Lista inscripciones */}
           {inscripciones.length === 0 ? (
             <div className="text-center py-12 text-gray-400">
               <div className="text-3xl mb-2">📋</div>
@@ -520,13 +635,12 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
           ) : (
             <div className="space-y-2">
               {inscripciones.map(insc => {
-                const ei  = ESTADO_INSC[insc.estado];
-                const ep  = PAGO_BADGE[insc.pago_estado];
-                const nombre   = (insc.pilotos as any)?.nombre    || "Piloto";
+                const ei       = ESTADO_INSC[insc.estado];
+                const ep       = PAGO_BADGE[insc.pago_estado];
+                const nombre   = (insc.pilotos as any)?.nombre   || "Piloto";
                 const telefono = (insc.pilotos as any)?.telefono || "";
                 return (
                   <div key={insc.id} className="bg-white border border-gray-200 rounded-2xl px-4 py-3.5 space-y-3">
-                    {/* Header piloto */}
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -535,9 +649,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                             {ei.label}
                           </span>
                           {insc.estado !== "rechazado" && (
-                            <span className={`text-xs font-medium ${ep.color}`}>
-                              · {ep.label}
-                            </span>
+                            <span className={`text-xs font-medium ${ep.color}`}>· {ep.label}</span>
                           )}
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">
@@ -548,11 +660,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                         )}
                       </div>
                     </div>
-
-                    {/* Acciones según estado */}
                     <div className="flex gap-2 flex-wrap">
-
-                      {/* Solicitud pendiente → aprobar o rechazar */}
                       {insc.estado === "solicitado" && (
                         <>
                           <button onClick={() => cambiarEstadoInsc(insc.id, "inscrito")}
@@ -565,32 +673,24 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                           </button>
                         </>
                       )}
-
-                      {/* Inscrito → confirmar pago */}
                       {insc.estado === "inscrito" && insc.pago_estado === "pendiente" && (
                         <button onClick={() => confirmarPago(insc.id)}
                           className="text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-blue-700 transition">
                           💳 Confirmar pago
                         </button>
                       )}
-
-                      {/* Inscrito con pago confirmado → habilitar para competir */}
                       {insc.estado === "inscrito" && insc.pago_estado === "confirmado_admin" && (
                         <button onClick={() => cambiarEstadoInsc(insc.id, "confirmado")}
                           className="text-xs bg-green-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-green-700 transition">
                           ✓ Habilitar para competir
                         </button>
                       )}
-
-                      {/* Pago — placeholder visual (futura integración) */}
                       {insc.estado === "inscrito" && insc.pago_estado === "pendiente" && (
                         <button disabled
                           className="text-xs border border-gray-200 text-gray-400 px-3 py-1.5 rounded-lg cursor-not-allowed opacity-60">
                           💳 Pago en app (próximamente)
                         </button>
                       )}
-
-                      {/* Notas internas */}
                       <button onClick={() => setNotasModal({ id: insc.id, notas: insc.notas_admin || "" })}
                         className="text-xs border border-gray-200 text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-50 transition">
                         📝 Notas
@@ -615,7 +715,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
             <textarea
               value={notasModal.notas}
               onChange={e => setNotasModal({ ...notasModal, notas: e.target.value })}
-              placeholder="Visible solo para el admin. Ej: pendiente transferencia, contactar por WhatsApp..."
+              placeholder="Visible solo para el admin..."
               className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-indigo-300"
             />
             <div className="flex gap-2 justify-end">
@@ -632,6 +732,79 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
         </div>
       )}
 
+    </div>
+  );
+}
+
+// ── Subcomponente tarjeta campeonato ───────────────────────────
+function CampeonatoCard({
+  c, confirmDeleteId, onEditar, onToggle, onVerFechas, onConfirmDelete, onEliminar,
+}: {
+  c: Campeonato;
+  confirmDeleteId: string | null;
+  onEditar:       (c: Campeonato) => void;
+  onToggle:       (id: string, activo: boolean) => void;
+  onVerFechas:    (id: string) => void;
+  onConfirmDelete:(id: string | null) => void;
+  onEliminar:     (id: string) => void;
+}) {
+  const confirmando = confirmDeleteId === c.id;
+  return (
+    <div className={`border rounded-2xl px-4 py-3.5 flex items-center justify-between gap-3 transition ${
+      c.activo ? "bg-white border-gray-200" : "bg-gray-50 border-gray-100 opacity-70"
+    }`}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+          <p className={`text-sm font-semibold truncate ${c.activo ? "text-gray-900" : "text-gray-500"}`}>
+            {c.nombre}
+          </p>
+          <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
+            c.activo ? "bg-green-50 text-green-700 border-green-200"
+                     : "bg-gray-100 text-gray-400 border-gray-200"
+          }`}>
+            {c.activo ? "Activo" : "Inactivo"}
+          </span>
+        </div>
+        <p className="text-xs text-gray-400 mt-0.5">
+          Temporada {c.temporada}{c.descripcion ? ` · ${c.descripcion}` : ""}
+        </p>
+      </div>
+      <div className="flex items-center gap-1.5 flex-shrink-0">
+        {/* Editar */}
+        <button onClick={() => onEditar(c)}
+          className="text-xs border border-gray-200 text-gray-500 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 transition">
+          ✏️
+        </button>
+        {/* Activar/Desactivar */}
+        <button onClick={() => onToggle(c.id, c.activo)}
+          className="text-xs border border-gray-200 px-2.5 py-1.5 rounded-lg hover:bg-gray-50 transition text-gray-500">
+          {c.activo ? "Desactivar" : "Activar"}
+        </button>
+        {/* Eliminar con confirm inline */}
+        {confirmando ? (
+          <div className="flex items-center gap-1">
+            <span className="text-xs text-red-600 font-medium">¿Eliminar?</span>
+            <button onClick={() => onEliminar(c.id)}
+              className="text-xs bg-red-600 text-white px-2 py-1 rounded-lg font-semibold hover:bg-red-700 transition">
+              Sí
+            </button>
+            <button onClick={() => onConfirmDelete(null)}
+              className="text-xs border border-gray-200 px-2 py-1 rounded-lg hover:bg-gray-50 transition">
+              No
+            </button>
+          </div>
+        ) : (
+          <button onClick={() => onConfirmDelete(c.id)}
+            className="text-xs border border-red-100 text-red-400 px-2.5 py-1.5 rounded-lg hover:bg-red-50 transition">
+            🗑
+          </button>
+        )}
+        {/* Ver fechas */}
+        <button onClick={() => onVerFechas(c.id)}
+          className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition">
+          Ver fechas →
+        </button>
+      </div>
     </div>
   );
 }
