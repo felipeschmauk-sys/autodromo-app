@@ -471,7 +471,7 @@ export default function AdminPage() {
             <span className="text-xl">🏁</span>
             <div>
               <div className="font-bold text-sm leading-none">Panel Maestro</div>
-              <div className="text-xs text-gray-400 leading-none mt-0.5">{nombreAutodromo}</div>
+              <div className="text-xs text-gray-400 leading-none mt-0.5">Race Control</div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -548,7 +548,7 @@ export default function AdminPage() {
         ))}
       </nav>
 
-      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" ? "max-w-7xl" : "max-w-3xl"}`}>
+      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" ? "max-w-7xl" : tab === "config" ? "max-w-5xl" : "max-w-3xl"}`}>
 
         {/* ── BANNER: sin evento activo ──────────────────────────────── */}
         {!contexto.fechaId && tab !== "eventos" && tab !== "config" && (
@@ -621,7 +621,7 @@ export default function AdminPage() {
                        : "🟢 PISTA HABILITADA"}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {sesiones.length} de {maxPilotos} cupos · {nombreAutodromo}
+                      {sesiones.length} de {maxPilotos} cupos activos
                       {cargandoBandera && <span className="ml-2 text-xs text-gray-400">Enviando...</span>}
                     </p>
                   </div>
@@ -1312,87 +1312,124 @@ export default function AdminPage() {
 
         {/* ── CONFIG ─────────────────────────────────────────────────── */}
         {tab === "config" && (
-          <>
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Autódromo activo</p>
-              </div>
-              <div className="p-5 space-y-4">
-                <select
-                  value={autodromo}
-                  onChange={e => setAutodromo(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white"
-                >
-                  {AUTODROMO_OPTIONS.map(a => (
-                    <option key={a} value={a}>{a}</option>
-                  ))}
-                </select>
-                <div className="grid grid-cols-2 gap-3">
+          <div className="lg:grid lg:grid-cols-2 lg:gap-5 space-y-4 lg:space-y-0 lg:items-start">
+
+            {/* ── COLUMNA IZQUIERDA: parámetros + estado ── */}
+            <div className="space-y-4">
+
+              {/* Parámetros de operación */}
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">⚙️</span>
                   <div>
-                    <label className="text-xs text-gray-500 font-medium">Máx. pilotos en pista</label>
-                    <input
-                      type="number"
-                      value={maxPilotos}
-                      onChange={e => setMaxPilotos(Number(e.target.value))}
-                      min={1} max={30}
-                      className="mt-1 w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                    />
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Parámetros de operación</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Configuración general del circuito</p>
                   </div>
                 </div>
-                <button className="w-full bg-gray-900 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl text-sm transition-colors">
-                  Guardar configuración
-                </button>
-              </div>
-            </div>
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Definir geocerca de pista</p>
-              </div>
-              <div className="p-5">
-                <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700 mb-4">
-                  📍 Haz clic en el mapa para marcar los vértices de la geocerca. Mínimo 3 puntos para guardar.
-                </div>
-                <GeofenceMap />
-                <div className="flex gap-2 mt-3">
-                  <button className="bg-gray-900 text-white text-xs font-medium px-4 py-2 rounded-xl hover:bg-gray-700 transition-colors">
-                    ✓ Guardar geocerca
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Circuito activo</label>
+                    <select
+                      value={autodromo}
+                      onChange={e => setAutodromo(e.target.value)}
+                      className="mt-1.5 w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900 bg-white"
+                    >
+                      {AUTODROMO_OPTIONS.map(a => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-500 font-semibold uppercase tracking-wider">Capacidad máxima en pista</label>
+                    <div className="mt-1.5 flex items-center gap-3">
+                      <input
+                        type="number"
+                        value={maxPilotos}
+                        onChange={e => setMaxPilotos(Number(e.target.value))}
+                        min={1} max={30}
+                        className="w-28 border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-center focus:outline-none focus:ring-2 focus:ring-gray-900"
+                      />
+                      <span className="text-sm text-gray-400">vehículos simultáneos</span>
+                    </div>
+                  </div>
+                  <button className="w-full bg-gray-900 hover:bg-gray-700 text-white font-semibold py-3 rounded-xl text-sm transition-colors">
+                    Guardar configuración
                   </button>
-                  <button className="border border-gray-200 text-gray-600 text-xs font-medium px-4 py-2 rounded-xl hover:bg-gray-50 transition-colors">
-                    🗑 Limpiar
-                  </button>
                 </div>
               </div>
-            </div>
-            {/* ── SECTORES DE PISTA ── */}
-            <div className="bg-gray-900 rounded-2xl border border-gray-700 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-700">
-                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Sectores de pista</p>
-                <p className="text-xs text-gray-600 mt-0.5">Definí divisiones del circuito para control independiente de banderas</p>
+
+              {/* Estado del sistema */}
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">📊</span>
+                  <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Estado del sistema</p>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {[
+                    { label: "Pilotos registrados",  value: pilotos.length },
+                    { label: "Sesiones activas",      value: sesiones.length },
+                    { label: "Capacidad disponible",  value: `${Math.max(0, maxPilotos - sesiones.length)} lugares` },
+                    {
+                      label: "Estado de pista",
+                      value: bandera === "roja" ? "🔴 ROJA" : bandera === "amarilla" ? "🟡 AMARILLA" : "🟢 Verde",
+                      color: bandera === "roja" ? "text-red-600 font-bold" : bandera === "amarilla" ? "text-yellow-600 font-bold" : "text-green-600",
+                    },
+                  ].map((row, i) => (
+                    <div key={i} className="px-5 py-3.5 flex justify-between items-center text-sm">
+                      <span className="text-gray-500">{row.label}</span>
+                      <span className={`font-semibold text-gray-900 ${row.color || ""}`}>{row.value}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="p-5">
-                <SectoresEditor />
-              </div>
+
             </div>
 
-            <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Estado del sistema</p>
-              </div>
-              <div className="divide-y divide-gray-50">
-                {[
-                  { label: "Pilotos registrados", value: pilotos.length },
-                  { label: "Sesiones activas", value: sesiones.length },
-                  { label: "Capacidad disponible", value: `${Math.max(0, maxPilotos - sesiones.length)} lugares` },
-                  { label: "Estado de pista", value: bandera === "roja" ? "🔴 ROJA" : bandera === "amarilla" ? "🟡 AMARILLA" : "🟢 Verde", color: bandera === "roja" ? "text-red-600 font-bold" : bandera === "amarilla" ? "text-yellow-600 font-bold" : "text-green-600" },
-                ].map((row, i) => (
-                  <div key={i} className="px-5 py-3 flex justify-between items-center text-sm">
-                    <span className="text-gray-500">{row.label}</span>
-                    <span className={`font-semibold text-gray-900 ${row.color || ""}`}>{row.value}</span>
+            {/* ── COLUMNA DERECHA: geocerca + sectores ── */}
+            <div className="space-y-4">
+
+              {/* Geocerca */}
+              <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-100 flex items-center gap-2">
+                  <span className="text-base">📍</span>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-700 uppercase tracking-wider">Geocerca de pista</p>
+                    <p className="text-xs text-gray-400 mt-0.5">Definí el límite físico del circuito en el mapa</p>
                   </div>
-                ))}
+                </div>
+                <div className="p-5">
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700 mb-4">
+                    Haz clic en el mapa para marcar los vértices de la geocerca. Mínimo 3 puntos para guardar.
+                  </div>
+                  <GeofenceMap />
+                  <div className="flex gap-2 mt-3">
+                    <button className="flex-1 bg-gray-900 text-white text-xs font-semibold px-4 py-2.5 rounded-xl hover:bg-gray-700 transition-colors">
+                      ✓ Guardar geocerca
+                    </button>
+                    <button className="border border-gray-200 text-gray-600 text-xs font-medium px-4 py-2.5 rounded-xl hover:bg-gray-50 transition-colors">
+                      🗑 Limpiar
+                    </button>
+                  </div>
+                </div>
               </div>
+
+              {/* Sectores de pista */}
+              <div className="bg-gray-950 rounded-2xl border border-gray-800 overflow-hidden">
+                <div className="px-5 py-3.5 border-b border-gray-800 flex items-center gap-2">
+                  <span className="text-base">🏁</span>
+                  <div>
+                    <p className="text-xs font-semibold text-gray-300 uppercase tracking-wider">Sectores de pista</p>
+                    <p className="text-xs text-gray-600 mt-0.5">Divisiones del circuito para control independiente de banderas</p>
+                  </div>
+                </div>
+                <div className="p-5">
+                  <SectoresEditor />
+                </div>
+              </div>
+
             </div>
-          </>
+
+          </div>
         )}
       </main>
     </div>

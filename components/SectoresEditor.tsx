@@ -167,32 +167,35 @@ export default function SectoresEditor() {
     );
   }
 
+  // Barra visual proporcional de sectores
+  const barraTotal = trazado.length || 1;
+
   return (
     <div className="space-y-5">
 
       {/* ── Selector de cantidad ── */}
       <div>
-        <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
-          Cantidad de sectores
+        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+          Divisiones del circuito
         </p>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
           <button
             onClick={() => cambiarCantidad(cantidad - 1)}
             disabled={cantidad <= 1}
-            className="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-lg transition-colors flex items-center justify-center"
+            className="w-9 h-9 rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-lg transition-colors flex items-center justify-center flex-shrink-0"
           >
             −
           </button>
 
-          <div className="flex gap-1.5">
+          <div className="flex gap-1.5 flex-wrap">
             {[1, 2, 3, 4, 5, 6, 7, 8].map(n => (
               <button
                 key={n}
                 onClick={() => cambiarCantidad(n)}
-                className={`w-9 h-9 rounded-lg text-sm font-bold transition-all ${
+                className={`w-9 h-9 rounded-lg text-sm font-black transition-all ${
                   cantidad === n
-                    ? "bg-indigo-600 text-white shadow-lg shadow-indigo-900"
-                    : "bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white"
+                    ? "bg-white text-gray-900 shadow-lg"
+                    : "bg-gray-800 text-gray-500 hover:bg-gray-700 hover:text-white"
                 }`}
               >
                 {n}
@@ -203,17 +206,51 @@ export default function SectoresEditor() {
           <button
             onClick={() => cambiarCantidad(cantidad + 1)}
             disabled={cantidad >= 8}
-            className="w-10 h-10 rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-lg transition-colors flex items-center justify-center"
+            className="w-9 h-9 rounded-xl bg-gray-800 hover:bg-gray-700 disabled:opacity-30 text-white font-bold text-lg transition-colors flex items-center justify-center flex-shrink-0"
           >
             +
           </button>
         </div>
       </div>
 
+      {/* ── Barra visual proporcional de sectores ── */}
+      {rangos.length > 0 && trazado.length > 0 && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+            Distribución del trazado
+          </p>
+          <div className="flex h-2.5 rounded-full overflow-hidden gap-px bg-gray-900">
+            {rangos.map((r, i) => {
+              const pct = ((r.fin - r.inicio) / barraTotal) * 100;
+              return (
+                <div
+                  key={i}
+                  style={{ width: `${pct}%`, background: r.color }}
+                  className="transition-all duration-300"
+                  title={`${r.nombre}: ${pct.toFixed(0)}%`}
+                />
+              );
+            })}
+          </div>
+          <div className="flex gap-px mt-1">
+            {rangos.map((r, i) => {
+              const pct = ((r.fin - r.inicio) / barraTotal) * 100;
+              return (
+                <div key={i} style={{ width: `${pct}%` }} className="transition-all duration-300">
+                  <p className="text-xs text-gray-600 text-center truncate px-1" style={{ fontSize: "10px" }}>
+                    {pct.toFixed(0)}%
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* ── Mapa Leaflet con sectores coloreados y límites arrastrables ── */}
       <div>
         {!trazado.length ? (
-          <div className="bg-gray-950 border border-gray-800 rounded-2xl py-12 text-center text-gray-600 text-sm">
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl py-10 text-center text-gray-600 text-sm">
             <p className="text-2xl mb-2">🗺</p>
             <p>Sin trazado cargado en Supabase</p>
           </div>
@@ -225,7 +262,7 @@ export default function SectoresEditor() {
               onBoundaryChange={handleBoundaryChange}
             />
             {cantidad >= 2 && (
-              <p className="text-xs text-gray-600 text-center mt-2">
+              <p className="text-xs text-gray-700 text-center mt-2">
                 Arrastrá los marcadores de límite para ajustar los sectores
               </p>
             )}
@@ -236,29 +273,40 @@ export default function SectoresEditor() {
       {/* ── Nombres de sectores ── */}
       {cantidad >= 2 && (
         <div className="space-y-2">
-          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
-            Nombres de sectores
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+            Nombres
           </p>
-          <div className="grid grid-cols-2 gap-2">
-            {Array.from({ length: cantidad }, (_, i) => (
-              <div key={i} className="flex items-center gap-2 bg-gray-900 border border-gray-800 rounded-xl px-3 py-2">
+          <div className="space-y-1.5">
+            {Array.from({ length: cantidad }, (_, i) => {
+              const pct = rangos[i]
+                ? (((rangos[i].fin - rangos[i].inicio) / barraTotal) * 100).toFixed(0)
+                : null;
+              return (
                 <div
-                  className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                  style={{ background: COLORS[i % COLORS.length] }}
-                />
-                <input
-                  type="text"
-                  value={nombres[i] ?? `Sector ${i + 1}`}
-                  onChange={e => {
-                    const n = [...nombres];
-                    n[i]   = e.target.value;
-                    setNombres(n);
-                  }}
-                  className="flex-1 bg-transparent text-white text-sm font-medium focus:outline-none min-w-0"
-                  placeholder={`Sector ${i + 1}`}
-                />
-              </div>
-            ))}
+                  key={i}
+                  className="flex items-center gap-3 bg-gray-900 rounded-xl px-3 py-2.5 border-l-4"
+                  style={{ borderLeftColor: COLORS[i % COLORS.length] }}
+                >
+                  <span className="text-xs font-black text-gray-600 w-4 text-center flex-shrink-0">
+                    {i + 1}
+                  </span>
+                  <input
+                    type="text"
+                    value={nombres[i] ?? `Sector ${i + 1}`}
+                    onChange={e => {
+                      const n = [...nombres];
+                      n[i]   = e.target.value;
+                      setNombres(n);
+                    }}
+                    className="flex-1 bg-transparent text-white text-sm font-semibold focus:outline-none min-w-0 placeholder-gray-700"
+                    placeholder={`Sector ${i + 1}`}
+                  />
+                  {pct && (
+                    <span className="text-xs text-gray-700 flex-shrink-0 font-mono">{pct}%</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -268,13 +316,13 @@ export default function SectoresEditor() {
         <button
           onClick={guardarSectores}
           disabled={guardando || cantidad < 2 || !trazado.length}
-          className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors"
+          className="flex-1 py-3 bg-white hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed text-gray-900 font-bold rounded-xl text-sm transition-colors"
         >
           {guardando ? "Guardando..." : `Guardar ${cantidad} sectores`}
         </button>
         <button
           onClick={resetearSectores}
-          className="px-4 py-3 bg-gray-800 hover:bg-gray-700 text-gray-400 rounded-xl text-sm transition-colors"
+          className="px-4 py-3 bg-gray-800 hover:bg-gray-700 text-gray-500 hover:text-gray-300 rounded-xl text-sm transition-colors"
           title="Eliminar todos los sectores"
         >
           🗑
@@ -283,14 +331,16 @@ export default function SectoresEditor() {
 
       {/* ── Feedback ── */}
       {mensaje && (
-        <p className={`text-sm text-center font-semibold ${mensaje.ok ? "text-green-400" : "text-red-400"}`}>
+        <div className={`text-sm text-center font-semibold px-4 py-2.5 rounded-xl ${
+          mensaje.ok ? "bg-green-950 text-green-400" : "bg-red-950 text-red-400"
+        }`}>
           {mensaje.texto}
-        </p>
+        </div>
       )}
 
       {cantidad === 1 && !cargando && (
-        <p className="text-xs text-gray-600 text-center">
-          Con 1 sector no hay división — seleccioná 2 o más para activar el control por sector
+        <p className="text-xs text-gray-700 text-center">
+          Seleccioná 2 o más sectores para activar el control de banderas por zona
         </p>
       )}
     </div>
