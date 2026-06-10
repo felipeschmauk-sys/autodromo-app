@@ -94,13 +94,39 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
     return s.find(sec => idx >= sec.punto_inicio && idx <= sec.punto_fin) || null;
   }
 
-  async function checkAutoYellow(pilotoId: string, lat: number, lng: number, velocidad: number) {
+  async function revertAutoYellow(pilotoId: string) {
+    for (const [sectorId, pId] of autoYellowRef.current.entries()) {
+      if (pId === pilotoId) {
+        autoYellowRef.current.delete(sectorId);
+        await supabase.from("sectores_pista").update({ bandera: "verde" }).eq("id", sectorId);
+        console.log(`🟢 Revertido auto-amarilla: sector ${sectorId} (piloto salió de pista)`);
+      }
+    }
+  }
+
+  async function checkAutoYellow(
+    pilotoId: string,
+    lat: number,
+    lng: number,
+    velocidad: number,
+    dentroGeocerca: boolean | null,
+  ) {
     // Solo aplica cuando la pista está en verde (sin override global)
     if (banderaRef.current !== "verde") return;
 
-    const stopped = velocidad <= 2;
+    // ── FUERA DE GEOCERCA DE PISTA ──────────────────────────────
+    // Si el piloto no está confirmado dentro de la pista, revertir
+    // cualquier auto-amarilla que haya causado y no hacer nada más.
+    if (dentroGeocerca !== true) {
+      await revertAutoYellow(pilotoId);
+      return;
+    }
+
+    // ── DENTRO DE PISTA ─────────────────────────────────────────
+    const stopped = velocidad <= 5;   // ≤5 km/h = detenido en pista
 
     if (stopped) {
+      // Buscar en qué sector está físicamente el piloto
       const sector = detectSectorByPos(lat, lng);
       if (sector && sector.bandera === "verde" && !autoYellowRef.current.has(sector.id)) {
         autoYellowRef.current.set(sector.id, pilotoId);
@@ -108,14 +134,8 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
         console.log(`🟡 Auto-amarilla: ${sector.nombre} (piloto ${pilotoId})`);
       }
     } else {
-      // Piloto se mueve — revertir su auto-amarilla si la tenía
-      for (const [sectorId, pId] of autoYellowRef.current.entries()) {
-        if (pId === pilotoId) {
-          autoYellowRef.current.delete(sectorId);
-          await supabase.from("sectores_pista").update({ bandera: "verde" }).eq("id", sectorId);
-          console.log(`🟢 Revertido auto-amarilla: sector ${sectorId}`);
-        }
-      }
+      // Piloto se mueve dentro de pista — revertir su auto-amarilla si la tenía
+      await revertAutoYellow(pilotoId);
     }
   }
 
@@ -252,9 +272,9 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
             return next;
           });
 
-          // Auto-yellow: si el piloto está detenido, amarillar su sector
+          // Auto-yellow: solo si el piloto está dentro de la geocerca de pista
           if (u.lat && u.lng) {
-            checkAutoYellow(u.piloto_id, u.lat, u.lng, u.velocidad ?? 0);
+            checkAutoYellow(u.piloto_id, u.lat, u.lng, u.velocidad ?? 0, u.dentro_geocerca ?? null);
           }
         })
       .subscribe();
