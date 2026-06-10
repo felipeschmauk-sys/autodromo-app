@@ -105,7 +105,7 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
     const globalOvride = GLOBAL_FLAGS.has(bandera);
 
     if (sectores.length > 0) {
-      sectores.forEach(s => {
+      sectores.forEach((s, i) => {
         const ef    = globalOvride ? bandera : s.bandera;
         const color = STROKE[ef] || STROKE.verde;
         const pts   = trazado
@@ -122,28 +122,28 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
           L.polyline(pts, { color, weight: 4, opacity: 0.92 }).addTo(map)
         );
 
-        // Etiqueta del sector en el punto medio
-        const midIdx = Math.floor((s.punto_inicio + s.punto_fin) / 2);
-        const mc     = trazado[midIdx];
+        // Etiqueta compacta en el cuarto del sector (no en el medio) para no tapar el trazado
+        const quarterIdx = Math.floor(s.punto_inicio + (s.punto_fin - s.punto_inicio) * 0.25);
+        const mc         = trazado[quarterIdx];
         if (mc) {
           const label = L.divIcon({
             html: `<div style="
               background:white;
               color:${color};
-              border:2px solid ${color};
-              border-radius:6px;
-              padding:3px 10px;
-              font-size:11px;
+              border:1.5px solid ${color};
+              border-radius:4px;
+              padding:1px 5px;
+              font-size:9px;
               font-weight:900;
               font-family:monospace;
-              letter-spacing:1px;
+              letter-spacing:.5px;
               white-space:nowrap;
-              text-transform:uppercase;
-              box-shadow:0 2px 6px rgba(0,0,0,.18);
+              box-shadow:0 1px 3px rgba(0,0,0,.15);
               pointer-events:none;
-            ">${s.nombre}</div>`,
-            iconSize:   [120, 24],
-            iconAnchor: [60, 12],
+              line-height:14px;
+            ">S${i + 1}</div>`,
+            iconSize:   [26, 16],
+            iconAnchor: [13, 20],   // ancla debajo del punto → etiqueta queda fuera del trazado
             className:  "",
           });
           trackRef.current.push(
