@@ -381,6 +381,17 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
 
     setGuardando(false);
     if (error) { showMsg("error", error.message); return; }
+
+    // Si el circuito que se guardó es el activo, propagar max_pilotos al sistema en vivo
+    const esActivo = vista === "editar" && seleccionado?.id === activoId;
+    if (esActivo) {
+      await supabase
+        .from("estado_pista")
+        .update({ max_pilotos: maxPilotos })
+        .eq("activo", true);
+      onMaxPilotosChange?.(maxPilotos);
+    }
+
     showMsg("ok", vista === "editar" ? "Circuito actualizado." : "Circuito guardado correctamente.");
     await cargar();
     setVista("lista");

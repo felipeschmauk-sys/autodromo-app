@@ -757,23 +757,7 @@ export default function AdminPage() {
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad de pista</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-900">{sesiones.length} /</span>
-                  <input
-                    type="number"
-                    min={1} max={50}
-                    value={maxPilotos}
-                    onChange={e => {
-                      const v = Math.max(1, Math.min(50, Number(e.target.value)));
-                      setMaxPilotos(v);
-                    }}
-                    onBlur={async e => {
-                      const v = Math.max(1, Math.min(50, Number(e.target.value)));
-                      await supabase.from("estado_pista").update({ max_pilotos: v }).eq("activo", true);
-                    }}
-                    className="w-14 text-sm font-bold text-gray-900 text-center border border-gray-200 rounded-lg px-1 py-0.5 focus:outline-none focus:ring-2 focus:ring-gray-900"
-                  />
-                </div>
+                <span className="text-sm font-bold text-gray-900">{sesiones.length} / {maxPilotos}</span>
               </div>
               <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
