@@ -120,6 +120,19 @@ export default function SectoresEditor() {
     });
   }, []);
 
+  // ── Mover límite con botones ──────────────────────────────
+  const moverLimite = useCallback((boundaryIdx: number, delta: number) => {
+    setRangos(prev => {
+      const next    = [...prev];
+      const minIdx  = next[boundaryIdx].inicio + 2;
+      const maxIdx  = next[boundaryIdx + 1].fin - 2;
+      const newFin  = Math.max(minIdx, Math.min(maxIdx, next[boundaryIdx].fin + delta));
+      next[boundaryIdx]     = { ...next[boundaryIdx],     fin:    newFin };
+      next[boundaryIdx + 1] = { ...next[boundaryIdx + 1], inicio: newFin };
+      return next;
+    });
+  }, []);
+
   // ── Guardar en Supabase ─────────────────────────────────────
   const guardarSectores = async () => {
     if (!rangos.length || cantidad < 2) return;
@@ -273,39 +286,96 @@ export default function SectoresEditor() {
         )}
       </div>
 
-      {/* ── Nombres de sectores ── */}
+      {/* ── Nombres + controles de límite intercalados ── */}
       {cantidad >= 2 && (
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Nombres
+            Sectores y límites
           </p>
-          <div className="space-y-1.5">
+          <div className="space-y-1">
             {Array.from({ length: cantidad }, (_, i) => {
               const pct = rangos[i]
                 ? (((rangos[i].fin - rangos[i].inicio) / barraTotal) * 100).toFixed(0)
                 : null;
               return (
-                <div
-                  key={i}
-                  className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 border-l-4"
-                  style={{ borderLeftColor: COLORS[i % COLORS.length] }}
-                >
-                  <span className="text-xs font-black text-gray-400 w-4 text-center flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  <input
-                    type="text"
-                    value={nombres[i] ?? `Sector ${i + 1}`}
-                    onChange={e => {
-                      const n = [...nombres];
-                      n[i]   = e.target.value;
-                      setNombres(n);
-                    }}
-                    className="flex-1 bg-transparent text-gray-900 text-sm font-semibold focus:outline-none min-w-0 placeholder-gray-400"
-                    placeholder={`Sector ${i + 1}`}
-                  />
-                  {pct && (
-                    <span className="text-xs text-gray-400 flex-shrink-0 font-mono">{pct}%</span>
+                <div key={i}>
+                  {/* Fila del sector */}
+                  <div
+                    className="flex items-center gap-3 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 border-l-4"
+                    style={{ borderLeftColor: COLORS[i % COLORS.length] }}
+                  >
+                    <span className="text-xs font-black text-gray-400 w-4 text-center flex-shrink-0">
+                      {i + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={nombres[i] ?? `Sector ${i + 1}`}
+                      onChange={e => {
+                        const n = [...nombres];
+                        n[i]   = e.target.value;
+                        setNombres(n);
+                      }}
+                      className="flex-1 bg-transparent text-gray-900 text-sm font-semibold focus:outline-none min-w-0 placeholder-gray-400"
+                      placeholder={`Sector ${i + 1}`}
+                    />
+                    {pct && (
+                      <span className="text-xs text-gray-400 flex-shrink-0 font-mono">{pct}%</span>
+                    )}
+                  </div>
+
+                  {/* Control de límite entre sector i y i+1 */}
+                  {i < cantidad - 1 && rangos[i] && rangos[i + 1] && (
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      {/* Línea divisoria izquierda */}
+                      <div className="flex-1 h-px bg-gray-200" />
+
+                      {/* Indicador de color combinado */}
+                      <div className="flex items-center gap-0 flex-shrink-0">
+                        <div className="w-2 h-4 rounded-l-sm" style={{ background: COLORS[i % COLORS.length] }} />
+                        <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[(i + 1) % COLORS.length] }} />
+                      </div>
+
+                      {/* Botones de ajuste */}
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          onClick={() => moverLimite(i, -10)}
+                          title="Retroceder 10 puntos"
+                          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors select-none"
+                        >
+                          «
+                        </button>
+                        <button
+                          onClick={() => moverLimite(i, -1)}
+                          title="Retroceder 1 punto"
+                          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors select-none"
+                        >
+                          ‹
+                        </button>
+
+                        {/* Posición actual */}
+                        <span className="text-xs font-mono text-gray-500 w-20 text-center">
+                          pt {rangos[i].fin} / {trazado.length}
+                        </span>
+
+                        <button
+                          onClick={() => moverLimite(i, +1)}
+                          title="Avanzar 1 punto"
+                          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors select-none"
+                        >
+                          ›
+                        </button>
+                        <button
+                          onClick={() => moverLimite(i, +10)}
+                          title="Avanzar 10 puntos"
+                          className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 font-bold text-sm flex items-center justify-center transition-colors select-none"
+                        >
+                          »
+                        </button>
+                      </div>
+
+                      {/* Línea divisoria derecha */}
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
                   )}
                 </div>
               );
