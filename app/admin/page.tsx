@@ -848,14 +848,13 @@ export default function AdminPage() {
               </div>
             </div>
 
-          </div>{/* fin columna izquierda */}
+          </div>
 
-          {/* ════ COLUMNA DERECHA: MAPA ════ */}
           <div className="lg:sticky lg:top-[116px]">
             <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} />
           </div>
 
-          </div>{/* fin grid dos columnas */}
+          </div>
         )}
 
 
