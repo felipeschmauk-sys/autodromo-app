@@ -116,7 +116,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
   // ── Loaders ────────────────────────────────────────────────
   const loadCampeonatos = useCallback(async () => {
     const { data } = await supabase
-      .from("campeonatos").select("*").order("temporada", { ascending: false });
+      .from("campeonatos").select("*").order("created_at", { ascending: false });
     setCampeonatos(data || []);
   }, []);
 
