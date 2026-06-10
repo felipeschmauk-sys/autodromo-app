@@ -15,6 +15,30 @@ import { guardarTrazado, guardarGeocerca, type Coordenada } from "@/lib/gps";
 
 // ── Helpers ─────────────────────────────────────────────────────
 
+/** Distancia total del trazado en km usando la fórmula de Haversine */
+function calcularKm(coords: Coordenada[]): number {
+  if (coords.length < 2) return 0;
+  let total = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const R  = 6371;
+    const d1 = (coords[i].lat - coords[i - 1].lat) * Math.PI / 180;
+    const d2 = (coords[i].lng - coords[i - 1].lng) * Math.PI / 180;
+    const a  = Math.sin(d1 / 2) ** 2
+             + Math.cos(coords[i - 1].lat * Math.PI / 180)
+             * Math.cos(coords[i].lat     * Math.PI / 180)
+             * Math.sin(d2 / 2) ** 2;
+    total += R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+  return Math.round(total * 1000) / 1000; // 3 decimales
+}
+
+/** Formatea km: "1.642 km" o "843 m" si < 1 km */
+function fmtKm(coords: Coordenada[]): string {
+  const km = calcularKm(coords);
+  if (km === 0) return "—";
+  return km >= 1 ? `${km.toFixed(3)} km` : `${Math.round(km * 1000)} m`;
+}
+
 function parsearKML(texto: string): Coordenada[] | null {
   try {
     const doc = new DOMParser().parseFromString(texto, "text/xml");
@@ -227,7 +251,7 @@ function MapaCircuito({
         drawTrazado(L, map, coords);
         map.fitBounds(L.latLngBounds(coords.map((c: Coordenada) => [c.lat, c.lng])), { padding: [40, 40] });
       }
-      setKmlMsg(`✓ Trazado importado: ${coords.length} puntos`);
+      setKmlMsg(`✓ Trazado importado: ${fmtKm(coords)}`);
       setTimeout(() => setKmlMsg(null), 3000);
     };
     reader.readAsText(file);
@@ -543,9 +567,7 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
                         </p>
                       )}
                       <div className={`flex gap-2.5 mt-1.5 text-xs ${seleccionado?.id === c.id ? "text-gray-500" : "text-gray-400"}`}>
-                        {(c.trazado_coords?.length || 0) > 0 && <span>🛣 {c.trazado_coords.length} pts</span>}
-                        {(c.geocerca_pista?.length || 0) >= 3 && <span className="text-green-500">● Pista</span>}
-                        {(c.geocerca_recinto?.length || 0) >= 3 && <span className="text-indigo-500">● Recinto</span>}
+                        {(c.trazado_coords?.length || 0) > 0 && <span>🛣 {fmtKm(c.trazado_coords)}</span>}
                         {!(c.trazado_coords?.length) && !(c.geocerca_pista?.length) && (
                           <span className="text-amber-500">Sin coordenadas</span>
                         )}
@@ -586,24 +608,22 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
                     </div>
                   </div>
 
-                  {/* Stats de coordenadas */}
-                  <div className="grid grid-cols-3 gap-3">
-                    {[
-                      { label: "Trazado",          val: seleccionado.trazado_coords?.length || 0,  unit: "puntos",   cls: "bg-amber-50 border-amber-200 text-amber-700"    },
-                      { label: "Geocerca pista",   val: seleccionado.geocerca_pista?.length || 0,  unit: "vértices", cls: "bg-green-50 border-green-200 text-green-700"    },
-                      { label: "Geocerca recinto", val: seleccionado.geocerca_recinto?.length || 0, unit: "vértices", cls: "bg-indigo-50 border-indigo-200 text-indigo-700"  },
-                    ].map(s => (
-                      <div key={s.label} className={`rounded-xl border px-4 py-3 ${s.cls}`}>
-                        <p className="text-xs font-semibold opacity-60">{s.label}</p>
-                        <p className="text-2xl font-black mt-0.5 leading-none">{s.val}</p>
-                        <p className="text-xs opacity-50 mt-0.5">{s.unit}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  <div className="flex items-center justify-between text-sm text-gray-500 bg-gray-50 rounded-xl px-4 py-3">
-                    <span>Capacidad máxima</span>
-                    <span className="font-bold text-gray-900">{seleccionado.max_pilotos} vehículos</span>
+                  {/* Stats del circuito */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border bg-amber-50 border-amber-200 text-amber-700 px-4 py-3">
+                      <p className="text-xs font-semibold opacity-60">Longitud</p>
+                      <p className="text-2xl font-black mt-0.5 leading-none">
+                        {(seleccionado.trazado_coords?.length || 0) >= 2
+                          ? fmtKm(seleccionado.trazado_coords)
+                          : "—"}
+                      </p>
+                      <p className="text-xs opacity-50 mt-0.5">trazado</p>
+                    </div>
+                    <div className="rounded-xl border bg-gray-50 border-gray-200 text-gray-700 px-4 py-3">
+                      <p className="text-xs font-semibold opacity-60">Capacidad</p>
+                      <p className="text-2xl font-black mt-0.5 leading-none">{seleccionado.max_pilotos}</p>
+                      <p className="text-xs opacity-50 mt-0.5">vehículos máx.</p>
+                    </div>
                   </div>
 
                   {/* Botón activar */}
