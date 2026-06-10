@@ -54,9 +54,10 @@ const FLAG_LABEL: Record<string, string> = {
 // ── Componente ─────────────────────────────────────────────────
 interface DireccionCarreraProps {
   fechaId?: string | null;
+  mapHeight?: number;
 }
 
-export default function DireccionCarrera({ fechaId }: DireccionCarreraProps = {}) {
+export default function DireccionCarrera({ fechaId, mapHeight = 320 }: DireccionCarreraProps = {}) {
   const [trazado,  setTrazado]  = useState<Coordenada[]>([]);
   const [pilotos,  setPilotos]  = useState<Map<string, PilotoEnPista>>(new Map());
   const [bandera,  setBandera]  = useState("verde");
@@ -316,7 +317,7 @@ export default function DireccionCarrera({ fechaId }: DireccionCarreraProps = {}
           )}
 
           {/* Mapa Leaflet */}
-          <div style={{ height: 300, position: "relative" }}>
+          <div style={{ height: mapHeight, position: "relative" }}>
             {trazado.length > 0 ? (
               <LeafletAdminMap
                 trazado={trazado}

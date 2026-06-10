@@ -548,7 +548,7 @@ export default function AdminPage() {
         ))}
       </nav>
 
-      <main className="max-w-3xl mx-auto p-4 space-y-4">
+      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" ? "max-w-7xl" : "max-w-3xl"}`}>
 
         {/* ── BANNER: sin evento activo ──────────────────────────────── */}
         {!contexto.fechaId && tab !== "eventos" && tab !== "config" && (
@@ -580,7 +580,11 @@ export default function AdminPage() {
         )}
 
         {tab === "direccion" && !!contexto.fechaId && (
-          <>
+          <div className="lg:grid lg:grid-cols-[380px_1fr] lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+
+          {/* ════ COLUMNA IZQUIERDA: CONTROLES ════ */}
+          <div className="space-y-4">
+
             {/* ── Estado de pista + control de banderas ── */}
             <div className={`rounded-2xl border-2 px-5 py-4 space-y-4 transition-colors duration-500 ${
               bandera === "roja"             ? "bg-red-50    border-red-300"
@@ -737,9 +741,6 @@ export default function AdminPage() {
               </div>
             )}
 
-            {/* ── MAPA EN TIEMPO REAL ── */}
-            <DireccionCarrera fechaId={contexto.fechaId} />
-
             {/* ── MENSAJES A PILOTOS — desactivado temporalmente ── */}
 
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
@@ -846,7 +847,15 @@ export default function AdminPage() {
                 )}
               </div>
             </div>
-          </>
+
+          </div>{/* fin columna izquierda */}
+
+          {/* ════ COLUMNA DERECHA: MAPA ════ */}
+          <div className="lg:sticky lg:top-[116px]">
+            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} />
+          </div>
+
+          </div>{/* fin grid dos columnas */}
         )}
 
 
