@@ -125,7 +125,28 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
       .from("fechas_evento").select("*")
       .eq("campeonato_id", campId)
       .order("fecha_evento");
-    setFechas(data || []);
+
+    const hoy = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+
+    // Auto-finalizar fechas cuyo día ya pasó y aún no están marcadas como finalizadas
+    const vencidas = (data || []).filter(
+      f => f.fecha_evento < hoy && f.estado !== "finalizado"
+    );
+    if (vencidas.length > 0) {
+      await Promise.all(
+        vencidas.map(f =>
+          supabase.from("fechas_evento").update({ estado: "finalizado" }).eq("id", f.id)
+        )
+      );
+      // Recargar con estados actualizados
+      const { data: refresh } = await supabase
+        .from("fechas_evento").select("*")
+        .eq("campeonato_id", campId)
+        .order("fecha_evento");
+      setFechas(refresh || []);
+    } else {
+      setFechas(data || []);
+    }
   }, []);
 
   const loadInscripciones = useCallback(async (fechaId: string) => {

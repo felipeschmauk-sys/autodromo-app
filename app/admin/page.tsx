@@ -222,11 +222,13 @@ export default function AdminPage() {
   }, []);
 
   const cargarFechasDeContexto = useCallback(async (campeonatoId: string) => {
+    const hoy = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
     const { data } = await supabase
       .from("fechas_evento")
-      .select("id, nombre, tipo, estado")
+      .select("id, nombre, tipo, estado, fecha_evento")
       .eq("campeonato_id", campeonatoId)
-      .in("estado", ["abierto", "finalizado"])
+      .in("estado", ["borrador", "abierto"])   // solo fechas no finalizadas
+      .gte("fecha_evento", hoy)                // solo hoy o futuras
       .order("fecha_evento");
     setFechasOpt((data || []) as FechaOpt[]);
   }, []);
