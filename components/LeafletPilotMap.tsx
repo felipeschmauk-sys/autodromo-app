@@ -149,8 +149,10 @@ export default function LeafletPilotMap({
     }
 
     return () => {
-      if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current);
-      map.remove();
+      // try/catch: si Leaflet falla al desmontar (ej: al rotar el teléfono),
+      // React puede dejar una copia "fantasma" del panel en pantalla.
+      try { if (watchRef.current !== null) navigator.geolocation.clearWatch(watchRef.current); } catch {}
+      try { map.remove(); } catch {}
       mapRef.current     = null;
       posRef.current     = null;
       gpsHistRef.current = [];
@@ -183,7 +185,7 @@ export default function LeafletPilotMap({
     }
 
     // Siempre ajustar la vista al trazado completo — el punto GPS se mueve sin mover el mapa
-    map.fitBounds(L.polyline(latlngs).getBounds(), { padding: [28, 28] });
+    try { map.fitBounds(L.polyline(latlngs).getBounds(), { padding: [28, 28] }); } catch {}
   }, [trazado, sectores, bandera]);
 
   // ── Invalidar tamaño cuando cambia height ─────────────────

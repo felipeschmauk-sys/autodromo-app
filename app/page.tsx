@@ -202,19 +202,20 @@ const FLAG_CONFIG: Record<string, {
   bg: string; border: string; color: string; subColor: string;
   emoji: string; title: string; desc: string; pulse: boolean;
 }> = {
-  verde:          { bg: "bg-green-950",  border: "border-green-800",  color: "text-green-400",  subColor: "text-green-700",  emoji: "🟢",    title: "PISTA LIBRE",      desc: "Circulación normal habilitada",                       pulse: false },
-  amarilla:       { bg: "bg-yellow-950", border: "border-yellow-800", color: "text-yellow-400", subColor: "text-yellow-700", emoji: "🟡",    title: "BANDERA AMARILLA", desc: "Reducir velocidad · Prohibido adelantar",              pulse: false },
-  amarilla_doble: { bg: "bg-yellow-950", border: "border-yellow-700", color: "text-yellow-300", subColor: "text-yellow-600", emoji: "🟡🟡", title: "DOBLE AMARILLA",   desc: "Peligro grave · Velocidad reducida · No adelantar",    pulse: true  },
-  roja:           { bg: "bg-red-950",    border: "border-red-700",    color: "text-red-400",    subColor: "text-red-700",    emoji: "🔴",    title: "BANDERA ROJA",     desc: "Detención inmediata · Dirigirse a boxes",              pulse: true  },
-  safety_car:     { bg: "bg-yellow-950", border: "border-yellow-700", color: "text-yellow-400", subColor: "text-yellow-700", emoji: "🚗",    title: "SAFETY CAR",       desc: "Seguir al safety car · No adelantar",                 pulse: true  },
-  blanca:         { bg: "bg-gray-900",   border: "border-gray-700",   color: "text-gray-200",   subColor: "text-gray-500",   emoji: "⬜",    title: "VEHÍCULO LENTO",  desc: "Máxima precaución · No adelantar",                    pulse: false },
-  negra:          { bg: "bg-gray-950",   border: "border-gray-600",   color: "text-white",      subColor: "text-gray-400",   emoji: "⬛",    title: "INGRESE A BOXES", desc: "El piloto señalado debe retirarse de pista",          pulse: false },
+  // Colores SÓLIDOS y llamativos (fondo = color real de la bandera, sin pulso)
+  verde:          { bg: "bg-green-600",  border: "border-green-700",  color: "text-white",      subColor: "text-white/80",   emoji: "🟢",    title: "PISTA LIBRE",      desc: "Circulación normal habilitada",                       pulse: false },
+  amarilla:       { bg: "bg-yellow-400", border: "border-yellow-500", color: "text-black",      subColor: "text-black/70",   emoji: "🟡",    title: "BANDERA AMARILLA", desc: "Reducir velocidad · Prohibido adelantar",              pulse: false },
+  amarilla_doble: { bg: "bg-yellow-400", border: "border-yellow-500", color: "text-black",      subColor: "text-black/70",   emoji: "🟡🟡", title: "DOBLE AMARILLA",   desc: "Peligro grave · Velocidad reducida · No adelantar",    pulse: false },
+  roja:           { bg: "bg-red-600",    border: "border-red-700",    color: "text-white",      subColor: "text-white/85",   emoji: "🔴",    title: "BANDERA ROJA",     desc: "Detención inmediata · Dirigirse a boxes",              pulse: false },
+  safety_car:     { bg: "bg-yellow-400", border: "border-yellow-500", color: "text-black",      subColor: "text-black/70",   emoji: "🚗",    title: "SAFETY CAR",       desc: "Seguir al safety car · No adelantar",                 pulse: false },
+  blanca:         { bg: "bg-gray-100",   border: "border-gray-300",   color: "text-gray-900",   subColor: "text-gray-600",   emoji: "⬜",    title: "VEHÍCULO LENTO",  desc: "Máxima precaución · No adelantar",                    pulse: false },
+  negra:          { bg: "bg-black",      border: "border-gray-700",   color: "text-white",      subColor: "text-white/70",   emoji: "⬛",    title: "INGRESE A BOXES", desc: "El piloto señalado debe retirarse de pista",          pulse: false },
   // ── Task #58: banderas personales, de sector y cuadros ──
-  negra_blanco:   { bg: "bg-gray-900",   border: "border-gray-500",   color: "text-gray-100",   subColor: "text-gray-400",   emoji: "⬛⬜", title: "ADVERTENCIA",      desc: "Conducta antideportiva · Última advertencia",         pulse: false },
-  azul:           { bg: "bg-blue-950",   border: "border-blue-700",   color: "text-blue-400",   subColor: "text-blue-700",   emoji: "🔵",    title: "BANDERA AZUL",     desc: "Auto más rápido se aproxima · Facilite el paso",      pulse: false },
-  taller:         { bg: "bg-purple-950", border: "border-purple-700", color: "text-purple-400", subColor: "text-purple-700", emoji: "🔧",    title: "INGRESE A TALLER", desc: "Dirigirse a boxes de inmediato",                      pulse: false },
-  rayas:          { bg: "bg-yellow-950", border: "border-red-800",    color: "text-yellow-400", subColor: "text-yellow-700", emoji: "⚠️",    title: "PISTA RESBALADIZA", desc: "Aceite o escombros en el sector · Máxima precaución", pulse: false },
-  cuadros:        { bg: "bg-gray-950",   border: "border-gray-500",   color: "text-white",      subColor: "text-gray-400",   emoji: "🏁",    title: "BANDERA DE CUADROS", desc: "Fin de la sesión · Ingrese a boxes",                pulse: false },
+  negra_blanco:   { bg: "bg-gray-800",   border: "border-gray-600",   color: "text-white",      subColor: "text-white/70",   emoji: "⬛⬜", title: "ADVERTENCIA",      desc: "Conducta antideportiva · Última advertencia",         pulse: false },
+  azul:           { bg: "bg-blue-600",   border: "border-blue-700",   color: "text-white",      subColor: "text-white/80",   emoji: "🔵",    title: "BANDERA AZUL",     desc: "Auto más rápido se aproxima · Facilite el paso",      pulse: false },
+  taller:         { bg: "bg-violet-600", border: "border-violet-700", color: "text-white",      subColor: "text-white/80",   emoji: "🔧",    title: "INGRESE A TALLER", desc: "Dirigirse a boxes de inmediato",                      pulse: false },
+  rayas:          { bg: "bg-yellow-400", border: "border-red-600",    color: "text-red-700",    subColor: "text-red-800/80", emoji: "⚠️",    title: "PISTA RESBALADIZA", desc: "Aceite o escombros en el sector · Máxima precaución", pulse: false },
+  cuadros:        { bg: "bg-black",      border: "border-gray-600",   color: "text-white",      subColor: "text-white/70",   emoji: "🏁",    title: "BANDERA DE CUADROS", desc: "Fin de la sesión · Ingrese a boxes",                pulse: false },
 };
 
 // ── Task #58: detección de sector por posición GPS ────────────
@@ -1606,33 +1607,23 @@ export default function Home() {
                 />
               </div>
 
-              {/* Panel bandera — 30% */}
+              {/* Panel bandera — 30% (color sólido, sin pulso, sin badge GPS) */}
               <div
-                className={`flex flex-col items-center justify-center p-6 border-l ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}
+                className={`flex flex-col items-center justify-center p-6 border-l ${flag.bg} ${flag.border}`}
                 style={{ width: "30%" }}
               >
                 <span className="text-6xl mb-5 leading-none">{flag.emoji}</span>
-                <p className={`text-xl font-black tracking-widest text-center leading-tight ${flag.color}`}>
+                <p className={`text-2xl font-black tracking-widest text-center leading-tight ${flag.color}`}>
                   {flag.title}
                 </p>
-                <p className={`text-xs mt-3 text-center leading-snug ${flag.subColor}`}>
+                <p className={`text-sm mt-3 text-center leading-snug font-semibold ${flag.subColor}`}>
                   {flag.desc}
                 </p>
                 {flagEsPersonal && (
-                  <span className={`mt-3 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full bg-white/10 ${flag.color}`}>
+                  <span className={`mt-3 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full bg-black/20 ${flag.color}`}>
                     DIRIGIDA A TI
                   </span>
                 )}
-                {estadoPista.sector && (
-                  <p className="text-xs text-gray-600 mt-4">Sector: {estadoPista.sector}</p>
-                )}
-                {estadoPista.mensaje && (
-                  <p className="text-xs text-gray-600 mt-1">{estadoPista.mensaje}</p>
-                )}
-                {/* Semáforo GPS */}
-                <div className={`mt-6 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${semaforoGPS.bg} ${semaforoGPS.text}`}>
-                  {semaforoGPS.dot} {semaforoGPS.label}
-                </div>
               </div>
 
             </div>
