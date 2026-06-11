@@ -313,17 +313,27 @@ export default function AdminPage() {
           () => { cargarSesiones(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "pilotos" },
           () => { cargarPilotos(); })
-      .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" },
-          (payload) => {
-            const n = payload.new as any;
-            if (n?.bandera)     setBandera(n.bandera);
-            if (n?.max_pilotos) setMaxPilotos(n.max_pilotos);
-          })
       .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" },
           () => { cargarSectores(); })
       .subscribe((status) => { setRealtimeConectado(status === "SUBSCRIBED"); });
+
+    // Canal separado para la bandera global — si comparte canal con sectores,
+    // los eventos pueden cruzarse y la bandera "parpadea" con cambios de sector.
+    const chEstado = supabase
+      .channel("admin-estado-pista")
+      .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" },
+          (payload) => {
+            const n = payload.new as any;
+            // Solo eventos de la fila activa de estado_pista (sectores no tienen `activo`)
+            if (n?.activo !== true) return;
+            if (typeof n.bandera === "string") setBandera(n.bandera);
+            if (n.max_pilotos) setMaxPilotos(n.max_pilotos);
+          })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(chEstado);
       setRealtimeConectado(false);
     };
   }, [autenticado, cargarPilotos, cargarSesiones, cargarBandera, cargarSectores]);

@@ -681,12 +681,23 @@ export default function Home() {
       .order("orden")
       .then(({ data }) => { if (data) setSectores(data); });
 
-    const channel = supabase
-      .channel("flag-main")
+    // Canales SEPARADOS para bandera global y sectores — si comparten canal,
+    // los eventos pueden cruzarse y la bandera global "parpadea" con los
+    // cambios de sector (ej: amarilla automática encendiéndose/apagándose).
+    const chEstado = supabase
+      .channel("flag-estado")
       .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" }, (payload) => {
         const n = payload.new as any;
-        if (n) setEstadoPista({ bandera: n.bandera || "verde", sector: n.sector, mensaje: n.mensaje });
+        // Solo aceptar eventos que realmente sean de la fila activa de estado_pista
+        // (las filas de sectores no tienen columna `activo`)
+        if (n && n.activo === true && typeof n.bandera === "string") {
+          setEstadoPista({ bandera: n.bandera || "verde", sector: n.sector, mensaje: n.mensaje });
+        }
       })
+      .subscribe();
+
+    const chSectores = supabase
+      .channel("flag-sectores")
       .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" }, () => {
         supabase
           .from("sectores_pista")
@@ -696,7 +707,10 @@ export default function Home() {
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(chEstado);
+      supabase.removeChannel(chSectores);
+    };
   }, [stage]);
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──

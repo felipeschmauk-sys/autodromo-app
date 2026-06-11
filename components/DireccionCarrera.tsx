@@ -176,7 +176,11 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
     const ch = supabase
       .channel("dir-bandera")
       .on("postgres_changes", { event: "*", schema: "public", table: "estado_pista" },
-        payload => { const n = payload.new as any; if (n?.bandera) setBandera(n.bandera); })
+        payload => {
+          const n = payload.new as any;
+          // Solo eventos de la fila activa (evita cruces con otras tablas/filas)
+          if (n?.activo === true && typeof n.bandera === "string") setBandera(n.bandera);
+        })
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
