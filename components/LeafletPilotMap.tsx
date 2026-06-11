@@ -41,7 +41,36 @@ const STROKE: Record<string, string> = {
   blanca:         "#9ca3af",
 };
 
-const GLOBAL_FLAGS = new Set(["roja", "amarilla", "amarilla_doble", "safety_car"]);
+const GLOBAL_FLAGS = new Set(["roja", "amarilla", "amarilla_doble", "safety_car", "cuadros"]);
+
+// ── Task #59: dibujar polilínea según bandera ──────────────────
+// Las polilíneas SVG de Leaflet solo aceptan color sólido, así que los
+// patrones se simulan superponiendo una línea base + una línea con dashes:
+//   rayas   → base amarilla + dashes rojos  (peligro en sector)
+//   cuadros → base blanca   + dashes negros (fin de sesión)
+function pushFlagPolyline(
+  map: L.Map,
+  layers: L.Layer[],
+  pts: [number, number][],
+  flag: string,
+  mainWeight: number,
+  glowWeight: number,
+  glowOpacity: number,
+) {
+  if (flag === "rayas") {
+    layers.push(L.polyline(pts, { color: "#eab308", weight: glowWeight, opacity: glowOpacity }).addTo(map));
+    layers.push(L.polyline(pts, { color: "#eab308", weight: mainWeight, opacity: 0.95, lineCap: "butt" }).addTo(map));
+    layers.push(L.polyline(pts, { color: "#ef4444", weight: mainWeight, opacity: 0.95, dashArray: "10 10", lineCap: "butt" }).addTo(map));
+  } else if (flag === "cuadros") {
+    layers.push(L.polyline(pts, { color: "#374151", weight: glowWeight, opacity: glowOpacity }).addTo(map));
+    layers.push(L.polyline(pts, { color: "#ffffff", weight: mainWeight, opacity: 1, lineCap: "butt" }).addTo(map));
+    layers.push(L.polyline(pts, { color: "#111111", weight: mainWeight, opacity: 1, dashArray: "9 9", lineCap: "butt" }).addTo(map));
+  } else {
+    const color = STROKE[flag] || STROKE.verde;
+    layers.push(L.polyline(pts, { color, weight: glowWeight, opacity: glowOpacity }).addTo(map));
+    layers.push(L.polyline(pts, { color, weight: mainWeight, opacity: 0.95 }).addTo(map));
+  }
+}
 
 // ── Componente ─────────────────────────────────────────────────
 export default function LeafletPilotMap({
@@ -141,26 +170,16 @@ export default function LeafletPilotMap({
 
     if (sectores.length > 0 && !override) {
       sectores.forEach(s => {
-        const color = STROKE[s.bandera] || STROKE.verde;
-        const pts   = trazado
+        const pts = trazado
           .slice(s.punto_inicio, s.punto_fin + 1)
           .map(c => [c.lat, c.lng] as [number, number]);
         if (pts.length < 2) return;
-        trackRef.current.push(
-          L.polyline(pts, { color, weight: 20, opacity: 0.18 }).addTo(map)
-        );
-        trackRef.current.push(
-          L.polyline(pts, { color, weight: 7, opacity: 0.95 }).addTo(map)
-        );
+        // Task #59: con patrón si es rayas/cuadros
+        pushFlagPolyline(map, trackRef.current, pts, s.bandera, 7, 20, 0.18);
       });
     } else {
-      const color = STROKE[bandera] || STROKE.verde;
-      trackRef.current.push(
-        L.polyline(latlngs, { color, weight: 20, opacity: 0.18 }).addTo(map)
-      );
-      trackRef.current.push(
-        L.polyline(latlngs, { color, weight: 7, opacity: 0.95 }).addTo(map)
-      );
+      // Task #59: trazado completo con patrón si corresponde
+      pushFlagPolyline(map, trackRef.current, latlngs, bandera, 7, 20, 0.18);
     }
 
     // Siempre ajustar la vista al trazado completo — el punto GPS se mueve sin mover el mapa

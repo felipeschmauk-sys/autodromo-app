@@ -54,7 +54,7 @@ interface ValidacionResult {
   advertencia?: string;
 }
 type PanelTab = "direccion" | "qr" | "pilotos" | "config" | "revision" | "eventos";
-type TipoEvento = "racing" | "time_attack" | "entrenamiento";
+type TipoEvento = "racing" | "track_day" | "entrenamiento";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
 
 interface Contexto {
@@ -70,12 +70,12 @@ interface FechaOpt     { id: string; nombre: string; tipo: TipoEvento; estado: s
 
 const TIPO_LABEL: Record<TipoEvento, string> = {
   racing:        "Racing",
-  time_attack:   "Time Attack",
+  track_day:     "Track Day",
   entrenamiento: "Entrenamiento",
 };
 const TIPO_COLOR: Record<TipoEvento, string> = {
   racing:        "bg-red-600 text-white",
-  time_attack:   "bg-blue-600 text-white",
+  track_day:     "bg-blue-600 text-white",
   entrenamiento: "bg-emerald-600 text-white",
 };
 
@@ -88,7 +88,7 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
     { id: "revision",  label: "Rev. Técnica", emoji: "🔧"  },
     { id: "config",    label: "Config",       emoji: "⚙️"  },
   ],
-  time_attack: [
+  track_day: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },

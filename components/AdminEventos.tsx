@@ -28,7 +28,7 @@ interface FechaEvento {
   trazado: string | null;
   cupos_max: number;
   estado: "borrador" | "abierto" | "finalizado";
-  tipo: "racing" | "time_attack" | "entrenamiento";
+  tipo: "racing" | "track_day" | "entrenamiento";
   descripcion: string | null;
 }
 
@@ -74,7 +74,7 @@ interface AdminEventosProps {
 
 const TIPO_EVENTO_OPTS = [
   { value: "racing",        label: "Racing (carrera)" },
-  { value: "time_attack",   label: "Time Attack" },
+  { value: "track_day",     label: "Track Day" },
   { value: "entrenamiento", label: "Entrenamiento" },
 ];
 
@@ -110,7 +110,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
   const [ffTrazado, setFfTrazado]           = useState("");
   const [ffCupos, setFfCupos]               = useState("30");
   const [ffEstado, setFfEstado]             = useState<"borrador" | "abierto" | "finalizado">("borrador");
-  const [ffTipo, setFfTipo]                 = useState<"racing" | "time_attack" | "entrenamiento">("racing");
+  const [ffTipo, setFfTipo]                 = useState<"racing" | "track_day" | "entrenamiento">("racing");
   const [ffDesc, setFfDesc]                 = useState("");
 
   // ── Loaders ────────────────────────────────────────────────
@@ -562,11 +562,11 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                           <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
                           {f.tipo && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                              f.tipo === "racing"      ? "bg-red-100 text-red-700" :
-                              f.tipo === "time_attack" ? "bg-blue-100 text-blue-700" :
-                                                        "bg-emerald-100 text-emerald-700"
+                              f.tipo === "racing"    ? "bg-red-100 text-red-700" :
+                              f.tipo === "track_day" ? "bg-blue-100 text-blue-700" :
+                                                      "bg-emerald-100 text-emerald-700"
                             }`}>
-                              {f.tipo === "racing" ? "Racing" : f.tipo === "time_attack" ? "Time Attack" : "Entreno"}
+                              {f.tipo === "racing" ? "Racing" : f.tipo === "track_day" ? "Track Day" : "Entreno"}
                             </span>
                           )}
                           <span className="flex items-center gap-1 text-xs text-gray-500">

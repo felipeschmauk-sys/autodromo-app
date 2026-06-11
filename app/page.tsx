@@ -24,7 +24,7 @@ interface EventoActivo {
   fechaId: string;
   campeonatoNombre: string;
   fechaNombre: string;
-  tipo: "racing" | "time_attack" | "entrenamiento";
+  tipo: "racing" | "track_day" | "entrenamiento";
   estadoInsc: string;
 }
 interface CampeonatoItem { id: string; nombre: string; temporada: number; descripcion: string | null; }
@@ -32,7 +32,7 @@ interface FechaItem {
   id: string; nombre: string; fecha_evento: string;
   autodromo: string | null; trazado: string | null;
   cupos_max: number; estado: string;
-  tipo: "racing" | "time_attack" | "entrenamiento";
+  tipo: "racing" | "track_day" | "entrenamiento";
   campeonato_id: string;
 }
 interface InscripcionItem {
@@ -209,7 +209,23 @@ const FLAG_CONFIG: Record<string, {
   safety_car:     { bg: "bg-orange-950", border: "border-orange-700", color: "text-orange-400", subColor: "text-orange-700", emoji: "🚗",    title: "SAFETY CAR",       desc: "Seguir al safety car · No adelantar",                 pulse: true  },
   blanca:         { bg: "bg-gray-900",   border: "border-gray-700",   color: "text-gray-200",   subColor: "text-gray-500",   emoji: "⬜",    title: "VEHÍCULO LENTO",  desc: "Máxima precaución · No adelantar",                    pulse: false },
   negra:          { bg: "bg-gray-950",   border: "border-gray-600",   color: "text-white",      subColor: "text-gray-400",   emoji: "⬛",    title: "INGRESE A BOXES", desc: "El piloto señalado debe retirarse de pista",          pulse: false },
+  // ── Task #58: banderas personales, de sector y cuadros ──
+  negra_blanco:   { bg: "bg-gray-900",   border: "border-gray-500",   color: "text-gray-100",   subColor: "text-gray-400",   emoji: "⬛⬜", title: "ADVERTENCIA",      desc: "Conducta antideportiva · Última advertencia",         pulse: false },
+  azul:           { bg: "bg-blue-950",   border: "border-blue-700",   color: "text-blue-400",   subColor: "text-blue-700",   emoji: "🔵",    title: "BANDERA AZUL",     desc: "Auto más rápido se aproxima · Facilite el paso",      pulse: false },
+  taller:         { bg: "bg-purple-950", border: "border-purple-700", color: "text-purple-400", subColor: "text-purple-700", emoji: "🔧",    title: "INGRESE A TALLER", desc: "Dirigirse a boxes de inmediato",                      pulse: false },
+  rayas:          { bg: "bg-yellow-950", border: "border-red-800",    color: "text-yellow-400", subColor: "text-yellow-700", emoji: "⚠️",    title: "PISTA RESBALADIZA", desc: "Aceite o escombros en el sector · Máxima precaución", pulse: false },
+  cuadros:        { bg: "bg-gray-950",   border: "border-gray-500",   color: "text-white",      subColor: "text-gray-400",   emoji: "🏁",    title: "BANDERA DE CUADROS", desc: "Fin de la sesión · Ingrese a boxes",                pulse: false },
 };
+
+// ── Task #58: detección de sector por posición GPS ────────────
+function findClosestIdx(lat: number, lng: number, trazado: Coordenada[]): number {
+  let minD = Infinity, closest = 0;
+  trazado.forEach((c, i) => {
+    const d = (lat - c.lat) ** 2 + (lng - c.lng) ** 2;
+    if (d < minD) { minD = d; closest = i; }
+  });
+  return closest;
+}
 
 // ── Componente: Speed Card (zona amarilla portrait) ──────────
 function SpeedCard({
@@ -219,7 +235,7 @@ function SpeedCard({
 }: {
   geocercaCoords: Coordenada[];
   recintoCoords?: Coordenada[];
-  onGPSChange?: (dentro: boolean | null, dentroRecinto: boolean | null) => void;
+  onGPSChange?: (dentro: boolean | null, dentroRecinto: boolean | null, pos?: Coordenada) => void;
 }) {
   const [vel, setVel]             = useState(0);
   const [prec, setPrec]           = useState<number | null>(null);
@@ -247,7 +263,8 @@ function SpeedCard({
         if (recintoCoords.length >= 3)  setDentroRecinto(nuevoDentroRecinto);
         onGPSChange?.(
           geocercaCoords.length >= 3 ? nuevoDentro : null,
-          recintoCoords.length  >= 3 ? nuevoDentroRecinto : null
+          recintoCoords.length  >= 3 ? nuevoDentroRecinto : null,
+          pos2d
         );
       },
       () => setGpsOk(false),
@@ -550,6 +567,10 @@ export default function Home() {
   const [gpsEnPista,    setGpsEnPista]    = useState<boolean | null>(null);
   const [gpsEnRecinto,  setGpsEnRecinto]  = useState<boolean | null>(null);
 
+  // ── Task #58: jerarquía de banderas ──
+  const [banderaPersonal, setBanderaPersonal] = useState<string | null>(null);
+  const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
+
   // ── Estados de mensajes del director ──
   const [mensajeActivo, setMensajeActivo] = useState<MensajePiloto | null>(null);
   const mensajeDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -776,6 +797,10 @@ export default function Home() {
           ? puntoEnGeocerca({ lat, lng }, gc)
           : true;
 
+        // Task #58: posición para detectar el sector del piloto
+        // (funciona también en landscape, donde SpeedCard no está montado)
+        setPosPiloto({ lat, lng, dentro: gc.length >= 3 ? dentro : null });
+
         await registrarUbicacion({
           piloto_id:        pilotoId,
           sesion_id:        sesionId!,
@@ -794,15 +819,18 @@ export default function Home() {
     const checkSession = async () => {
       const { data } = await supabase
         .from("sesiones")
-        .select("id, estado")
+        .select("id, estado, bandera_piloto")
         .eq("piloto_id", pilotoId)
         .eq("estado", "activa")
         .maybeSingle();
       if (data?.id) {
         iniciarGPS(data.id);
-      } else if (!data && sesionId) {
+        // Task #58: bandera personal asignada por el director
+        setBanderaPersonal(data.bandera_piloto ?? null);
+      } else if (!data) {
         // sesión cerrada remotamente
-        detenerGPS();
+        if (sesionId) detenerGPS();
+        setBanderaPersonal(null);
       }
     };
 
@@ -830,8 +858,15 @@ export default function Home() {
         payload => {
           const s = payload.new as any;
           if (s.piloto_id === pilotoId) {
-            if (s.estado === "activa")   iniciarGPS(s.id);
-            if (s.estado === "inactiva") detenerGPS();
+            if (s.estado === "activa") {
+              iniciarGPS(s.id);
+              // Task #58: bandera personal en tiempo real
+              setBanderaPersonal(s.bandera_piloto ?? null);
+            }
+            if (s.estado === "inactiva") {
+              detenerGPS();
+              setBanderaPersonal(null);
+            }
           }
         })
       .subscribe();
@@ -956,7 +991,25 @@ export default function Home() {
       ? { label: "Fuera",        bg: "bg-red-600",    text: "text-white",    dot: "🔴" }
       : { label: "GPS…",         bg: "bg-gray-700",   text: "text-gray-300", dot: "⚪" };
 
-  const flag = FLAG_CONFIG[estadoPista.bandera] || FLAG_CONFIG.verde;
+  // ── Task #58: jerarquía de banderas ──────────────────────────
+  // Prioridad: cuadros > roja > bandera personal > bandera del sector > bandera global
+  const sectorActual = (() => {
+    if (!posPiloto || posPiloto.dentro !== true) return null;     // solo si está dentro de pista
+    if (trazado.length < 2 || sectores.length === 0) return null;
+    const idx = findClosestIdx(posPiloto.lat, posPiloto.lng, trazado);
+    return sectores.find(s => idx >= s.punto_inicio && idx <= s.punto_fin) || null;
+  })();
+  const banderaSector = sectorActual && sectorActual.bandera !== "verde" ? sectorActual.bandera : null;
+
+  const banderaEfectiva =
+    estadoPista.bandera === "cuadros" ? "cuadros"
+    : estadoPista.bandera === "roja"  ? "roja"
+    : banderaPersonal                 ? banderaPersonal
+    : banderaSector                   ? banderaSector
+    : estadoPista.bandera;
+
+  const flagEsPersonal = !!banderaPersonal && banderaEfectiva === banderaPersonal;
+  const flag = FLAG_CONFIG[banderaEfectiva] || FLAG_CONFIG.verde;
   const habilitado = estadoPiloto === "habilitado";
 
   // ─────────────────────────────────────────────────────────────
@@ -1224,10 +1277,10 @@ export default function Home() {
           STAGE: EVENTOS — Selector de campeonato y fecha
       ══════════════════════════════════════════════════════ */}
       {stage === "eventos" && (() => {
-        const TIPO_LABEL = { racing: "Racing", time_attack: "Time Attack", entrenamiento: "Entreno" };
+        const TIPO_LABEL = { racing: "Racing", track_day: "Track Day", entrenamiento: "Entreno" };
         const TIPO_COLOR = {
           racing:        "bg-red-600 text-white",
-          time_attack:   "bg-blue-600 text-white",
+          track_day:     "bg-blue-600 text-white",
           entrenamiento: "bg-emerald-600 text-white",
         };
         const INSC_BADGE: Record<string, { label: string; cls: string }> = {
@@ -1542,6 +1595,11 @@ export default function Home() {
                 <p className={`text-xs mt-3 text-center leading-snug ${flag.subColor}`}>
                   {flag.desc}
                 </p>
+                {flagEsPersonal && (
+                  <span className={`mt-3 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full bg-white/10 ${flag.color}`}>
+                    DIRIGIDA A TI
+                  </span>
+                )}
                 {estadoPista.sector && (
                   <p className="text-xs text-gray-600 mt-4">Sector: {estadoPista.sector}</p>
                 )}
@@ -1626,6 +1684,11 @@ export default function Home() {
                     <div>
                       <p className={`text-2xl font-black tracking-widest leading-none ${flag.color}`}>{flag.title}</p>
                       <p className={`text-sm mt-1.5 leading-snug ${flag.subColor}`}>{flag.desc}</p>
+                      {flagEsPersonal && (
+                        <span className={`mt-1.5 inline-block text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full bg-white/10 ${flag.color}`}>
+                          DIRIGIDA A TI
+                        </span>
+                      )}
                       {estadoPista.sector  && <p className="text-xs text-gray-500 mt-1">Sector: {estadoPista.sector}</p>}
                       {estadoPista.mensaje && <p className="text-xs text-gray-500 mt-0.5">{estadoPista.mensaje}</p>}
                     </div>
@@ -1636,7 +1699,10 @@ export default function Home() {
                 <SpeedCard
                   geocercaCoords={geocerca}
                   recintoCoords={geocercaRecinto}
-                  onGPSChange={(d, r) => { setGpsEnPista(d); setGpsEnRecinto(r); }}
+                  onGPSChange={(d, r, pos) => {
+                    setGpsEnPista(d); setGpsEnRecinto(r);
+                    if (pos) setPosPiloto({ lat: pos.lat, lng: pos.lng, dentro: d }); // Task #58
+                  }}
                 />
 
               </div>
@@ -1840,6 +1906,11 @@ export default function Home() {
                   <div>
                     <p className={`font-black text-xl tracking-widest ${flag.color}`}>{flag.title}</p>
                     <p className={`text-sm mt-0.5 ${flag.subColor}`}>{flag.desc}</p>
+                    {flagEsPersonal && (
+                      <span className={`mt-1.5 inline-block text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full bg-white/10 ${flag.color}`}>
+                        DIRIGIDA A TI
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
