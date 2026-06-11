@@ -131,16 +131,23 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
     dentroGeocerca: boolean | null,
   ) {
     if (banderaRef.current !== "verde") return;
-    if (dentroGeocerca !== true) { await revertAutoYellow(pilotoId); return; }
 
-    const stopped = velocidad <= 5;
-    if (stopped) {
+    // Solo revertir si está CONFIRMADO fuera (false). Si es null/desconocido,
+    // no hacer nada — el jitter del GPS en el borde de la geocerca causaba
+    // un bucle encender/apagar cada 3 segundos.
+    if (dentroGeocerca === false) { await revertAutoYellow(pilotoId); return; }
+    if (dentroGeocerca !== true) return;
+
+    if (velocidad <= 5) {
+      // Detenido en pista → amarilla en su sector
       const sector = detectSectorByPos(lat, lng);
       if (sector && sector.bandera === "verde" && !autoYellowRef.current.has(sector.id)) {
         autoYellowRef.current.set(sector.id, pilotoId);
         await supabase.from("sectores_pista").update({ bandera: "amarilla" }).eq("id", sector.id);
       }
-    } else {
+    } else if (velocidad > 8) {
+      // Histéresis: recién sobre 8 km/h se considera "en movimiento" y se
+      // revierte. Entre 5 y 8 no se hace nada (banda muerta anti-parpadeo).
       await revertAutoYellow(pilotoId);
     }
   }
@@ -154,7 +161,8 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
   useEffect(() => {
     const load = async () => {
       const { data } = await supabase.from("sectores_pista").select("*").order("orden");
-      if (data) setSectores(data);
+      // Solo actualizar si cambió de verdad — evita redibujar el mapa en cada evento
+      if (data) setSectores(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
     };
     load();
     const ch = supabase

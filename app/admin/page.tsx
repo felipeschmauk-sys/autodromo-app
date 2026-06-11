@@ -266,7 +266,8 @@ export default function AdminPage() {
       .from("sectores_pista")
       .select("*")
       .order("orden");
-    if (data) setSectores(data);
+    // Solo actualizar si cambió de verdad — evita re-renders innecesarios
+    if (data) setSectores(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
   }, []);
 
   const setSectorBandera = useCallback(async (id: string, nuevaBandera: string) => {

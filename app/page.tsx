@@ -674,12 +674,17 @@ export default function Home() {
         if (data) setEstadoPista({ bandera: data.bandera || "verde", sector: data.sector, mensaje: data.mensaje });
       });
 
-    // Cargar sectores
+    // Cargar sectores (solo actualizar estado si los datos realmente cambiaron,
+    // para no redibujar el mapa y la pizarra sin necesidad)
+    const aplicarSectores = (data: Sector[] | null) => {
+      if (!data) return;
+      setSectores(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
+    };
     supabase
       .from("sectores_pista")
       .select("*")
       .order("orden")
-      .then(({ data }) => { if (data) setSectores(data); });
+      .then(({ data }) => aplicarSectores(data as Sector[] | null));
 
     // Canales SEPARADOS para bandera global y sectores — si comparten canal,
     // los eventos pueden cruzarse y la bandera global "parpadea" con los
@@ -691,7 +696,11 @@ export default function Home() {
         // Solo aceptar eventos que realmente sean de la fila activa de estado_pista
         // (las filas de sectores no tienen columna `activo`)
         if (n && n.activo === true && typeof n.bandera === "string") {
-          setEstadoPista({ bandera: n.bandera || "verde", sector: n.sector, mensaje: n.mensaje });
+          setEstadoPista(prev =>
+            prev.bandera === n.bandera && prev.sector === n.sector && prev.mensaje === n.mensaje
+              ? prev
+              : { bandera: n.bandera || "verde", sector: n.sector, mensaje: n.mensaje }
+          );
         }
       })
       .subscribe();
@@ -703,7 +712,7 @@ export default function Home() {
           .from("sectores_pista")
           .select("*")
           .order("orden")
-          .then(({ data }) => { if (data) setSectores(data); });
+          .then(({ data }) => aplicarSectores(data as Sector[] | null));
       })
       .subscribe();
 
