@@ -603,7 +603,8 @@ export default function AdminPage() {
               bandera === "roja"             ? "bg-red-50    border-red-300"
               : bandera === "amarilla"       ? "bg-yellow-50 border-yellow-300"
               : bandera === "amarilla_doble" ? "bg-yellow-50 border-yellow-400"
-              : bandera === "safety_car"     ? "bg-orange-50 border-orange-300"
+              : bandera === "safety_car"     ? "bg-yellow-50 border-yellow-300"
+              : bandera === "cuadros"        ? "bg-gray-100  border-gray-400"
               : "bg-green-50 border-green-300"
             }`}>
               {/* Estado actual */}
@@ -612,20 +613,23 @@ export default function AdminPage() {
                   <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
                     bandera === "roja"               ? "bg-red-500 animate-pulse"
                     : bandera.startsWith("amarilla") ? "bg-yellow-500 animate-pulse"
-                    : bandera === "safety_car"        ? "bg-orange-500 animate-pulse"
+                    : bandera === "safety_car"        ? "bg-yellow-500 animate-pulse"
+                    : bandera === "cuadros"           ? "bg-gray-800"
                     : "bg-green-500 animate-pulse"
                   }`} />
                   <div>
                     <p className={`font-bold text-base leading-tight ${
                       bandera === "roja"               ? "text-red-700"
                       : bandera.startsWith("amarilla") ? "text-yellow-700"
-                      : bandera === "safety_car"        ? "text-orange-700"
+                      : bandera === "safety_car"        ? "text-yellow-700"
+                      : bandera === "cuadros"           ? "text-gray-800"
                       : "text-green-700"
                     }`}>
                       {bandera === "roja"             ? "🚩 BANDERA ROJA — Detención inmediata"
                        : bandera === "amarilla"       ? "🟡 BANDERA AMARILLA — Reducir velocidad"
                        : bandera === "amarilla_doble" ? "🟡🟡 DOBLE AMARILLA — Peligro grave"
                        : bandera === "safety_car"     ? "🚗 SAFETY CAR — Seguir al safety car"
+                       : bandera === "cuadros"        ? "🏁 BANDERA DE CUADROS — Fin de sesión"
                        : "🟢 PISTA HABILITADA"}
                     </p>
                     <p className="text-sm text-gray-500">
@@ -650,28 +654,6 @@ export default function AdminPage() {
                   🟢 Verde
                 </button>
                 <button
-                  onClick={() => aplicarBandera("amarilla")}
-                  disabled={bandera === "amarilla" || cargandoBandera}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
-                    bandera === "amarilla"
-                      ? "bg-yellow-500 border-yellow-500 text-white shadow-lg shadow-yellow-200 animate-pulse"
-                      : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-50 disabled:opacity-40"
-                  }`}
-                >
-                  🟡 Amarilla
-                </button>
-                <button
-                  onClick={() => aplicarBandera("safety_car")}
-                  disabled={bandera === "safety_car" || cargandoBandera}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
-                    bandera === "safety_car"
-                      ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-200 animate-pulse"
-                      : "bg-white border-orange-300 text-orange-700 hover:bg-orange-50 disabled:opacity-40"
-                  }`}
-                >
-                  🚗 Safety Car
-                </button>
-                <button
                   onClick={() => aplicarBandera("roja")}
                   disabled={bandera === "roja" || cargandoBandera}
                   className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
@@ -681,6 +663,32 @@ export default function AdminPage() {
                   }`}
                 >
                   🔴 Roja
+                </button>
+                <button
+                  onClick={() => aplicarBandera("safety_car")}
+                  disabled={bandera === "safety_car" || cargandoBandera}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                    bandera === "safety_car"
+                      ? "bg-yellow-500 border-yellow-500 text-white shadow-lg shadow-yellow-200 animate-pulse"
+                      : "bg-white border-yellow-300 text-yellow-700 hover:bg-yellow-50 disabled:opacity-40"
+                  }`}
+                >
+                  🚗 Safety Car
+                </button>
+                <button
+                  onClick={() => aplicarBandera("cuadros")}
+                  disabled={bandera === "cuadros" || cargandoBandera}
+                  className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl font-bold text-sm transition-all border-2 ${
+                    bandera === "cuadros"
+                      ? "bg-gray-900 border-gray-900 text-white shadow-lg shadow-gray-300"
+                      : "bg-white border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-40"
+                  }`}
+                >
+                  <span
+                    className="w-4 h-4 rounded-sm border border-gray-300 flex-shrink-0"
+                    style={{ background: "repeating-conic-gradient(#111 0% 25%, #fff 0% 50%) 0 / 8px 8px" }}
+                  />
+                  Cuadros
                 </button>
               </div>
             </div>
@@ -700,7 +708,7 @@ export default function AdminPage() {
                   {sectores.map((s, i) => {
                     const colors = ["bg-blue-400", "bg-amber-400", "bg-emerald-400", "bg-pink-400", "bg-violet-400", "bg-orange-400", "bg-cyan-400", "bg-lime-400"];
                     const dotColor = colors[i % colors.length];
-                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "safety_car";
+                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "safety_car" || bandera === "cuadros";
                     const efectiva = isGlobalOverride ? bandera : s.bandera;
                     return (
                       <div key={s.id} className="px-5 py-3 flex items-center gap-4">
@@ -712,10 +720,17 @@ export default function AdminPage() {
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${
                           efectiva === "roja"           ? "bg-red-100 text-red-600"
                           : efectiva === "amarilla"     ? "bg-yellow-100 text-yellow-700"
-                          : efectiva === "safety_car"   ? "bg-orange-100 text-orange-700"
+                          : efectiva === "safety_car"   ? "bg-yellow-100 text-yellow-700"
+                          : efectiva === "cuadros"      ? "bg-gray-200 text-gray-800"
+                          : efectiva === "rayas"        ? "bg-yellow-100 text-red-700"
                           : "bg-green-100 text-green-700"
                         }`}>
-                          {efectiva === "roja" ? "🔴 Roja" : efectiva === "amarilla" ? "🟡 Amarilla" : efectiva === "safety_car" ? "🚗 SC" : "🟢 Verde"}
+                          {efectiva === "roja" ? "🔴 Roja"
+                           : efectiva === "amarilla" ? "🟡 Amarilla"
+                           : efectiva === "safety_car" ? "🚗 SC"
+                           : efectiva === "cuadros" ? "🏁 Fin"
+                           : efectiva === "rayas" ? "⚠️ Rayas"
+                           : "🟢 Verde"}
                         </span>
                         {/* Botones solo si no hay override global */}
                         {!isGlobalOverride && (

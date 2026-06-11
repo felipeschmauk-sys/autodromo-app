@@ -37,7 +37,7 @@ const STROKE: Record<string, string> = {
   amarilla:       "#eab308",
   amarilla_doble: "#f59e0b",
   roja:           "#ef4444",
-  safety_car:     "#f97316",
+  safety_car:     "#eab308",   // SC se señaliza con amarillo, no naranjo
   blanca:         "#9ca3af",
 };
 
