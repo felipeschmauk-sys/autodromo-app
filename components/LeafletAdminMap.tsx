@@ -193,13 +193,53 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
     pilotos.forEach(p => {
       // Solo mostrar pilotos con GPS válido y dentro de la geocerca
       // (dentro_geocerca === null = sin geocerca configurada → mostrar igual)
-      const sinGps    = p.lat === null || p.lng === null;
-      const fueraGeo  = p.dentro_geocerca === false;
+      const sinGps   = p.lat === null || p.lng === null;
+      const enBoxes  = p.dentro_geocerca === false;
 
-      if (sinGps || fueraGeo) {
+      // Sin GPS nunca → eliminar marcador
+      if (sinGps) {
         if (markersRef.current[p.piloto_id]) {
           map.removeLayer(markersRef.current[p.piloto_id]);
           delete markersRef.current[p.piloto_id];
+        }
+        return;
+      }
+
+      // En boxes → punto pequeño gris en última posición conocida
+      if (enBoxes) {
+        const icon = L.divIcon({
+          html: `
+            <div style="display:flex;flex-direction:column;gap:2px;white-space:nowrap">
+              <div style="display:flex;align-items:center;gap:4px">
+                <div style="
+                  width:8px;height:8px;border-radius:50%;
+                  background:#6b7280;border:1.5px solid #fff;
+                  opacity:0.6;flex-shrink:0;
+                "></div>
+                <span style="
+                  background:rgba(5,5,15,.6);color:#9ca3af;
+                  border:1px solid #37415166;border-radius:4px;
+                  padding:1px 5px;font-size:10px;font-weight:700;font-family:monospace;
+                  letter-spacing:.5px;opacity:0.75;
+                ">${p.nombre.split(" ")[0].toUpperCase()}</span>
+              </div>
+              <div style="
+                margin-left:12px;background:rgba(5,5,15,.5);color:#6b7280;
+                border-radius:3px;padding:0 5px;
+                font-size:9px;font-weight:700;font-family:monospace;letter-spacing:.5px
+              ">BOXES</div>
+            </div>`,
+          iconSize:   [100, 36],
+          iconAnchor: [4, 6],
+          className:  "",
+        });
+        if (markersRef.current[p.piloto_id]) {
+          markersRef.current[p.piloto_id].setLatLng([p.lat!, p.lng!]);
+          markersRef.current[p.piloto_id].setIcon(icon);
+        } else {
+          markersRef.current[p.piloto_id] = L.marker([p.lat!, p.lng!], {
+            icon, zIndexOffset: 300,
+          }).addTo(map);
         }
         return;
       }
