@@ -65,9 +65,13 @@ const COLORES = [
 interface DireccionCarreraProps {
   fechaId?: string | null;
   mapHeight?: number;
+  /** ID del circuito activo para este evento. Cuando se provee, lee trazado
+   *  directamente de la tabla `circuitos` en lugar de la tabla global `trazado_pista`.
+   *  Cambiar este prop dispara un re-fetch inmediato sin depender de Realtime. */
+  circuitoId?: string | null;
 }
 
-export default function DireccionCarrera({ fechaId, mapHeight = 320 }: DireccionCarreraProps = {}) {
+export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId }: DireccionCarreraProps = {}) {
   const [trazado,     setTrazado]     = useState<Coordenada[]>([]);
   const [pilotos,     setPilotos]     = useState<Map<string, PilotoEnPista>>(new Map());
   const [bandera,     setBandera]     = useState("verde");
@@ -153,16 +157,22 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
     }
   }
 
-  // ── Cargar circuito + suscribir cambios ───────────────────────────────────
+  // ── Cargar trazado ─────────────────────────────────────────────────────────
+  // Si se provee circuitoId, leer directo de `circuitos` (fuente de verdad única).
+  // Cuando circuitoId cambia React re-ejecuta este efecto → mapa actualiza sin Realtime.
+  // Fallback: tabla global `trazado_pista` (para compatibilidad).
   useEffect(() => {
-    const load = () => getTrazadoActivo().then(c => { if (c) setTrazado(c); });
-    load();
-    const ch = supabase
-      .channel("dir-trazado")
-      .on("postgres_changes", { event: "*", schema: "public", table: "trazado_pista" }, load)
-      .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, []);
+    if (circuitoId) {
+      supabase
+        .from("circuitos")
+        .select("trazado_coords")
+        .eq("id", circuitoId)
+        .single()
+        .then(({ data }) => { if (data?.trazado_coords?.length >= 2) setTrazado(data.trazado_coords); });
+    } else {
+      getTrazadoActivo().then(c => { if (c) setTrazado(c); });
+    }
+  }, [circuitoId]);
 
   // ── Cargar sectores y suscribir cambios ────────────────────────────────────
   useEffect(() => {

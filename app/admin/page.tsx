@@ -138,6 +138,8 @@ export default function AdminPage() {
   // GPS state per pilot (para badge en "Pilotos en sesión")
   const [pilotoGpsState, setPilotoGpsState] = useState<Map<string, { dentro_geocerca: boolean | null; ts: number }>>(new Map());
   const [gpsTick, setGpsTick] = useState(0);
+  // Circuito activo por evento — fuente de verdad para DireccionCarrera
+  const [circuitoIdActivo, setCircuitoIdActivo] = useState<string | null>(null);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
   const [qrStep, setQrStep] = useState<QRStep>("idle");
   const [validacion, setValidacion] = useState<ValidacionResult | null>(null);
@@ -248,10 +250,24 @@ export default function AdminPage() {
     if (!fecha) return;
     setContexto(prev => ({ ...prev, fechaId: fecha.id, fechaNombre: fecha.nombre, tipo: fecha.tipo }));
     cargarPilotosEvento(fecha.id);
+    // Restaurar circuito asociado a este evento (si existe)
+    const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
+    setCircuitoIdActivo(porFecha[fecha.id] ?? null);
     // Si el tab actual no está disponible para este tipo, ir al primero disponible
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento]);
+
+  // Callback: cuando CircuitoManager activa un circuito, vincularlo al evento activo
+  const handleCircuitoActivado = useCallback((circuitoId: string) => {
+    setCircuitoIdActivo(circuitoId);
+    const fechaId = contexto.fechaId;
+    if (fechaId) {
+      const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
+      porFecha[fechaId] = circuitoId;
+      localStorage.setItem("circuitosByFecha", JSON.stringify(porFecha));
+    }
+  }, [contexto.fechaId]);
 
   // ── Banderas ─────────────────────────────────────────────────────────────
   const cargarBandera = useCallback(async () => {
@@ -619,7 +635,7 @@ export default function AdminPage() {
 
           {/* ════ COLUMNA IZQUIERDA: MAPA (desktop) ════ */}
           <div className="lg:sticky lg:top-[116px] order-2 lg:order-1">
-            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} />
+            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} circuitoId={circuitoIdActivo} />
           </div>
 
           {/* ════ COLUMNA DERECHA: CONTROLES ════ */}
@@ -1379,7 +1395,10 @@ export default function AdminPage() {
           <div className="space-y-5">
 
             {/* Biblioteca de circuitos */}
-            <CircuitoManager onMaxPilotosChange={setMaxPilotos} />
+            <CircuitoManager
+              onMaxPilotosChange={setMaxPilotos}
+              onCircuitoActivado={handleCircuitoActivado}
+            />
 
             {/* Sectores de pista */}
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">

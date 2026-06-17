@@ -323,9 +323,12 @@ function MapaCircuito({
 
 interface CircuitoManagerProps {
   onMaxPilotosChange?: (max: number) => void;
+  /** Llamado con el id del circuito recién activado. Permite al padre actualizar
+   *  DireccionCarrera y persistir la asociación fecha→circuito. */
+  onCircuitoActivado?: (circuitoId: string) => void;
 }
 
-export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerProps) {
+export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado }: CircuitoManagerProps) {
   const [circuitos,    setCircuitos]    = useState<Circuito[]>([]);
   const [busqueda,     setBusqueda]     = useState("");
   const [cargando,     setCargando]     = useState(true);
@@ -464,6 +467,7 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
       setActivoId(c.id);
       localStorage.setItem("activoCircuitoId", c.id);
       onMaxPilotosChange?.(c.max_pilotos);
+      onCircuitoActivado?.(c.id);
       showMsg("ok", `✅ "${c.nombre}" activado. Trazado, geocercas y sectores actualizados.`);
     } catch (err: any) {
       showMsg("error", err.message || "Error al activar el circuito.");
