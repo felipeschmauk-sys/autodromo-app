@@ -1217,7 +1217,7 @@ export default function Home() {
                     </div>
                   )}
                   <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700">
-                    📋 Una vez creada tu cuenta deberás aprobar la prueba de conocimientos para quedar habilitado.
+                    📋 Al inscribirte en un campeonato deberás completar una prueba de conocimientos del reglamento del evento.
                   </div>
                   {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
                   <div className="flex gap-2 pt-2">
@@ -1243,7 +1243,7 @@ export default function Home() {
                   {subTab === "reglamento" && (
                     <div className="space-y-4">
                       <div className="bg-indigo-50 border border-indigo-100 rounded-xl px-4 py-3 text-sm text-indigo-700 font-medium">
-                        📖 Lee el reglamento TCC 2026 antes de rendir la prueba. Necesitas 100% para habilitar tu cuenta.
+                        📖 Lee el reglamento TCC 2026 antes de rendir la prueba.
                       </div>
 
                       {/* Secciones del reglamento TCC */}
@@ -1271,62 +1271,66 @@ export default function Home() {
 
                   {subTab === "prueba" && (
                     <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <div className="text-sm text-gray-500">Responde el 100% correctamente para habilitar tu cuenta.</div>
-                        {evaluado && (
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${aprobado ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"}`}>
-                            {aprobado ? "✓ Aprobada" : `${incorrectas} incorrecta${incorrectas > 1 ? "s" : ""}`}
-                          </span>
-                        )}
+
+                      {/* ── Banner: prueba en construcción ── */}
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-4 text-center space-y-1">
+                        <div className="text-2xl">🚧</div>
+                        <p className="text-sm font-semibold text-amber-800">Prueba de conocimientos en desarrollo</p>
+                        <p className="text-xs text-amber-700 leading-relaxed">
+                          Próximamente deberás completar esta evaluación al inscribirte en un campeonato.
+                          Por ahora podés acceder directamente a la plataforma.
+                        </p>
                       </div>
-                      <div className="space-y-4">
-                        {PREGUNTAS.map((p, qi) => (
+
+                      {/* Preguntas visibles pero deshabilitadas — preview de lo que vendrá */}
+                      <div className="space-y-3 opacity-40 pointer-events-none select-none">
+                        {PREGUNTAS.slice(0, 3).map((p, qi) => (
                           <div key={qi} className="border rounded-xl p-4 space-y-3">
                             <div className="text-xs text-gray-400">Pregunta {qi + 1} de {PREGUNTAS.length}</div>
-                            <div className="text-sm font-medium">{p.pregunta}</div>
+                            <div className="text-sm font-medium text-gray-700">{p.pregunta}</div>
                             <div className="space-y-2">
-                              {p.opciones.map((op, oi) => {
-                                let cls = "w-full text-left border rounded-xl px-3 py-2.5 text-sm transition flex items-center gap-3 ";
-                                if (!evaluado) cls += respuestas[qi] === oi ? "border-indigo-500 bg-indigo-50 text-indigo-700" : "hover:border-indigo-300 hover:bg-indigo-50";
-                                else if (oi === p.correcta) cls += "border-green-500 bg-green-50 text-green-700";
-                                else if (respuestas[qi] === oi) cls += "border-red-400 bg-red-50 text-red-600";
-                                else cls += "opacity-40";
-                                return (
-                                  <button key={oi} onClick={() => selRespuesta(qi, oi)} className={cls} disabled={evaluado}>
-                                    <span className="w-5 h-5 rounded-full border flex items-center justify-center text-xs font-medium flex-shrink-0">
-                                      {evaluado && oi === p.correcta ? "✓" : evaluado && respuestas[qi] === oi ? "✗" : String.fromCharCode(65 + oi)}
-                                    </span>
-                                    {op}
-                                  </button>
-                                );
-                              })}
+                              {p.opciones.map((op, oi) => (
+                                <div key={oi} className="w-full text-left border rounded-xl px-3 py-2.5 text-sm flex items-center gap-3 bg-white">
+                                  <span className="w-5 h-5 rounded-full border flex items-center justify-center text-xs font-medium flex-shrink-0">
+                                    {String.fromCharCode(65 + oi)}
+                                  </span>
+                                  {op}
+                                </div>
+                              ))}
                             </div>
                           </div>
                         ))}
-                      </div>
-                      {evaluado && aprobado && (
-                        <div className="bg-green-50 border border-green-200 rounded-xl p-4 text-sm text-green-700">
-                          <div className="font-semibold mb-1">🎉 ¡Prueba aprobada!</div>Accediendo a tu cuenta...
+                        <div className="border border-dashed rounded-xl px-4 py-3 text-center text-xs text-gray-400">
+                          + {PREGUNTAS.length - 3} preguntas más
                         </div>
-                      )}
-                      {evaluado && !aprobado && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-sm text-red-600">
-                          <div className="font-semibold mb-1">✗ {incorrectas} respuesta{incorrectas > 1 ? "s" : ""} incorrecta{incorrectas > 1 ? "s" : ""}</div>
-                          Necesitas 100%. Las correctas están en verde.
-                        </div>
-                      )}
-                      <div className="flex gap-2">
-                        {!evaluado && (
-                          <button onClick={evaluar} className="flex-1 bg-indigo-600 text-white py-2.5 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition">
-                            Enviar respuestas →
-                          </button>
-                        )}
-                        {evaluado && !aprobado && (
-                          <button onClick={reintentar} className="flex-1 border py-2.5 rounded-xl text-sm font-medium hover:bg-gray-50 transition">
-                            🔄 Reintentar
-                          </button>
-                        )}
                       </div>
+
+                      {/* Botón de acceso directo */}
+                      <div className="border-t pt-4 space-y-2">
+                        <button
+                          onClick={async () => {
+                            setLoading(true);
+                            setEstadoPiloto("habilitado");
+                            const piloto = await getPiloto();
+                            if (piloto) {
+                              await aprobarPrueba(piloto.id);
+                              setPilotoData({ ...piloto, prueba_aprobada: true });
+                            }
+                            cargarCampeonatos();
+                            if (piloto) cargarMisInscripciones(piloto.id);
+                            setStage("eventos");
+                            setLoading(false);
+                          }}
+                          disabled={loading}
+                          className="w-full bg-indigo-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-60"
+                        >
+                          {loading ? "Accediendo..." : "Confirmar y acceder a la plataforma →"}
+                        </button>
+                        <p className="text-xs text-gray-400 text-center">
+                          La prueba será obligatoria al momento de inscribirse en un campeonato.
+                        </p>
+                      </div>
+
                     </div>
                   )}
                 </div>
