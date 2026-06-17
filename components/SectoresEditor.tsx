@@ -31,7 +31,11 @@ interface Rango {
   color:  string;
 }
 
-export default function SectoresEditor() {
+interface SectoresEditorProps {
+  circuitoId?: string | null;
+}
+
+export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {}) {
   const [trazado,   setTrazado]   = useState<Coordenada[]>([]);
   const [cantidad,  setCantidad]  = useState(1);
   const [nombres,   setNombres]   = useState<string[]>(["Sector 1"]);
@@ -41,9 +45,20 @@ export default function SectoresEditor() {
   const [cargando,  setCargando]  = useState(true);
 
   // ── Cargar trazado y sectores existentes ──────────────────
+  // circuitoId como dep: cuando cambia el circuito activo, recarga el trazado
   useEffect(() => {
     const init = async () => {
-      const coords = await getTrazadoActivo();
+      let coords: Coordenada[] | null = null;
+      if (circuitoId) {
+        const { data } = await supabase
+          .from("circuitos")
+          .select("trazado_coords")
+          .eq("id", circuitoId)
+          .single();
+        coords = data?.trazado_coords ?? null;
+      } else {
+        coords = await getTrazadoActivo();
+      }
       if (coords) setTrazado(coords);
 
       try {
@@ -62,7 +77,7 @@ export default function SectoresEditor() {
       }
     };
     init();
-  }, []);
+  }, [circuitoId]); // re-carga cuando cambia el circuito activo
 
   // ── Cuando cambia la cantidad, ajustar nombres y recalcular rangos ─
   const cambiarCantidad = (nueva: number) => {

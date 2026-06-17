@@ -1410,7 +1410,7 @@ export default function AdminPage() {
                 </div>
               </div>
               <div className="p-5">
-                <SectoresEditor />
+                <SectoresEditor circuitoId={circuitoIdActivo} />
               </div>
             </div>
 
