@@ -168,7 +168,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
         .select("trazado_coords")
         .eq("id", circuitoId)
         .single()
-        .then(({ data }) => { if (data?.trazado_coords?.length >= 2) setTrazado(data.trazado_coords); });
+        .then(({ data }) => { if (data?.trazado_coords?.length >= 2) setTrazado(data?.trazado_coords ?? []); });
     } else {
       getTrazadoActivo().then(c => { if (c) setTrazado(c); });
     }
