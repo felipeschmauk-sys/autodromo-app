@@ -369,7 +369,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
         <div className="col-span-2">
           <label className={labelCls}>Nombre del evento *</label>
           <input value={ffNombre} onChange={e => setFfNombre(e.target.value)}
-            placeholder="ej. Fecha 3 – Las Vizcachas" className={inputCls} />
+            placeholder="ej. Fecha 3 – Nombre del evento" className={inputCls} />
         </div>
         <div>
           <label className={labelCls}>N° de fecha</label>
@@ -384,7 +384,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
         <div>
           <label className={labelCls}>Autódromo</label>
           <input value={ffAutodromo} onChange={e => setFfAutodromo(e.target.value)}
-            placeholder="ej. Las Vizcachas" className={inputCls} />
+            placeholder="ej. Nombre del autódromo" className={inputCls} />
         </div>
         <div>
           <label className={labelCls}>Trazado</label>

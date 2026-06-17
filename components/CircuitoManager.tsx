@@ -669,7 +669,7 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
                 <input
                   type="text" value={nombre} onChange={e => setNombre(e.target.value)}
                   className="mt-1.5 w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
-                  placeholder="Autódromo Las Vizcachas"
+                  placeholder="Nombre del autódromo"
                 />
               </div>
               <div>
