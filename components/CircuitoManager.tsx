@@ -331,7 +331,9 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
   const [cargando,     setCargando]     = useState(true);
   const [vista,        setVista]        = useState<Vista>("lista");
   const [seleccionado, setSeleccionado] = useState<Circuito | null>(null);
-  const [activoId,     setActivoId]     = useState<string | null>(null);
+  const [activoId,     setActivoId]     = useState<string | null>(
+    typeof window !== "undefined" ? localStorage.getItem("activoCircuitoId") : null
+  );
 
   // Form state
   const [nombre,           setNombre]           = useState("");
@@ -359,7 +361,15 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
       .from("circuitos")
       .select("*")
       .order("created_at", { ascending: false });
-    if (data) setCircuitos(data);
+    if (data) {
+      setCircuitos(data);
+      // Verificar que el circuito activo guardado todavía existe
+      const guardado = typeof window !== "undefined" ? localStorage.getItem("activoCircuitoId") : null;
+      if (guardado && !data.find((c: any) => c.id === guardado)) {
+        localStorage.removeItem("activoCircuitoId");
+        setActivoId(null);
+      }
+    }
     setCargando(false);
   };
 
@@ -452,6 +462,7 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
       await supabase.from("sectores_pista").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       setActivoId(c.id);
+      localStorage.setItem("activoCircuitoId", c.id);
       onMaxPilotosChange?.(c.max_pilotos);
       showMsg("ok", `✅ "${c.nombre}" activado. Trazado, geocercas y sectores actualizados.`);
     } catch (err: any) {
