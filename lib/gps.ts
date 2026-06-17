@@ -30,7 +30,37 @@ export async function guardarTrazado(
   coordenadas: Coordenada[],
   nombre: string = 'Circuito principal'
 ) {
-  await supabase.from('trazado_pista').update({ activo: false }).eq('activo', true)
+  // Actualizar fila activa existente (evita INSERT bloqueado por RLS)
+  const { data: activo } = await supabase
+    .from('trazado_pista')
+    .select('id')
+    .eq('activo', true)
+    .maybeSingle()
+
+  if (activo?.id) {
+    const { error } = await supabase
+      .from('trazado_pista')
+      .update({ nombre, coordenadas })
+      .eq('id', activo.id)
+    return { error: error?.message }
+  }
+
+  // Sin fila activa → tomar cualquier fila y activarla
+  const { data: cualquiera } = await supabase
+    .from('trazado_pista')
+    .select('id')
+    .limit(1)
+    .maybeSingle()
+
+  if (cualquiera?.id) {
+    const { error } = await supabase
+      .from('trazado_pista')
+      .update({ nombre, coordenadas, activo: true })
+      .eq('id', cualquiera.id)
+    return { error: error?.message }
+  }
+
+  // Tabla vacía → insertar (setup inicial, requiere RLS permisivo)
   const { error } = await supabase
     .from('trazado_pista')
     .insert({ nombre, coordenadas, activo: true })
@@ -58,13 +88,40 @@ export async function guardarGeocerca(
   nombre?: string
 ) {
   const nombreDefault = tipo === 'recinto' ? 'Recinto' : 'Pista Principal'
-  // Desactivar geocerca anterior del mismo tipo
-  await supabase
+
+  // Actualizar fila activa existente del mismo tipo (evita INSERT bloqueado por RLS)
+  const { data: activa } = await supabase
     .from('geocerca')
-    .update({ activa: false })
+    .select('id')
     .eq('activa', true)
     .eq('tipo', tipo)
+    .maybeSingle()
 
+  if (activa?.id) {
+    const { error } = await supabase
+      .from('geocerca')
+      .update({ nombre: nombre ?? nombreDefault, coordenadas })
+      .eq('id', activa.id)
+    return { error: error?.message }
+  }
+
+  // Sin fila activa del tipo → tomar cualquier fila del mismo tipo
+  const { data: cualquiera } = await supabase
+    .from('geocerca')
+    .select('id')
+    .eq('tipo', tipo)
+    .limit(1)
+    .maybeSingle()
+
+  if (cualquiera?.id) {
+    const { error } = await supabase
+      .from('geocerca')
+      .update({ nombre: nombre ?? nombreDefault, coordenadas, activa: true })
+      .eq('id', cualquiera.id)
+    return { error: error?.message }
+  }
+
+  // Sin ninguna fila del tipo → insertar (setup inicial)
   const { error } = await supabase
     .from('geocerca')
     .insert({ nombre: nombre ?? nombreDefault, coordenadas, activa: true, tipo })
