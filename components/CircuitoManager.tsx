@@ -448,9 +448,12 @@ export default function CircuitoManager({ onMaxPilotosChange }: CircuitoManagerP
         .update({ max_pilotos: c.max_pilotos })
         .eq("activo", true);
 
+      // Limpiar sectores del trazado anterior (índices ya no corresponden al nuevo circuito)
+      await supabase.from("sectores_pista").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+
       setActivoId(c.id);
       onMaxPilotosChange?.(c.max_pilotos);
-      showMsg("ok", `✅ "${c.nombre}" activado. Trazado y geocercas aplicados al sistema.`);
+      showMsg("ok", `✅ "${c.nombre}" activado. Trazado, geocercas y sectores actualizados.`);
     } catch (err: any) {
       showMsg("error", err.message || "Error al activar el circuito.");
     } finally {

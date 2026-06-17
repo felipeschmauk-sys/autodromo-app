@@ -153,9 +153,15 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
     }
   }
 
-  // ── Cargar circuito ────────────────────────────────────────────────────────
+  // ── Cargar circuito + suscribir cambios ───────────────────────────────────
   useEffect(() => {
-    getTrazadoActivo().then(c => { if (c) setTrazado(c); });
+    const load = () => getTrazadoActivo().then(c => { if (c) setTrazado(c); });
+    load();
+    const ch = supabase
+      .channel("dir-trazado")
+      .on("postgres_changes", { event: "*", schema: "public", table: "trazado_pista" }, load)
+      .subscribe();
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
   // ── Cargar sectores y suscribir cambios ────────────────────────────────────
