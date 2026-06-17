@@ -135,6 +135,9 @@ export default function AdminPage() {
   const [ingresoManualOkId, setIngresoManualOkId] = useState<string | null>(null);
   const [accionandoInscId, setAccionandoInscId] = useState<string | null>(null);
   const [alertas, setAlertas] = useState<string[]>([]);
+  // GPS state per pilot (para badge en "Pilotos en sesión")
+  const [pilotoGpsState, setPilotoGpsState] = useState<Map<string, { dentro_geocerca: boolean | null; ts: number }>>(new Map());
+  const [gpsTick, setGpsTick] = useState(0);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
   const [qrStep, setQrStep] = useState<QRStep>("idle");
   const [validacion, setValidacion] = useState<ValidacionResult | null>(null);
@@ -316,7 +319,19 @@ export default function AdminPage() {
           () => { cargarPilotos(); })
       .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" },
           () => { cargarSectores(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "ubicaciones_piloto" },
+          (payload) => {
+            const u = payload.new as any;
+            setPilotoGpsState(prev => {
+              const next = new Map(prev);
+              next.set(u.piloto_id, { dentro_geocerca: u.dentro_geocerca, ts: Date.now() });
+              return next;
+            });
+          })
       .subscribe((status) => { setRealtimeConectado(status === "SUBSCRIBED"); });
+
+    // Ticker para re-calcular estado offline en el panel derecho cada 5 s
+    const tickId = setInterval(() => setGpsTick(t => t + 1), 5_000);
 
     // Canal separado para la bandera global — si comparte canal con sectores,
     // los eventos pueden cruzarse y la bandera "parpadea" con cambios de sector.
@@ -335,6 +350,7 @@ export default function AdminPage() {
     return () => {
       supabase.removeChannel(channel);
       supabase.removeChannel(chEstado);
+      clearInterval(tickId);
       setRealtimeConectado(false);
     };
   }, [autenticado, cargarPilotos, cargarSesiones, cargarBandera, cargarSectores]);
@@ -835,6 +851,20 @@ export default function AdminPage() {
                     const iniciales = nombre.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
                     const colors = ["bg-indigo-500", "bg-teal-500", "bg-orange-500", "bg-pink-500", "bg-purple-500"];
                     const color = colors[nombre.charCodeAt(0) % colors.length];
+
+                    // Calcular estado GPS del piloto
+                    const gps = pilotoGpsState.get(s.piloto_id);
+                    const OFFLINE_MS = 20_000;
+                    const isOffline = !gps || (Date.now() - gps.ts) > OFFLINE_MS;
+                    void gpsTick; // referencia para que React re-calcule cuando cambia el tick
+                    const estadoBadge = isOffline
+                      ? { label: "Sin señal", cls: "bg-red-100 text-red-600" }
+                      : gps?.dentro_geocerca === true
+                      ? { label: "En pista",  cls: "bg-green-100 text-green-700" }
+                      : gps?.dentro_geocerca === false
+                      ? { label: "En recinto", cls: "bg-yellow-100 text-yellow-700" }
+                      : { label: "Sin GPS",   cls: "bg-gray-100 text-gray-500" };
+
                     return (
                       <div key={s.id} className="px-5 py-3.5 flex items-center gap-4">
                         <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
@@ -846,8 +876,8 @@ export default function AdminPage() {
                             {new Date(s.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
                           </p>
                         </div>
-                        <span className="text-xs bg-green-100 text-green-700 font-medium px-2.5 py-1 rounded-full">
-                          En pista
+                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${estadoBadge.cls}`}>
+                          {estadoBadge.label}
                         </span>
                         <button
                           onClick={async () => {

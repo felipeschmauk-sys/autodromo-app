@@ -34,6 +34,7 @@ interface PilotoEnPista {
   velocidad: number;
   dentro_geocerca: boolean | null;
   ultima_actualizacion: Date | null;
+  offline: boolean;
   color: string;
   bandera_piloto: string | null;
 }
@@ -232,6 +233,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
               lat: null, lng: null, velocidad: 0,
               dentro_geocerca:     null,
               ultima_actualizacion: null,
+              offline:             true,
               color:               COLORES[colorIdx++ % COLORES.length],
               bandera_piloto:      s.bandera_piloto ?? null,
             });
@@ -290,6 +292,29 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320 }: Direccion
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fechaId]);
+
+  // ── Detección de pilotos offline ──────────────────────────────────────────
+  useEffect(() => {
+    const OFFLINE_MS = 20_000; // 20 s sin actualización = offline
+    const id = setInterval(() => {
+      const now = Date.now();
+      setPilotos(prev => {
+        let changed = false;
+        const next = new Map(prev);
+        for (const [pid, p] of next) {
+          const shouldBeOffline =
+            p.ultima_actualizacion === null ||
+            now - p.ultima_actualizacion.getTime() > OFFLINE_MS;
+          if (shouldBeOffline !== p.offline) {
+            next.set(pid, { ...p, offline: shouldBeOffline });
+            changed = true;
+          }
+        }
+        return changed ? next : prev;
+      });
+    }, 5_000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Datos derivados ────────────────────────────────────────────────────────
   const pilotosList  = Array.from(pilotos.values());

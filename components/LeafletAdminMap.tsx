@@ -33,6 +33,7 @@ interface Piloto {
   velocidad: number;
   color: string;
   dentro_geocerca: boolean | null;
+  offline?: boolean;
 }
 
 interface Props {
@@ -191,12 +192,20 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
     const activeIds = new Set(pilotos.map(p => p.piloto_id));
 
     pilotos.forEach(p => {
-      // Solo mostrar pilotos con GPS válido y dentro de la geocerca
-      // (dentro_geocerca === null = sin geocerca configurada → mostrar igual)
-      const sinGps   = p.lat === null || p.lng === null;
-      const enBoxes  = p.dentro_geocerca === false;
+      const isOffline      = !!p.offline;
+      const sinGps         = p.lat === null || p.lng === null;
+      const enPistaConfirm = p.dentro_geocerca === true;
 
-      // Sin GPS nunca → eliminar marcador
+      // Offline + no estaba confirmado en pista → quitar del mapa
+      if (isOffline && !enPistaConfirm) {
+        if (markersRef.current[p.piloto_id]) {
+          map.removeLayer(markersRef.current[p.piloto_id]);
+          delete markersRef.current[p.piloto_id];
+        }
+        return;
+      }
+
+      // Sin GPS nunca → quitar del mapa
       if (sinGps) {
         if (markersRef.current[p.piloto_id]) {
           map.removeLayer(markersRef.current[p.piloto_id]);
@@ -205,8 +214,48 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         return;
       }
 
-      // En boxes → punto pequeño gris en última posición conocida
-      if (enBoxes) {
+      // Offline + última posición confirmada EN PISTA → marcador rojo OFFLINE (alerta de seguridad)
+      if (isOffline) {
+        const icon = L.divIcon({
+          html: `
+            <div style="display:flex;flex-direction:column;gap:2px;white-space:nowrap">
+              <div style="display:flex;align-items:center;gap:4px">
+                <div style="
+                  width:14px;height:14px;border-radius:50%;
+                  background:#ef4444;border:2px solid #fff;
+                  box-shadow:0 0 12px #ef444499;flex-shrink:0;
+                  animation:pulse 1s ease-in-out infinite;
+                "></div>
+                <span style="
+                  background:rgba(5,5,15,.95);color:#ef4444;
+                  border:1px solid #ef444466;border-radius:4px;
+                  padding:1px 7px;font-size:11px;font-weight:800;font-family:monospace;
+                  letter-spacing:.5px
+                ">${p.nombre.split(" ")[0].toUpperCase()}</span>
+              </div>
+              <div style="
+                margin-left:18px;background:#ef4444;color:#fff;
+                border-radius:3px;padding:0 6px;
+                font-size:9px;font-weight:900;font-family:monospace;letter-spacing:1px
+              ">SIN SEÑAL</div>
+            </div>`,
+          iconSize:   [120, 40],
+          iconAnchor: [7, 9],
+          className:  "",
+        });
+        if (markersRef.current[p.piloto_id]) {
+          markersRef.current[p.piloto_id].setLatLng([p.lat!, p.lng!]);
+          markersRef.current[p.piloto_id].setIcon(icon);
+        } else {
+          markersRef.current[p.piloto_id] = L.marker([p.lat!, p.lng!], {
+            icon, zIndexOffset: 900,
+          }).addTo(map);
+        }
+        return;
+      }
+
+      // Online + en boxes/fuera de pista → punto gris en última posición
+      if (p.dentro_geocerca === false) {
         const icon = L.divIcon({
           html: `
             <div style="display:flex;flex-direction:column;gap:2px;white-space:nowrap">
@@ -244,6 +293,7 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         return;
       }
 
+      // Online + en pista (o sin geocerca configurada) → dot de color con velocidad
       const stopped  = p.velocidad <= 2;
       const dotColor = stopped ? "#f59e0b" : p.color;
       const spdColor = p.velocidad > 80 ? "#ef4444"
