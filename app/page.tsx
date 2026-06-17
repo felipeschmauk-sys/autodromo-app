@@ -245,34 +245,74 @@ function SpeedCard({
   const [dentroRecinto, setDentroRecinto] = useState<boolean | null>(null);
   const gpsHist             = useRef<[number, number][]>([]);
 
+  // ── Refs para geocerca: evitan que el watchPosition se cancele
+  //    y reinicie cada vez que llegan los datos de Supabase, lo que
+  //    en iOS puede interrumpir el diálogo de permiso en nuevos dispositivos.
+  const geocercaRef  = useRef<Coordenada[]>(geocercaCoords);
+  const recintoRef   = useRef<Coordenada[]>(recintoCoords);
+  const onGPSChangeRef = useRef(onGPSChange);
+  useEffect(() => { geocercaRef.current  = geocercaCoords; }, [geocercaCoords]);
+  useEffect(() => { recintoRef.current   = recintoCoords;  }, [recintoCoords]);
+  useEffect(() => { onGPSChangeRef.current = onGPSChange;  }, [onGPSChange]);
+
   useEffect(() => {
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
-    const id = navigator.geolocation.watchPosition(
-      (pos) => {
-        setGpsOk(true);
-        setVel(pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : 0);
-        setPrec(Math.round(pos.coords.accuracy));
-        // Suavizado GPS: promedia las últimas 4 lecturas para reducir jitter
-        gpsHist.current.push([pos.coords.latitude, pos.coords.longitude]);
-        if (gpsHist.current.length > 4) gpsHist.current.shift();
-        const lat = gpsHist.current.reduce((s, p) => s + p[0], 0) / gpsHist.current.length;
-        const lng = gpsHist.current.reduce((s, p) => s + p[1], 0) / gpsHist.current.length;
-        const pos2d = { lat, lng };
-        const nuevoDentro = geocercaCoords.length >= 3 ? puntoEnGeocerca(pos2d, geocercaCoords) : null;
-        const nuevoDentroRecinto = recintoCoords.length >= 3 ? puntoEnGeocerca(pos2d, recintoCoords) : null;
-        if (geocercaCoords.length >= 3) setDentro(nuevoDentro);
-        if (recintoCoords.length >= 3)  setDentroRecinto(nuevoDentroRecinto);
-        onGPSChange?.(
-          geocercaCoords.length >= 3 ? nuevoDentro : null,
-          recintoCoords.length  >= 3 ? nuevoDentroRecinto : null,
-          pos2d
-        );
-      },
-      () => setGpsOk(false),
-      { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
-    );
-    return () => navigator.geolocation.clearWatch(id);
-  }, [geocercaCoords, recintoCoords]);
+
+    let watchId: number | null = null;
+
+    const startWatch = () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          setGpsOk(true);
+          setVel(pos.coords.speed != null ? Math.round(pos.coords.speed * 3.6) : 0);
+          setPrec(Math.round(pos.coords.accuracy));
+          // Suavizado GPS: promedia las últimas 4 lecturas para reducir jitter
+          gpsHist.current.push([pos.coords.latitude, pos.coords.longitude]);
+          if (gpsHist.current.length > 4) gpsHist.current.shift();
+          const lat = gpsHist.current.reduce((s, p) => s + p[0], 0) / gpsHist.current.length;
+          const lng = gpsHist.current.reduce((s, p) => s + p[1], 0) / gpsHist.current.length;
+          const pos2d = { lat, lng };
+          const gc = geocercaRef.current;
+          const rc = recintoRef.current;
+          const nuevoDentro = gc.length >= 3 ? puntoEnGeocerca(pos2d, gc) : null;
+          const nuevoDentroRecinto = rc.length >= 3 ? puntoEnGeocerca(pos2d, rc) : null;
+          if (gc.length >= 3) setDentro(nuevoDentro);
+          if (rc.length >= 3)  setDentroRecinto(nuevoDentroRecinto);
+          onGPSChangeRef.current?.(
+            gc.length >= 3 ? nuevoDentro : null,
+            rc.length  >= 3 ? nuevoDentroRecinto : null,
+            pos2d
+          );
+        },
+        () => setGpsOk(false),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
+      );
+    };
+
+    startWatch();
+
+    // Reiniciar GPS cuando el usuario vuelve a la app desde Ajustes
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") startWatch();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    // Reiniciar GPS si el usuario cambia el permiso de ubicación
+    let permStatus: PermissionStatus | null = null;
+    navigator.permissions?.query({ name: "geolocation" as PermissionName }).then((ps) => {
+      permStatus = ps;
+      ps.addEventListener("change", () => {
+        if (ps.state === "granted") startWatch();
+      });
+    }).catch(() => {});
+
+    return () => {
+      if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+      document.removeEventListener("visibilitychange", onVisibility);
+      permStatus?.removeEventListener("change", () => {});
+    };
+  }, []); // ← Sin dependencias: watchPosition se inicia una sola vez y usa refs
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -294,7 +334,7 @@ function SpeedCard({
               // 3 niveles: dentro pista > dentro recinto > fuera
               const enPista   = dentro === true;
               const enRecinto = !enPista && dentroRecinto === true;
-              const fuera     = dentro === false && (recintoCoords.length < 3 || dentroRecinto === false);
+              const fuera     = dentro === false && (recintoRef.current.length < 3 || dentroRecinto === false);
               const verificando = dentro === null && dentroRecinto === null;
 
               return (
