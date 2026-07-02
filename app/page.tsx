@@ -232,11 +232,15 @@ function findClosestIdx(lat: number, lng: number, trazado: Coordenada[]): number
 function SpeedCard({
   geocercaCoords,
   recintoCoords = [],
+  activo = true,
   onGPSChange,
+  onGPSError,
 }: {
   geocercaCoords: Coordenada[];
   recintoCoords?: Coordenada[];
+  activo?: boolean;              // solo inicia watchPosition cuando el permiso ya está concedido
   onGPSChange?: (dentro: boolean | null, dentroRecinto: boolean | null, pos?: Coordenada) => void;
+  onGPSError?: (code: number) => void;
 }) {
   const [vel, setVel]             = useState(0);
   const [prec, setPrec]           = useState<number | null>(null);
@@ -251,11 +255,14 @@ function SpeedCard({
   const geocercaRef  = useRef<Coordenada[]>(geocercaCoords);
   const recintoRef   = useRef<Coordenada[]>(recintoCoords);
   const onGPSChangeRef = useRef(onGPSChange);
+  const onGPSErrorRef  = useRef(onGPSError);
   useEffect(() => { geocercaRef.current  = geocercaCoords; }, [geocercaCoords]);
   useEffect(() => { recintoRef.current   = recintoCoords;  }, [recintoCoords]);
   useEffect(() => { onGPSChangeRef.current = onGPSChange;  }, [onGPSChange]);
+  useEffect(() => { onGPSErrorRef.current  = onGPSError;   }, [onGPSError]);
 
   useEffect(() => {
+    if (!activo) return;
     if (typeof navigator === "undefined" || !navigator.geolocation) return;
 
     let watchId: number | null = null;
@@ -285,7 +292,11 @@ function SpeedCard({
             pos2d
           );
         },
-        () => setGpsOk(false),
+        (err) => {
+          setGpsOk(false);
+          // code 1 = permiso denegado (el padre muestra el overlay de recuperación)
+          onGPSErrorRef.current?.(err.code);
+        },
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 2000 }
       );
     };
@@ -312,7 +323,7 @@ function SpeedCard({
       document.removeEventListener("visibilitychange", onVisibility);
       permStatus?.removeEventListener("change", () => {});
     };
-  }, []); // ← Sin dependencias: watchPosition se inicia una sola vez y usa refs
+  }, [activo]); // ← Solo re-inicia cuando se concede el permiso; el resto va por refs
 
   return (
     <div className="bg-white border border-gray-200 rounded-2xl overflow-hidden">
@@ -608,6 +619,65 @@ export default function Home() {
   const [gpsEnPista,    setGpsEnPista]    = useState<boolean | null>(null);
   const [gpsEnRecinto,  setGpsEnRecinto]  = useState<boolean | null>(null);
 
+  // ── Permiso de ubicación ──────────────────────────────────────
+  // "checking": consultando estado inicial
+  // "prompt":   falta pedirlo → overlay con botón (el diálogo de iOS
+  //             disparado por un toque del usuario es lo confiable)
+  // "granted":  concedido → SpeedCard y envío a Supabase pueden partir
+  // "denied":   denegado → overlay con instrucciones de recuperación
+  const [gpsPermiso, setGpsPermiso]   = useState<"checking" | "prompt" | "granted" | "denied">("checking");
+  const [gpsPidiendo, setGpsPidiendo] = useState(false);
+
+  useEffect(() => {
+    if (stage !== "app") return;
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+
+    let status: PermissionStatus | null = null;
+    let cancelado = false;
+    const aplicar = (state: string) => {
+      if (cancelado) return;
+      setGpsPermiso(state === "granted" ? "granted" : state === "denied" ? "denied" : "prompt");
+    };
+    // Safari sin Permissions API: si este dispositivo ya concedió antes
+    // (flag local), watchPosition parte sin diálogo; si falla con code 1
+    // el onGPSError lo baja a "denied".
+    const fallback = () => aplicar(localStorage.getItem("gps_permiso_ok") ? "granted" : "prompt");
+
+    if (navigator.permissions?.query) {
+      navigator.permissions.query({ name: "geolocation" as PermissionName })
+        .then((s) => { status = s; aplicar(s.state); s.onchange = () => aplicar(s.state); })
+        .catch(fallback);
+    } else {
+      fallback();
+    }
+    return () => { cancelado = true; if (status) status.onchange = null; };
+  }, [stage]);
+
+  const solicitarGPS = () => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    setGpsPidiendo(true);
+    navigator.geolocation.getCurrentPosition(
+      () => {
+        localStorage.setItem("gps_permiso_ok", "1");
+        setGpsPidiendo(false);
+        setGpsPermiso("granted");
+      },
+      (err) => {
+        setGpsPidiendo(false);
+        if (err.code === 1) {
+          localStorage.removeItem("gps_permiso_ok");
+          setGpsPermiso("denied");
+        } else {
+          // code 2/3 = permiso concedido pero aún sin señal:
+          // dejar pasar, el watchPosition sigue intentando solo
+          localStorage.setItem("gps_permiso_ok", "1");
+          setGpsPermiso("granted");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
+  };
+
   // ── Task #58: jerarquía de banderas ──
   const [banderaPersonal, setBanderaPersonal] = useState<string | null>(null);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
@@ -826,7 +896,7 @@ export default function Home() {
   // Manda posición a ubicaciones_piloto cada 3s cuando hay sesión activa.
   // Se activa automáticamente al crear la sesión (suscripción Realtime).
   useEffect(() => {
-    if (stage !== "app" || !pilotoData?.id) return;
+    if (stage !== "app" || !pilotoData?.id || gpsPermiso !== "granted") return;
 
     const pilotoId = pilotoData.id;
     let sesionId: string | null = null;
@@ -940,7 +1010,7 @@ export default function Home() {
       detenerGPS();
       supabase.removeChannel(ch);
     };
-  }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [stage, pilotoData?.id, gpsPermiso]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
   // ── Detección de orientación ──
@@ -1637,6 +1707,65 @@ export default function Home() {
             );
           })()}
 
+          {/* ══ OVERLAY PERMISO DE UBICACIÓN ══ */}
+          {(gpsPermiso === "prompt" || gpsPermiso === "denied") && (
+            <div
+              className="fixed inset-0 flex items-center justify-center px-6"
+              style={{ zIndex: 2500, background: "rgba(3,7,18,0.88)", maxWidth: 480, margin: "0 auto" }}
+            >
+              <div className="bg-white rounded-2xl px-6 py-7 w-full text-center shadow-2xl">
+                <span className="text-5xl leading-none">📍</span>
+                {gpsPermiso === "prompt" ? (
+                  <>
+                    <p className="text-gray-900 text-xl font-black mt-4">Activa tu ubicación</p>
+                    <p className="text-gray-500 text-sm mt-2 leading-snug">
+                      La app necesita tu GPS para mostrar tu velocidad, avisarte las banderas
+                      de tu sector y que Dirección de Carrera te vea en pista.
+                    </p>
+                    <button
+                      onClick={solicitarGPS}
+                      disabled={gpsPidiendo}
+                      className="mt-5 w-full bg-indigo-700 text-white font-bold py-3.5 rounded-xl active:scale-95 transition disabled:opacity-60"
+                    >
+                      {gpsPidiendo ? "Esperando GPS…" : "Compartir ubicación"}
+                    </button>
+                    <p className="text-gray-400 text-xs mt-3 leading-snug">
+                      Cuando el teléfono pregunte, elige <b>&ldquo;Permitir&rdquo;</b>.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-gray-900 text-xl font-black mt-4">Ubicación bloqueada</p>
+                    <p className="text-gray-500 text-sm mt-2 leading-snug">
+                      Este navegador tiene la ubicación denegada para la app. Actívala y vuelve a intentar:
+                    </p>
+                    <div className="bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 mt-4 text-left space-y-2">
+                      <p className="text-gray-700 text-xs leading-snug">
+                        <b>iPhone (Safari):</b> toca el botón <b>AA</b> en la barra de dirección
+                        → Ajustes del sitio web → Ubicación → <b>Permitir</b>.
+                      </p>
+                      <p className="text-gray-700 text-xs leading-snug">
+                        <b>Android (Chrome):</b> toca el candado junto a la dirección
+                        → Permisos → Ubicación → <b>Permitir</b>.
+                      </p>
+                      <p className="text-gray-700 text-xs leading-snug">
+                        Revisa también que la <b>Ubicación del teléfono</b> esté encendida
+                        (Ajustes → Privacidad → Localización).
+                      </p>
+                    </div>
+                    <button
+                      onClick={solicitarGPS}
+                      disabled={gpsPidiendo}
+                      className="mt-4 w-full bg-indigo-700 text-white font-bold py-3.5 rounded-xl active:scale-95 transition disabled:opacity-60"
+                    >
+                      {gpsPidiendo ? "Verificando…" : "Ya la activé — Reintentar"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ══ LANDSCAPE — MODO CONDUCCIÓN ══ */}
           {isLandscape && (
             <div className="fixed inset-0 bg-gray-950 flex" style={{ maxWidth: "none", zIndex: 2000 }}>
@@ -1757,9 +1886,14 @@ export default function Home() {
                 <SpeedCard
                   geocercaCoords={geocerca}
                   recintoCoords={geocercaRecinto}
+                  activo={gpsPermiso === "granted"}
                   onGPSChange={(d, r, pos) => {
                     setGpsEnPista(d); setGpsEnRecinto(r);
                     if (pos) setPosPiloto({ lat: pos.lat, lng: pos.lng, dentro: d }); // Task #58
+                  }}
+                  onGPSError={(code) => {
+                    // permiso revocado en caliente → reaparece el overlay
+                    if (code === 1) { localStorage.removeItem("gps_permiso_ok"); setGpsPermiso("denied"); }
                   }}
                 />
 

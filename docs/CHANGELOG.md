@@ -3,6 +3,27 @@
 
 ---
 
+## [0.5.0] — 2 Julio 2026
+### Agregado
+- Flujo de permiso de ubicación en la app del piloto: overlay al entrar a la vista
+  de pista que pide compartir GPS con un botón (gesto del usuario — confiable en iOS)
+- Detección del estado del permiso via `navigator.permissions.query` + listener de cambios
+- Pantalla de recuperación cuando el permiso quedó denegado, con instrucciones
+  paso a paso para Safari/iPhone y Chrome/Android + botón reintentar
+- Fallback con flag en localStorage para Safari antiguo sin Permissions API
+
+### Cambiado
+- `SpeedCard` ahora recibe `activo` (solo inicia `watchPosition` con permiso concedido)
+  y `onGPSError` (reporta el código de error; antes se descartaba)
+- El envío de ubicación a Supabase también espera el permiso concedido
+
+### Corregido
+- Teléfonos nuevos quedaban en "Sin GPS" para siempre: el permiso se pedía al montar
+  el componente (sin gesto), y si el usuario lo denegaba o perdía el diálogo, la app
+  fallaba en silencio sin forma de recuperarse
+
+---
+
 ## [0.4.0] — Mayo 2026
 ### Agregado
 - Panel maestro administrador en `/admin` con login propio

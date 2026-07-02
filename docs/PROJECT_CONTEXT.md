@@ -832,6 +832,7 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 ## 17. Bugs Conocidos y Consideraciones Técnicas
 
 ### Resueltos
+- ✅ GPS nunca conectaba en teléfonos nuevos → el permiso se pedía al montar (sin gesto) y una denegación quedaba silenciosa para siempre. Ahora: overlay que pide ubicación con botón, detección de estado via Permissions API, pantalla de recuperación si está denegado (Julio 2026)
 - ✅ Auto-yellow disparándose desde fuera del autódromo → `dentroGeocerca !== true` guard
 - ✅ max_pilotos perdido entre recargas → `estado_pista.max_pilotos` en DB
 - ✅ CHECK constraint bloqueaba renombrado time_attack→track_day → drop+recrear constraint
