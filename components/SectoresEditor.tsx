@@ -344,10 +344,13 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
                       {/* Línea divisoria izquierda */}
                       <div className="flex-1 h-px bg-gray-200" />
 
-                      {/* Indicador de color combinado */}
-                      <div className="flex items-center gap-0 flex-shrink-0">
-                        <div className="w-2 h-4 rounded-l-sm" style={{ background: COLORS[i % COLORS.length] }} />
-                        <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[(i + 1) % COLORS.length] }} />
+                      {/* Indicador de color combinado + qué límite mueve */}
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-0">
+                          <div className="w-2 h-4 rounded-l-sm" style={{ background: COLORS[i % COLORS.length] }} />
+                          <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[(i + 1) % COLORS.length] }} />
+                        </div>
+                        <span className="text-xs font-mono font-bold text-gray-400">{i + 1}|{i + 2}</span>
                       </div>
 
                       {/* Botones de ajuste */}
@@ -389,6 +392,24 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
                       </div>
 
                       {/* Línea divisoria derecha */}
+                      <div className="flex-1 h-px bg-gray-200" />
+                    </div>
+                  )}
+
+                  {/* Cierre del último sector: la línea de largada/meta (no editable) */}
+                  {i === cantidad - 1 && rangos[i] && rangos[0] && (
+                    <div className="flex items-center gap-2 px-2 py-1.5">
+                      <div className="flex-1 h-px bg-gray-200" />
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
+                        <div className="flex items-center gap-0">
+                          <div className="w-2 h-4 rounded-l-sm" style={{ background: COLORS[i % COLORS.length] }} />
+                          <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[0] }} />
+                        </div>
+                        <span className="text-xs font-mono font-bold text-gray-400">{i + 1}|1</span>
+                      </div>
+                      <span className="text-xs text-gray-400">
+                        🏁 línea de largada/meta — punto fijo del trazado
+                      </span>
                       <div className="flex-1 h-px bg-gray-200" />
                     </div>
                   )}

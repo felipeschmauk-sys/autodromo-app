@@ -3,6 +3,18 @@
 
 ---
 
+## [0.5.1] — 2 Julio 2026
+### Cambiado
+- Editor de sectores (mapa): eliminados los rectángulos de texto "SECTOR N" que
+  tapaban el trazado; quedan solo los círculos bicolor con números de límite
+- Editor de sectores (lista): cada fila de botones ahora indica qué límite mueve
+  (ej. "1|2", igual que el círculo del mapa) y el último sector muestra una fila
+  informativa "N|1 — línea de largada/meta" explicando que ese punto es fijo
+- Mapa del editor con `isolation: isolate` para que no se dibuje sobre el header
+  del panel al hacer scroll
+
+---
+
 ## [0.5.0] — 2 Julio 2026
 ### Agregado
 - Flujo de permiso de ubicación en la app del piloto: overlay al entrar a la vista

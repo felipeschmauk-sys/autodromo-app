@@ -93,27 +93,8 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
         L.polyline(pts, { color: r.color, weight: 6, opacity: 0.95 }).addTo(map)
       );
 
-      // Etiqueta en el punto medio del sector
-      const midIdx = Math.floor((r.inicio + r.fin) / 2);
-      const mc     = trazado[midIdx];
-      if (mc) {
-        const label = L.divIcon({
-          html: `<div style="
-            background:white;color:${r.color};
-            border:1.5px solid ${r.color};border-radius:5px;
-            padding:2px 8px;font-size:10px;font-weight:800;
-            font-family:monospace;letter-spacing:1px;
-            white-space:nowrap;text-transform:uppercase;
-            box-shadow:0 1px 4px rgba(0,0,0,.15);
-          ">${r.nombre}</div>`,
-          iconSize:   [100, 20],
-          iconAnchor: [50, 10],
-          className:  "",
-        });
-        layersRef.current.push(
-          L.marker([mc.lat, mc.lng], { icon: label, interactive: false }).addTo(map)
-        );
-      }
+      // Sin etiquetas de texto: los círculos bicolor de los límites bastan
+      // para identificar los sectores y no tapan el trazado
     });
 
     // Marcador de largada
@@ -188,6 +169,10 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
         borderRadius: "16px",
         overflow:     "hidden",
         position:     "relative",
+        // Evita que los panes de Leaflet (z-index alto) se dibujen
+        // sobre el header del panel al hacer scroll
+        isolation:    "isolate",
+        zIndex:       0,
       }}
     />
   );
