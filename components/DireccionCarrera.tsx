@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, sectorContienePunto, type Coordenada } from "@/lib/gps";
 
 const LeafletAdminMap = dynamic(() => import("@/components/LeafletAdminMap"), { ssr: false });
 
@@ -117,7 +117,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
     const s = sectoresRef.current;
     if (!t.length || !s.length) return null;
     const idx = findClosestIdx(lat, lng, t);
-    return s.find(sec => idx >= sec.punto_inicio && idx <= sec.punto_fin) || null;
+    return s.find(sec => sectorContienePunto(idx, sec.punto_inicio, sec.punto_fin)) || null;
   }
 
   async function revertAutoYellow(pilotoId: string) {

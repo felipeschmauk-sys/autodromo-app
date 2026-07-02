@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, sectorContienePunto, sectorSlice, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -441,7 +441,7 @@ function TrackSVG({
     .join(" ");
 
   const sectorPath = (inicio: number, fin: number) =>
-    trazado.slice(inicio, fin + 1)
+    sectorSlice(trazado, inicio, fin)
       .map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`)
       .join(" ");
 
@@ -1139,7 +1139,7 @@ export default function Home() {
     if (!posPiloto || posPiloto.dentro !== true) return null;     // solo si está dentro de pista
     if (trazado.length < 2 || sectores.length === 0) return null;
     const idx = findClosestIdx(posPiloto.lat, posPiloto.lng, trazado);
-    return sectores.find(s => idx >= s.punto_inicio && idx <= s.punto_fin) || null;
+    return sectores.find(s => sectorContienePunto(idx, s.punto_inicio, s.punto_fin)) || null;
   })();
   const banderaSector = sectorActual && sectorActual.bandera !== "verde" ? sectorActual.bandera : null;
 

@@ -12,6 +12,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
+import { sectorSlice, sectorLargo } from "@/lib/gps";
 
 // ── Tipos ─────────────────────────────────────────────────────
 interface Coordenada { lat: number; lng: number; }
@@ -140,8 +141,7 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         const ef    = globalOvride ? bandera : s.bandera;
         // Color para la etiqueta del sector (legible incluso con patrón)
         const color = ef === "rayas" ? "#ca8a04" : ef === "cuadros" ? "#111827" : (STROKE[ef] || STROKE.verde);
-        const pts   = trazado
-          .slice(s.punto_inicio, s.punto_fin + 1)
+        const pts   = sectorSlice(trazado, s.punto_inicio, s.punto_fin)
           .map(c => [c.lat, c.lng] as [number, number]);
         if (pts.length < 2) return;
 
@@ -149,7 +149,8 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         pushFlagPolyline(map, trackRef.current, pts, ef, 4, 16, 0.12);
 
         // Etiqueta compacta en el cuarto del sector (no en el medio) para no tapar el trazado
-        const quarterIdx = Math.floor(s.punto_inicio + (s.punto_fin - s.punto_inicio) * 0.25);
+        const largo      = sectorLargo(s.punto_inicio, s.punto_fin, trazado.length);
+        const quarterIdx = (s.punto_inicio + Math.floor(largo * 0.25)) % trazado.length;
         const mc         = trazado[quarterIdx];
         if (mc) {
           const label = L.divIcon({

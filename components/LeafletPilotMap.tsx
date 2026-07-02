@@ -12,6 +12,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
+import { sectorSlice } from "@/lib/gps";
 
 // ── Tipos ─────────────────────────────────────────────────────
 interface Coordenada { lat: number; lng: number; }
@@ -172,8 +173,7 @@ export default function LeafletPilotMap({
 
     if (sectores.length > 0 && !override) {
       sectores.forEach(s => {
-        const pts = trazado
-          .slice(s.punto_inicio, s.punto_fin + 1)
+        const pts = sectorSlice(trazado, s.punto_inicio, s.punto_fin)
           .map(c => [c.lat, c.lng] as [number, number]);
         if (pts.length < 2) return;
         // Task #59: con patrón si es rayas/cuadros

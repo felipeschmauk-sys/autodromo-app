@@ -3,6 +3,19 @@
 
 ---
 
+## [0.5.3] — 2 Julio 2026
+### Agregado
+- El límite N|1 (último sector → primero, la línea de meta) ahora es editable
+  igual que el resto: fila de botones en la lista y marcador arrastrable en el
+  mapa del editor
+- Sectores pueden "cruzar la meta": se guardan con `punto_inicio > punto_fin`
+- Helpers `sectorContienePunto` / `sectorSlice` / `sectorLargo` en `lib/gps.ts`,
+  usados por TODOS los consumidores de sectores (mapas admin/piloto, detección
+  de sector del piloto, auto-yellow, editor). Al trabajar con rangos de sector,
+  usar siempre estos helpers.
+
+---
+
 ## [0.5.2] — 2 Julio 2026
 ### Corregido
 - Estado GPS del piloto inconsistente entre vistas: el piloto veía "Fuera del

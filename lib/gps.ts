@@ -17,6 +17,28 @@ export interface UbicacionPiloto {
   dentro_recinto?: boolean | null
 }
 
+// ── SECTORES ──────────────────────────────────────────────────
+// Un sector con punto_inicio > punto_fin "cruza la línea de meta":
+// va desde inicio hasta el final del trazado y sigue desde 0 hasta fin.
+// Usar SIEMPRE estos helpers al trabajar con rangos de sector.
+
+export function sectorContienePunto(idx: number, inicio: number, fin: number): boolean {
+  return inicio <= fin
+    ? idx >= inicio && idx <= fin
+    : idx >= inicio || idx <= fin
+}
+
+export function sectorSlice<T>(trazado: T[], inicio: number, fin: number): T[] {
+  return inicio <= fin
+    ? trazado.slice(inicio, fin + 1)
+    : [...trazado.slice(inicio), ...trazado.slice(0, fin + 1)]
+}
+
+// Largo del sector en cantidad de puntos (circular)
+export function sectorLargo(inicio: number, fin: number, total: number): number {
+  return inicio <= fin ? fin - inicio : (total - inicio) + fin
+}
+
 // ── TRAZADO DE PISTA ──────────────────────────────────────────
 
 export async function getTrazadoActivo(): Promise<Coordenada[] | null> {

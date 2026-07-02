@@ -12,7 +12,7 @@
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-import { getTrazadoActivo, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, sectorLargo, type Coordenada } from "@/lib/gps";
 
 const LeafletSectoresMap = dynamic(
   () => import("@/components/LeafletSectoresMap"),
@@ -126,27 +126,43 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
   }, [nombres]);
 
   // ── Handler para drag de marcadores de límite ──────────────
+  // Los límites son circulares: el límite N|1 (último→primer sector)
+  // también se mueve; el sector que queda cruzando el punto de partida
+  // del trazado se guarda con punto_inicio > punto_fin.
   const handleBoundaryChange = useCallback((boundaryIdx: number, newFin: number) => {
     setRangos(prev => {
-      const next = [...prev];
-      next[boundaryIdx]     = { ...next[boundaryIdx],     fin:   newFin };
-      next[boundaryIdx + 1] = { ...next[boundaryIdx + 1], inicio: newFin };
+      const next   = [...prev];
+      const sigIdx = (boundaryIdx + 1) % prev.length;
+      next[boundaryIdx] = { ...next[boundaryIdx], fin:    newFin };
+      next[sigIdx]      = { ...next[sigIdx],      inicio: newFin };
       return next;
     });
   }, []);
 
-  // ── Mover límite con botones ──────────────────────────────
+  // ── Mover límite con botones (circular, incluye el límite N|1) ──
   const moverLimite = useCallback((boundaryIdx: number, delta: number) => {
     setRangos(prev => {
-      const next    = [...prev];
-      const minIdx  = next[boundaryIdx].inicio + 2;
-      const maxIdx  = next[boundaryIdx + 1].fin - 2;
-      const newFin  = Math.max(minIdx, Math.min(maxIdx, next[boundaryIdx].fin + delta));
-      next[boundaryIdx]     = { ...next[boundaryIdx],     fin:    newFin };
-      next[boundaryIdx + 1] = { ...next[boundaryIdx + 1], inicio: newFin };
+      const n     = prev.length;
+      const total = trazado.length;
+      if (!total || n < 2) return prev;
+      const next   = [...prev];
+      const sigIdx = (boundaryIdx + 1) % n;
+      let cand = (((next[boundaryIdx].fin + delta) % total) + total) % total;
+      // El candidato debe quedar dentro del arco entre el inicio del sector
+      // izquierdo y el fin del derecho, con mínimo 2 puntos por lado
+      const arco = sectorLargo(next[boundaryIdx].inicio, next[sigIdx].fin, total);
+      const izq  = sectorLargo(next[boundaryIdx].inicio, cand, total);
+      const der  = sectorLargo(cand, next[sigIdx].fin, total);
+      if (izq + der !== arco || izq < 2 || der < 2) {
+        cand = delta < 0
+          ? (next[boundaryIdx].inicio + 2) % total
+          : (next[sigIdx].fin - 2 + total) % total;
+      }
+      next[boundaryIdx] = { ...next[boundaryIdx], fin:    cand };
+      next[sigIdx]      = { ...next[sigIdx],      inicio: cand };
       return next;
     });
-  }, []);
+  }, [trazado.length]);
 
   // ── Guardar en Supabase ─────────────────────────────────────
   const guardarSectores = async () => {
@@ -249,7 +265,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
           </p>
           <div className="flex h-2.5 rounded-full overflow-hidden gap-px bg-gray-200">
             {rangos.map((r, i) => {
-              const pct = ((r.fin - r.inicio) / barraTotal) * 100;
+              const pct = (sectorLargo(r.inicio, r.fin, barraTotal) / barraTotal) * 100;
               return (
                 <div
                   key={i}
@@ -262,7 +278,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
           </div>
           <div className="flex gap-px mt-1">
             {rangos.map((r, i) => {
-              const pct = ((r.fin - r.inicio) / barraTotal) * 100;
+              const pct = (sectorLargo(r.inicio, r.fin, barraTotal) / barraTotal) * 100;
               return (
                 <div key={i} style={{ width: `${pct}%` }} className="transition-all duration-300">
                   <p className="text-center truncate px-1 text-gray-400" style={{ fontSize: "10px" }}>
@@ -310,7 +326,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
           <div className="space-y-1">
             {Array.from({ length: cantidad }, (_, i) => {
               const pct = rangos[i]
-                ? (((rangos[i].fin - rangos[i].inicio) / barraTotal) * 100).toFixed(0)
+                ? ((sectorLargo(rangos[i].inicio, rangos[i].fin, barraTotal) / barraTotal) * 100).toFixed(0)
                 : null;
               return (
                 <div key={i}>
@@ -338,8 +354,11 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
                     )}
                   </div>
 
-                  {/* Control de límite entre sector i y i+1 */}
-                  {i < cantidad - 1 && rangos[i] && rangos[i + 1] && (
+                  {/* Control de límite entre sector i y el siguiente
+                      (circular: el último sector limita con el primero) */}
+                  {rangos[i] && rangos[(i + 1) % cantidad] && (() => {
+                    const sig = (i + 1) % cantidad;
+                    return (
                     <div className="flex items-center gap-2 px-2 py-1.5">
                       {/* Línea divisoria izquierda */}
                       <div className="flex-1 h-px bg-gray-200" />
@@ -348,9 +367,9 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
                       <div className="flex items-center gap-1.5 flex-shrink-0">
                         <div className="flex items-center gap-0">
                           <div className="w-2 h-4 rounded-l-sm" style={{ background: COLORS[i % COLORS.length] }} />
-                          <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[(i + 1) % COLORS.length] }} />
+                          <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[sig % COLORS.length] }} />
                         </div>
-                        <span className="text-xs font-mono font-bold text-gray-400">{i + 1}|{i + 2}</span>
+                        <span className="text-xs font-mono font-bold text-gray-400">{i + 1}|{sig + 1}</span>
                       </div>
 
                       {/* Botones de ajuste */}
@@ -394,25 +413,8 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
                       {/* Línea divisoria derecha */}
                       <div className="flex-1 h-px bg-gray-200" />
                     </div>
-                  )}
-
-                  {/* Cierre del último sector: la línea de largada/meta (no editable) */}
-                  {i === cantidad - 1 && rangos[i] && rangos[0] && (
-                    <div className="flex items-center gap-2 px-2 py-1.5">
-                      <div className="flex-1 h-px bg-gray-200" />
-                      <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <div className="flex items-center gap-0">
-                          <div className="w-2 h-4 rounded-l-sm" style={{ background: COLORS[i % COLORS.length] }} />
-                          <div className="w-2 h-4 rounded-r-sm" style={{ background: COLORS[0] }} />
-                        </div>
-                        <span className="text-xs font-mono font-bold text-gray-400">{i + 1}|1</span>
-                      </div>
-                      <span className="text-xs text-gray-400">
-                        🏁 línea de largada/meta — punto fijo del trazado
-                      </span>
-                      <div className="flex-1 h-px bg-gray-200" />
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })}

@@ -12,6 +12,7 @@
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { useEffect, useRef } from "react";
+import { sectorSlice, sectorLargo } from "@/lib/gps";
 
 interface Coordenada { lat: number; lng: number; }
 
@@ -77,10 +78,9 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
       L.polyline(allLatlngs, { color: "#cbd5e1", weight: 8, opacity: 1 }).addTo(map)
     );
 
-    // Sectores coloreados
+    // Sectores coloreados (sectorSlice soporta el sector que cruza la meta)
     rangos.forEach(r => {
-      const pts = trazado
-        .slice(r.inicio, r.fin + 1)
+      const pts = sectorSlice(trazado, r.inicio, r.fin)
         .map(c => [c.lat, c.lng] as [number, number]);
       if (pts.length < 2) return;
 
@@ -109,15 +109,19 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
     }
 
     // ── Boundary markers arrastrables ──────────────────────
-    // Hay N-1 boundaries entre N sectores
-    for (let i = 0; i < rangos.length - 1; i++) {
+    // Circulares: N boundaries para N sectores. El límite N|1 (último→primero)
+    // también se arrastra; el sector que cruza la meta queda con inicio > fin.
+    const n     = rangos.length;
+    const total = trazado.length;
+    for (let i = 0; i < n && n >= 2; i++) {
       const boundaryIdx = i;
+      const sigIdx      = (i + 1) % n;
       const ptIdx       = rangos[i].fin; // punto de división
       const pt          = trazado[ptIdx];
       if (!pt) continue;
 
       const colorA = rangos[i].color;
-      const colorB = rangos[i + 1].color;
+      const colorB = rangos[sigIdx].color;
 
       const icon = L.divIcon({
         html: `<div style="
@@ -129,7 +133,7 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
           box-shadow:0 2px 12px rgba(0,0,0,.8);
           cursor:grab;font-family:monospace;
           text-shadow:0 1px 3px rgba(0,0,0,.9);
-        ">${i + 1}|${i + 2}</div>`,
+        ">${i + 1}|${sigIdx + 1}</div>`,
         iconSize:   [28, 28],
         iconAnchor: [14, 14],
         className:  "",
@@ -141,16 +145,25 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
         const latlng = e.target.getLatLng();
         // Snap al punto más cercano del trazado
         let minD = Infinity, nearest = ptIdx;
-        trazado.forEach((c, i) => {
+        trazado.forEach((c, j) => {
           const d = (latlng.lat - c.lat) ** 2 + (latlng.lng - c.lng) ** 2;
-          if (d < minD) { minD = d; nearest = i; }
+          if (d < minD) { minD = d; nearest = j; }
         });
-        // Mantener mínimo 2 puntos por sector
-        const minIdx = rangos[boundaryIdx].inicio + 2;
-        const maxIdx = rangos[boundaryIdx + 1].fin - 2;
-        const snapped = Math.max(minIdx, Math.min(maxIdx, nearest));
-        e.target.setLatLng([trazado[snapped].lat, trazado[snapped].lng]);
-        onBoundaryChange(boundaryIdx, snapped);
+        // Validez circular: dentro del arco entre sectores vecinos,
+        // con mínimo 2 puntos por lado
+        const ini  = rangos[boundaryIdx].inicio;
+        const finS = rangos[sigIdx].fin;
+        const arco = sectorLargo(ini, finS, total);
+        const izq  = sectorLargo(ini, nearest, total);
+        const der  = sectorLargo(nearest, finS, total);
+        if (izq + der !== arco || izq < 2 || der < 2) {
+          // Fuera del rango permitido: el marcador vuelve a su punto actual
+          const actual = trazado[rangos[boundaryIdx].fin];
+          e.target.setLatLng([actual.lat, actual.lng]);
+          return;
+        }
+        e.target.setLatLng([trazado[nearest].lat, trazado[nearest].lng]);
+        onBoundaryChange(boundaryIdx, nearest);
       });
 
       markersRef.current.push(marker);
