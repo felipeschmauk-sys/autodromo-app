@@ -280,6 +280,10 @@ created_at TIMESTAMPTZ
 ### RLS
 Todas las tablas tienen políticas abiertas `FOR ALL USING (true)`. El control de acceso es por aplicación, no por RLS.
 
+### Migraciones Ejecutadas Recientemente
+- ✅ `task-gps-recinto-migration.sql` (2 Jul 2026): columna `ubicaciones_piloto.dentro_recinto`
+- ✅ `inscripciones` confirmada en la publicación `supabase_realtime` (2 Jul 2026)
+
 ### Migraciones SQL Pendientes de Ejecutar
 El archivo `task-56-migration.sql` debe correrse en Supabase si aún no se ha hecho:
 ```sql
