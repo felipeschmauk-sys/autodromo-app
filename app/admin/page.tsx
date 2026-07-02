@@ -215,8 +215,9 @@ export default function AdminPage() {
   const [pilotosEvento, setPilotosEvento] = useState<PilotoEvento[]>([]);
   const [loadingPilotosEvento, setLoadingPilotosEvento] = useState(false);
 
-  const cargarPilotosEvento = useCallback(async (fechaId: string) => {
-    setLoadingPilotosEvento(true);
+  // silencioso = true: refresco en segundo plano (realtime/polling) sin spinner
+  const cargarPilotosEvento = useCallback(async (fechaId: string, silencioso = false) => {
+    if (!silencioso) setLoadingPilotosEvento(true);
     const { data } = await supabase
       .from("inscripciones")
       .select("id, estado, pago_estado, piloto_id, pilotos(nombre, telefono, rut, bloqueado)")
@@ -277,6 +278,26 @@ export default function AdminPage() {
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento]);
+
+  // ── Inscripciones en vivo del evento activo ──────────────────────────────
+  // Cuando un piloto se inscribe desde su app, la solicitud aparece sola en la
+  // pestaña Pilotos: Realtime filtrado por fecha + polling de respaldo cada 10 s
+  // (por si inscripciones no está en la publicación supabase_realtime).
+  useEffect(() => {
+    if (!autenticado || !contexto.fechaId) return;
+    const fid = contexto.fechaId;
+
+    const ch = supabase
+      .channel("admin-inscripciones-live")
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "inscripciones", filter: `fecha_id=eq.${fid}` },
+        () => { cargarPilotosEvento(fid, true); })
+      .subscribe();
+
+    const poll = setInterval(() => cargarPilotosEvento(fid, true), 10_000);
+
+    return () => { supabase.removeChannel(ch); clearInterval(poll); };
+  }, [autenticado, contexto.fechaId, cargarPilotosEvento]);
 
   // Callback: cuando CircuitoManager activa un circuito, vincularlo al evento activo
   const handleCircuitoActivado = useCallback((circuitoId: string) => {

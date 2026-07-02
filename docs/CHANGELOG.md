@@ -3,6 +3,15 @@
 
 ---
 
+## [0.5.4] — 2 Julio 2026
+### Corregido
+- Las solicitudes de inscripción nuevas no aparecían en la pestaña Pilotos del
+  admin hasta refrescar la página: el panel nunca se suscribía a `inscripciones`.
+  Ahora: Realtime filtrado por el evento activo + polling de respaldo cada 10 s,
+  con recarga silenciosa (sin spinner)
+
+---
+
 ## [0.5.3] — 2 Julio 2026
 ### Agregado
 - El límite N|1 (último sector → primero, la línea de meta) ahora es editable
