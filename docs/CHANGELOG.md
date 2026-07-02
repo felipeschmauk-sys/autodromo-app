@@ -3,6 +3,30 @@
 
 ---
 
+## [0.5.2] — 2 Julio 2026
+### Corregido
+- Estado GPS del piloto inconsistente entre vistas: el piloto veía "Fuera del
+  recinto" pero el admin mostraba "En recinto" (Dirección) y "En pista" (Pilotos).
+  Causa: solo se enviaba `dentro_geocerca` (pista); el estado del recinto nunca
+  llegaba a la DB, y la pestaña Pilotos mostraba "En pista" por el solo hecho de
+  tener sesión activa.
+
+### Agregado
+- Columna `ubicaciones_piloto.dentro_recinto` (migración: `docs/task-gps-recinto-migration.sql`)
+- El piloto ahora envía su estado completo (pista + recinto) cada 3 s
+- Helper único `estadoGpsPiloto()` en el panel admin: mismas etiquetas y lógica
+  que la app del piloto (En pista / En recinto / Fuera del recinto / Sin señal)
+  usado en Dirección y en la pestaña Pilotos
+- Marcador gris del mapa admin distingue RECINTO / FUERA (antes siempre "BOXES")
+- `registrarUbicacion` con fallback: si la migración no se ha corrido, reintenta
+  sin la columna nueva para no perder ubicaciones
+
+### Sin cambios (por diseño)
+- Piloto sin señal cuya última posición confirmada fue EN PISTA: sigue visible
+  en el mapa con marcador rojo "SIN SEÑAL" en su última ubicación conocida
+
+---
+
 ## [0.5.1] — 2 Julio 2026
 ### Cambiado
 - Editor de sectores (mapa): eliminados los rectángulos de texto "SECTOR N" que

@@ -136,8 +136,28 @@ export default function AdminPage() {
   const [accionandoInscId, setAccionandoInscId] = useState<string | null>(null);
   const [alertas, setAlertas] = useState<string[]>([]);
   // GPS state per pilot (para badge en "Pilotos en sesión")
-  const [pilotoGpsState, setPilotoGpsState] = useState<Map<string, { dentro_geocerca: boolean | null; ts: number }>>(new Map());
+  const [pilotoGpsState, setPilotoGpsState] = useState<Map<string, { dentro_geocerca: boolean | null; dentro_recinto: boolean | null; ts: number }>>(new Map());
   const [gpsTick, setGpsTick] = useState(0);
+
+  // ── Estado GPS unificado del piloto ──────────────────────────
+  // Misma lógica y mismas etiquetas que ve el piloto en su app
+  // (SpeedCard 3 niveles) + "Sin señal" cuando dejó de transmitir.
+  // Usar SIEMPRE este helper en cualquier vista del admin.
+  const GPS_OFFLINE_MS = 20_000;
+  const estadoGpsPiloto = (pilotoId: string): { label: string; cls: string } => {
+    const gps = pilotoGpsState.get(pilotoId);
+    if (!gps || Date.now() - gps.ts > GPS_OFFLINE_MS)
+      return { label: "Sin señal", cls: "bg-red-100 text-red-600" };
+    if (gps.dentro_geocerca === true)
+      return { label: "En pista", cls: "bg-green-100 text-green-700" };
+    if (gps.dentro_recinto === true)
+      return { label: "En recinto", cls: "bg-indigo-100 text-indigo-700" };
+    if (gps.dentro_recinto === false)
+      return { label: "Fuera del recinto", cls: "bg-red-100 text-red-600" };
+    if (gps.dentro_geocerca === false)
+      return { label: "Fuera de pista", cls: "bg-gray-100 text-gray-500" }; // sin dato de recinto (migración pendiente)
+    return { label: "Sin GPS", cls: "bg-gray-100 text-gray-500" };
+  };
   // Circuito activo por evento — fuente de verdad para DireccionCarrera
   const [circuitoIdActivo, setCircuitoIdActivo] = useState<string | null>(null);
   const [realtimeConectado, setRealtimeConectado] = useState(false);
@@ -340,7 +360,11 @@ export default function AdminPage() {
             const u = payload.new as any;
             setPilotoGpsState(prev => {
               const next = new Map(prev);
-              next.set(u.piloto_id, { dentro_geocerca: u.dentro_geocerca, ts: Date.now() });
+              next.set(u.piloto_id, {
+                dentro_geocerca: u.dentro_geocerca,
+                dentro_recinto:  u.dentro_recinto ?? null,
+                ts: Date.now(),
+              });
               return next;
             });
           })
@@ -868,18 +892,9 @@ export default function AdminPage() {
                     const colors = ["bg-indigo-500", "bg-teal-500", "bg-orange-500", "bg-pink-500", "bg-purple-500"];
                     const color = colors[nombre.charCodeAt(0) % colors.length];
 
-                    // Calcular estado GPS del piloto
-                    const gps = pilotoGpsState.get(s.piloto_id);
-                    const OFFLINE_MS = 20_000;
-                    const isOffline = !gps || (Date.now() - gps.ts) > OFFLINE_MS;
+                    // Estado GPS del piloto — mismo helper en todas las vistas
                     void gpsTick; // referencia para que React re-calcule cuando cambia el tick
-                    const estadoBadge = isOffline
-                      ? { label: "Sin señal", cls: "bg-red-100 text-red-600" }
-                      : gps?.dentro_geocerca === true
-                      ? { label: "En pista",  cls: "bg-green-100 text-green-700" }
-                      : gps?.dentro_geocerca === false
-                      ? { label: "En recinto", cls: "bg-yellow-100 text-yellow-700" }
-                      : { label: "Sin GPS",   cls: "bg-gray-100 text-gray-500" };
+                    const estadoBadge = estadoGpsPiloto(s.piloto_id);
 
                     return (
                       <div key={s.id} className="px-5 py-3.5 flex items-center gap-4">
@@ -1310,11 +1325,17 @@ export default function AdminPage() {
                             <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
-                            {enPista ? (
-                              <span className="text-xs bg-green-100 text-green-700 font-bold px-2.5 py-1 rounded-full">
-                                🟢 En pista
-                              </span>
-                            ) : (
+                            {enPista ? (() => {
+                              // Con sesión activa: mostrar el estado GPS real,
+                              // el mismo que ve el piloto en su app
+                              void gpsTick;
+                              const b = estadoGpsPiloto(p.piloto_id);
+                              return (
+                                <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${b.cls}`}>
+                                  {b.label}
+                                </span>
+                              );
+                            })() : (
                               <span className="text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">
                                 Listo · QR pendiente
                               </span>

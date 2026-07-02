@@ -34,6 +34,7 @@ interface Piloto {
   color: string;
   dentro_geocerca: boolean | null;
   offline?: boolean;
+  dentro_recinto?: boolean | null;
 }
 
 interface Props {
@@ -254,8 +255,12 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         return;
       }
 
-      // Online + en boxes/fuera de pista → punto gris en última posición
+      // Online + fuera de pista → punto gris en última posición.
+      // La etiqueta distingue recinto (boxes/paddock) de fuera del autódromo.
       if (p.dentro_geocerca === false) {
+        const etiquetaZona = p.dentro_recinto === true ? "RECINTO"
+                           : p.dentro_recinto === false ? "FUERA"
+                           : "BOXES";
         const icon = L.divIcon({
           html: `
             <div style="display:flex;flex-direction:column;gap:2px;white-space:nowrap">
@@ -276,7 +281,7 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
                 margin-left:12px;background:rgba(5,5,15,.5);color:#6b7280;
                 border-radius:3px;padding:0 5px;
                 font-size:9px;font-weight:700;font-family:monospace;letter-spacing:.5px
-              ">BOXES</div>
+              ">${etiquetaZona}</div>
             </div>`,
           iconSize:   [100, 36],
           iconAnchor: [4, 6],

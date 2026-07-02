@@ -13,6 +13,8 @@ export interface UbicacionPiloto {
   velocidad: number
   precision_metros: number
   dentro_geocerca: boolean
+  // Geocerca del recinto (null = recinto sin configurar)
+  dentro_recinto?: boolean | null
 }
 
 // ── TRAZADO DE PISTA ──────────────────────────────────────────
@@ -159,6 +161,16 @@ export async function registrarUbicacion(ubicacion: UbicacionPiloto) {
   const { error } = await supabase
     .from('ubicaciones_piloto')
     .insert(ubicacion)
+
+  // Compatibilidad: si la migración task-gps-recinto aún no se corrió,
+  // reintentar sin la columna dentro_recinto para no perder la ubicación
+  if (error && ubicacion.dentro_recinto !== undefined && /dentro_recinto/i.test(error.message)) {
+    const { dentro_recinto: _omitido, ...sinRecinto } = ubicacion
+    const { error: error2 } = await supabase
+      .from('ubicaciones_piloto')
+      .insert(sinRecinto)
+    return { error: error2?.message }
+  }
 
   return { error: error?.message }
 }

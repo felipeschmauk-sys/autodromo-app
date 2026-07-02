@@ -33,6 +33,7 @@ interface PilotoEnPista {
   lng: number | null;
   velocidad: number;
   dentro_geocerca: boolean | null;
+  dentro_recinto: boolean | null;
   ultima_actualizacion: Date | null;
   offline: boolean;
   color: string;
@@ -248,6 +249,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
               nombre:              s.pilotos?.nombre || "Piloto",
               lat: null, lng: null, velocidad: 0,
               dentro_geocerca:     null,
+              dentro_recinto:      null,
               ultima_actualizacion: null,
               offline:             true,
               color:               COLORES[colorIdx++ % COLORES.length],
@@ -289,6 +291,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
                 lng:                  u.lng,
                 velocidad:            u.velocidad ?? 0,
                 dentro_geocerca:      u.dentro_geocerca,
+                dentro_recinto:       u.dentro_recinto ?? null,
                 ultima_actualizacion: new Date(),
               });
             } else {

@@ -888,9 +888,11 @@ export default function Home() {
     };
   }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Ref para geocerca (acceso siempre actualizado dentro del intervalo) ──
+  // ── Refs para geocercas (acceso siempre actualizado dentro del intervalo) ──
   const geocercaGpsRef = useRef<Coordenada[]>([]);
+  const recintoGpsRef  = useRef<Coordenada[]>([]);
   useEffect(() => { geocercaGpsRef.current = geocerca; }, [geocerca]);
+  useEffect(() => { recintoGpsRef.current  = geocercaRecinto; }, [geocercaRecinto]);
 
   // ── Envío GPS a Supabase (background) ────────────────────────
   // Manda posición a ubicaciones_piloto cada 3s cuando hay sesión activa.
@@ -927,9 +929,14 @@ export default function Home() {
         const lat = ultimaPos.coords.latitude;
         const lng = ultimaPos.coords.longitude;
         const gc = geocercaGpsRef.current;
+        const rc = recintoGpsRef.current;
         const dentro = gc.length >= 3
           ? puntoEnGeocerca({ lat, lng }, gc)
           : true;
+        // Estado del recinto: lo que ve el piloto es lo que ve el admin
+        const dentroRecinto = rc.length >= 3
+          ? puntoEnGeocerca({ lat, lng }, rc)
+          : null;
 
         // Task #58: posición para detectar el sector del piloto
         // (funciona también en landscape, donde SpeedCard no está montado)
@@ -945,6 +952,7 @@ export default function Home() {
                               : 0,
           precision_metros: Math.round(ultimaPos.coords.accuracy),
           dentro_geocerca:  dentro,
+          dentro_recinto:   dentroRecinto,
         });
       }, 3000);
     };
