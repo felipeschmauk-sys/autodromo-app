@@ -730,11 +730,18 @@ export default function AdminPage() {
         {/* Fila 1: título + estado */}
         <div className="px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="text-xl flex-shrink-0">🏁</span>
-            <div className="flex-shrink-0">
-              <div className="font-bold text-sm leading-none">Panel Maestro</div>
-              <div className="text-xs text-gray-400 leading-none mt-0.5">Race Control</div>
-            </div>
+            {/* Logo + título: clic vuelve al inicio (lista de eventos) */}
+            <button
+              onClick={irAlInicioEventos}
+              title="Volver al inicio"
+              className="flex items-center gap-3 flex-shrink-0 text-left hover:opacity-80 transition-opacity"
+            >
+              <span className="text-xl">🏁</span>
+              <div>
+                <div className="font-bold text-sm leading-none">Panel Maestro</div>
+                <div className="text-xs text-gray-400 leading-none mt-0.5">Race Control</div>
+              </div>
+            </button>
 
             {/* Migas de navegación: Eventos › campeonato › fecha */}
             <div className="flex items-center gap-1.5 ml-3 text-xs min-w-0">
