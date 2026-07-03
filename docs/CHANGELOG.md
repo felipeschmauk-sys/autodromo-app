@@ -3,6 +3,18 @@
 
 ---
 
+## [0.6.1] — 3 Julio 2026
+### Corregido
+- El piloto veía una pista distinta a la del evento: la asociación
+  fecha→circuito vivía solo en localStorage del navegador del admin.
+  Ahora se persiste en la DB (`fechas_evento.circuito_id`, migración:
+  `docs/task-circuito-por-fecha-migration.sql`) y la app del piloto carga
+  trazado y geocercas del circuito de SU evento, con fallback al global
+- El admin resuelve el circuito de la fecha desde la DB primero
+  (localStorage queda como respaldo legado)
+
+---
+
 ## [0.6.0] — 3 Julio 2026
 ### Agregado
 - Banderas personales desde "Pilotos en sesión" (Dirección): clic en el nombre

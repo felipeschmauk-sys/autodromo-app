@@ -279,18 +279,30 @@ export default function AdminPage() {
     if (campId) await cargarFechasDeContexto(campId);
   }, [campeonatosOpt, cargarFechasDeContexto]);
 
+  // Circuito asignado a una fecha: DB primero, localStorage como respaldo
+  const resolverCircuitoDeFecha = useCallback(async (fechaId: string): Promise<string | null> => {
+    const { data, error } = await supabase
+      .from("fechas_evento")
+      .select("circuito_id")
+      .eq("id", fechaId)
+      .maybeSingle();
+    if (!error && (data as any)?.circuito_id) return (data as any).circuito_id as string;
+    const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
+    return porFecha[fechaId] ?? null;
+  }, []);
+
   const seleccionarFecha = useCallback((fechaId: string) => {
     const fecha = fechasOpt.find(f => f.id === fechaId);
     if (!fecha) return;
     setContexto(prev => ({ ...prev, fechaId: fecha.id, fechaNombre: fecha.nombre, tipo: fecha.tipo }));
     cargarPilotosEvento(fecha.id);
-    // Restaurar circuito asociado a este evento (si existe)
-    const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
-    setCircuitoIdActivo(porFecha[fecha.id] ?? null);
+    // Restaurar circuito asociado a este evento (DB primero, localStorage de respaldo)
+    setCircuitoIdActivo(null);
+    resolverCircuitoDeFecha(fecha.id).then(setCircuitoIdActivo);
     // Si el tab actual no está disponible para este tipo, ir al primero disponible
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
-  }, [fechasOpt, cargarPilotosEvento]);
+  }, [fechasOpt, cargarPilotosEvento, resolverCircuitoDeFecha]);
 
   // ── Bandera personal por piloto (menú en "Pilotos en sesión") ────────────
   const [menuBanderaPiloto, setMenuBanderaPiloto] = useState<string | null>(null); // sesion.id abierta
@@ -328,11 +340,11 @@ export default function AdminPage() {
     });
     cargarFechasDeContexto(campeonato.id); // rellena el selector de fechas del header
     cargarPilotosEvento(fecha.id);
-    const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
-    setCircuitoIdActivo(porFecha[fecha.id] ?? null);
+    setCircuitoIdActivo(null);
+    resolverCircuitoDeFecha(fecha.id).then(setCircuitoIdActivo);
     const tabsDisp = TABS_POR_TIPO[tipo || "sin_contexto"] || TABS_POR_TIPO.sin_contexto;
     setTab(tabsDisp[0].id);
-  }, [cargarFechasDeContexto, cargarPilotosEvento]);
+  }, [cargarFechasDeContexto, cargarPilotosEvento, resolverCircuitoDeFecha]);
 
   // ── Sesiones visibles según el evento activo ─────────────────────────────
   // Con una fecha seleccionada, las listas muestran solo pilotos inscritos en
@@ -364,13 +376,16 @@ export default function AdminPage() {
   }, [autenticado, contexto.fechaId, cargarPilotosEvento]);
 
   // Callback: cuando CircuitoManager activa un circuito, vincularlo al evento activo
-  const handleCircuitoActivado = useCallback((circuitoId: string) => {
+  const handleCircuitoActivado = useCallback(async (circuitoId: string) => {
     setCircuitoIdActivo(circuitoId);
     const fechaId = contexto.fechaId;
     if (fechaId) {
+      // localStorage como respaldo legado
       const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
       porFecha[fechaId] = circuitoId;
       localStorage.setItem("circuitosByFecha", JSON.stringify(porFecha));
+      // Fuente de verdad en DB: la app del piloto lee de aquí qué pista mostrar
+      await supabase.from("fechas_evento").update({ circuito_id: circuitoId }).eq("id", fechaId);
     }
   }, [contexto.fechaId]);
 

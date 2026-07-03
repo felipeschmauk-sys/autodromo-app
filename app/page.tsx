@@ -772,9 +772,37 @@ export default function Home() {
   useEffect(() => {
     if (stage !== "app") return;
 
-    getTrazadoActivo().then((coords) => { if (coords) setTrazado(coords); });
-    getGeocercaActiva('pista').then((coords) => { if (coords) setGeocerca(coords); });
-    getGeocercaActiva('recinto').then((coords) => { if (coords) setGeocercaRecinto(coords); });
+    // El piloto debe ver el circuito de SU evento (fechas_evento.circuito_id),
+    // el mismo que ve el admin. Fallback: trazado/geocercas globales si la
+    // fecha no tiene circuito asignado o la migración aún no se corre.
+    const cargarPistaDelEvento = async () => {
+      try {
+        if (eventoActivo?.fechaId) {
+          const { data: f } = await supabase
+            .from("fechas_evento")
+            .select("circuito_id")
+            .eq("id", eventoActivo.fechaId)
+            .maybeSingle();
+          if ((f as any)?.circuito_id) {
+            const { data: c } = await supabase
+              .from("circuitos")
+              .select("trazado_coords, geocerca_pista, geocerca_recinto")
+              .eq("id", (f as any).circuito_id)
+              .single();
+            if (c && (c.trazado_coords?.length ?? 0) >= 2) {
+              setTrazado(c.trazado_coords);
+              if ((c.geocerca_pista?.length ?? 0) >= 3)   setGeocerca(c.geocerca_pista);
+              if ((c.geocerca_recinto?.length ?? 0) >= 3) setGeocercaRecinto(c.geocerca_recinto);
+              return;
+            }
+          }
+        }
+      } catch { /* columna sin migrar u otro error → fallback global */ }
+      getTrazadoActivo().then((coords) => { if (coords) setTrazado(coords); });
+      getGeocercaActiva('pista').then((coords) => { if (coords) setGeocerca(coords); });
+      getGeocercaActiva('recinto').then((coords) => { if (coords) setGeocercaRecinto(coords); });
+    };
+    cargarPistaDelEvento();
 
     supabase
       .from("estado_pista")
@@ -831,7 +859,7 @@ export default function Home() {
       supabase.removeChannel(chEstado);
       supabase.removeChannel(chSectores);
     };
-  }, [stage]);
+  }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
   useEffect(() => {
