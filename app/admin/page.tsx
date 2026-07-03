@@ -44,8 +44,21 @@ interface SesionActiva {
   id: string;
   piloto_id: string;
   inicio: string;
+  bandera_piloto?: string | null;
   piloto?: Piloto;
 }
+
+// ── Banderas personales por piloto ──────────────────────────────
+// Solo las ve el piloto al que se le asignan (sesiones.bandera_piloto).
+// Disponibles según el tipo de sesión, igual que en DireccionCarrera.
+const BANDERAS_PILOTO: Array<{
+  value: string; label: string; emoji: string; activeCls: string; tipos: string[];
+}> = [
+  { value: "azul",         label: "Azul — dejar pasar", emoji: "🔵", activeCls: "bg-blue-600 border-blue-600 text-white",     tipos: ["racing", "track_day"] },
+  { value: "negra_blanco", label: "Advertencia",        emoji: "⚠️", activeCls: "bg-gray-700 border-gray-700 text-white",     tipos: ["racing"] },
+  { value: "negra",        label: "Negra — exclusión",  emoji: "⚫", activeCls: "bg-black border-black text-white",           tipos: ["racing", "track_day"] },
+  { value: "taller",       label: "A taller",           emoji: "🔧", activeCls: "bg-violet-600 border-violet-600 text-white", tipos: ["racing", "track_day", "entrenamiento"] },
+];
 interface ValidacionResult {
   valido: boolean;
   motivo?: string;
@@ -278,6 +291,16 @@ export default function AdminPage() {
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento]);
+
+  // ── Bandera personal por piloto (menú en "Pilotos en sesión") ────────────
+  const [menuBanderaPiloto, setMenuBanderaPiloto] = useState<string | null>(null); // sesion.id abierta
+
+  const toggleBanderaPiloto = useCallback(async (sesionId: string, bandera: string, actual: string | null) => {
+    // Toggle: clic en la activa la quita; el piloto la ve/deja de ver al instante
+    const nueva = actual === bandera ? null : bandera;
+    await supabase.from("sesiones").update({ bandera_piloto: nueva }).eq("id", sesionId);
+    cargarSesiones();
+  }, [cargarSesiones]);
 
   // ── Navegación rápida: migas del header + "Operar esta fecha" ────────────
   const irAlInicioEventos = useCallback(() => {
@@ -1001,31 +1024,72 @@ export default function AdminPage() {
                     void gpsTick; // referencia para que React re-calcule cuando cambia el tick
                     const estadoBadge = estadoGpsPiloto(s.piloto_id);
 
+                    const menuAbierto = menuBanderaPiloto === s.id;
+                    const banderaActual = s.bandera_piloto ?? null;
+                    const banderaInfo = BANDERAS_PILOTO.find(b => b.value === banderaActual);
+                    const banderasDisp = BANDERAS_PILOTO.filter(b => b.tipos.includes(contexto.tipo || "racing"));
+
                     return (
-                      <div key={s.id} className="px-5 py-3.5 flex items-center gap-4">
-                        <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
-                          {iniciales}
+                      <div key={s.id} className="px-5 py-3.5">
+                        <div className="flex items-center gap-4">
+                          <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
+                            {iniciales}
+                          </div>
+                          {/* Nombre clicable → menú de bandera personal */}
+                          <button
+                            onClick={() => setMenuBanderaPiloto(prev => prev === s.id ? null : s.id)}
+                            title="Bandera personal para este piloto"
+                            className="flex-1 min-w-0 text-left"
+                          >
+                            <p className="text-sm font-semibold text-gray-900 truncate flex items-center gap-1.5">
+                              {nombre}
+                              {banderaInfo && <span className="flex-shrink-0">{banderaInfo.emoji}</span>}
+                              <span className="text-gray-300 text-[10px] flex-shrink-0">{menuAbierto ? "▲" : "▼"}</span>
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              {new Date(s.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                            </p>
+                          </button>
+                          <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${estadoBadge.cls}`}>
+                            {estadoBadge.label}
+                          </span>
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`¿Retirar a ${nombre} de pista?`)) return;
+                              await cerrarSesionAdmin(s.piloto_id);
+                              cargarSesiones();
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2.5 py-1 rounded-lg transition-colors"
+                            title="Cerrar sesión del piloto"
+                          >
+                            ✕ Retirar
+                          </button>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{nombre}</p>
-                          <p className="text-xs text-gray-400">
-                            {new Date(s.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
-                          </p>
-                        </div>
-                        <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${estadoBadge.cls}`}>
-                          {estadoBadge.label}
-                        </span>
-                        <button
-                          onClick={async () => {
-                            if (!confirm(`¿Retirar a ${nombre} de pista?`)) return;
-                            await cerrarSesionAdmin(s.piloto_id);
-                            cargarSesiones();
-                          }}
-                          className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2.5 py-1 rounded-lg transition-colors"
-                          title="Cerrar sesión del piloto"
-                        >
-                          ✕ Retirar
-                        </button>
+
+                        {/* Menú de bandera personal: solo la ve este piloto en su app */}
+                        {menuAbierto && (
+                          <div className="mt-2.5 pl-13" style={{ paddingLeft: 52 }}>
+                            <p className="text-xs text-gray-400 mb-1.5">
+                              Bandera personal — solo la ve {nombre.split(" ")[0]}
+                            </p>
+                            <div className="flex flex-wrap gap-1.5">
+                              {banderasDisp.map(b => (
+                                <button
+                                  key={b.value}
+                                  onClick={() => toggleBanderaPiloto(s.id, b.value, banderaActual)}
+                                  title={banderaActual === b.value ? "Quitar bandera" : b.label}
+                                  className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
+                                    banderaActual === b.value
+                                      ? b.activeCls
+                                      : "border-gray-200 text-gray-500 hover:bg-gray-50 hover:border-gray-300"
+                                  }`}
+                                >
+                                  {b.emoji} {b.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

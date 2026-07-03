@@ -3,6 +3,17 @@
 
 ---
 
+## [0.6.0] — 3 Julio 2026
+### Agregado
+- Banderas personales desde "Pilotos en sesión" (Dirección): clic en el nombre
+  del piloto despliega el menú de banderas que solo ve ese piloto (azul,
+  advertencia, negra, a taller — según tipo de sesión). Toggle: otro clic la
+  quita. Persisten en sesiones.bandera_piloto; el piloto la ve al instante
+  con prioridad sobre sector/global y el badge "DIRIGIDA A TI"
+- Indicador de bandera personal activa junto al nombre del piloto en la lista
+
+---
+
 ## [0.5.8] — 2 Julio 2026
 ### Agregado
 - Migas de navegación en el header del panel: "🏠 Eventos › campeonato › fecha".
