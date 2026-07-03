@@ -163,6 +163,12 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
   // Cuando circuitoId cambia React re-ejecuta este efecto → mapa actualiza sin Realtime.
   // Fallback: tabla global `trazado_pista` (para compatibilidad).
   useEffect(() => {
+    if (circuitoId === null) {
+      // Evento sin circuito asignado: vista limpia, sin caer al trazado
+      // global (que sería el de la última fecha activada)
+      setTrazado([]);
+      return;
+    }
     if (circuitoId) {
       supabase
         .from("circuitos")

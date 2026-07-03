@@ -279,6 +279,15 @@ export default function AdminPage() {
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento]);
 
+  // ── Sesiones visibles según el evento activo ─────────────────────────────
+  // Con una fecha seleccionada, las listas muestran solo pilotos inscritos en
+  // ella (una fecha nueva parte limpia). Los contadores de CAPACIDAD siguen
+  // siendo globales: reflejan cuántos autos hay físicamente en la pista, igual
+  // que la validación real del QR en auth.ts.
+  const sesionesVisibles = contexto.fechaId
+    ? sesiones.filter(s => pilotosEvento.some(p => p.piloto_id === s.piloto_id))
+    : sesiones;
+
   // ── Inscripciones en vivo del evento activo ──────────────────────────────
   // Cuando un piloto se inscribe desde su app, la solicitud aparece sola en la
   // pestaña Pilotos: Realtime filtrado por fecha + polling de respaldo cada 10 s
@@ -901,13 +910,13 @@ export default function AdminPage() {
                   </svg>
                 </button>
               </div>
-              {sesiones.length === 0 ? (
+              {sesionesVisibles.length === 0 ? (
                 <div className="px-5 py-8 text-center text-gray-400 text-sm">
                   Ningún piloto activo en este momento
                 </div>
               ) : (
                 <div className="divide-y divide-gray-50">
-                  {sesiones.map(s => {
+                  {sesionesVisibles.map(s => {
                     const nombre = s.piloto?.nombre || s.piloto_id.slice(0, 8);
                     const iniciales = nombre.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
                     const colors = ["bg-indigo-500", "bg-teal-500", "bg-orange-500", "bg-pink-500", "bg-purple-500"];
@@ -953,7 +962,7 @@ export default function AdminPage() {
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Log de acciones</span>
               </div>
               <div className="divide-y divide-gray-50">
-                {sesiones.slice(0, 5).map(s => (
+                {sesionesVisibles.slice(0, 5).map(s => (
                   <div key={s.id} className="px-5 py-3 flex items-center gap-3">
                     <span className="text-xs text-gray-400 w-12 flex-shrink-0">
                       {new Date(s.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
@@ -963,7 +972,7 @@ export default function AdminPage() {
                     </span>
                   </div>
                 ))}
-                {sesiones.length === 0 && (
+                {sesionesVisibles.length === 0 && (
                   <div className="px-5 py-6 text-center text-gray-400 text-sm">Sin registros aún</div>
                 )}
               </div>

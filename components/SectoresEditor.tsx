@@ -56,10 +56,13 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
           .eq("id", circuitoId)
           .single();
         coords = data?.trazado_coords ?? null;
-      } else {
+      } else if (circuitoId === undefined) {
+        // Sin prop: comportamiento legado (trazado global)
         coords = await getTrazadoActivo();
       }
-      if (coords) setTrazado(coords);
+      // circuitoId === null → evento sin circuito asignado: editor vacío,
+      // sin caer al trazado global de la última fecha
+      setTrazado(coords ?? []);
 
       try {
         const { data } = await supabase
@@ -296,7 +299,14 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
         {!trazado.length ? (
           <div className="bg-gray-50 border border-gray-200 rounded-2xl py-10 text-center text-gray-400 text-sm">
             <p className="text-2xl mb-2">🗺</p>
-            <p>Sin trazado cargado en Supabase</p>
+            {circuitoId === null ? (
+              <>
+                <p>Este evento aún no tiene circuito asignado</p>
+                <p className="text-xs mt-1">Actívale un circuito desde la biblioteca de circuitos aquí en Config</p>
+              </>
+            ) : (
+              <p>Sin trazado cargado en Supabase</p>
+            )}
           </div>
         ) : (
           <>

@@ -3,6 +3,19 @@
 
 ---
 
+## [0.5.5] — 2 Julio 2026
+### Corregido
+- Fecha nueva partía "sucia" con la pista y los pilotos de la última fecha:
+  - Dirección y SectoresEditor caían al trazado global cuando el evento no
+    tenía circuito asignado; ahora muestran vista limpia con guía para asignar
+    circuito en Config
+  - El sidebar "Pilotos en sesión" y el log de acciones mostraban sesiones de
+    cualquier evento; ahora filtran por los inscritos de la fecha activa
+- Los contadores de CAPACIDAD siguen siendo globales a propósito: reflejan los
+  autos físicamente en pista, igual que la validación real del QR
+
+---
+
 ## [0.5.4] — 2 Julio 2026
 ### Corregido
 - Las solicitudes de inscripción nuevas no aparecían en la pestaña Pilotos del
