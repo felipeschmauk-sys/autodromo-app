@@ -1356,7 +1356,7 @@ export default function Home() {
                         <p className="text-sm font-semibold text-amber-800">Prueba de conocimientos en desarrollo</p>
                         <p className="text-xs text-amber-700 leading-relaxed">
                           Próximamente deberás completar esta evaluación al inscribirte en un campeonato.
-                          Por ahora podés acceder directamente a la plataforma.
+                          Por ahora puedes acceder directamente a la plataforma.
                         </p>
                       </div>
 

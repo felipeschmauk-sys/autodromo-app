@@ -661,7 +661,7 @@ export default function AdminPage() {
             <div className="text-3xl">📅</div>
             <p className="text-white font-semibold text-sm">Sin evento activo</p>
             <p className="text-gray-400 text-xs leading-relaxed">
-              Seleccioná un campeonato y una fecha en el selector de arriba,<br />
+              Selecciona un campeonato y una fecha en el selector de arriba,<br />
               o creá uno nuevo desde la pestaña Eventos.
             </p>
             <button
@@ -679,7 +679,7 @@ export default function AdminPage() {
             <p className="text-4xl mb-4">🏁</p>
             <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
             <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
-              Seleccioná un campeonato y una fecha en la parte superior para habilitar el control de pista.
+              Selecciona un campeonato y una fecha en la parte superior para habilitar el control de pista.
             </p>
           </div>
         )}
@@ -1114,7 +1114,7 @@ export default function AdminPage() {
 
                   {!contexto.fechaId ? (
                     <p className="px-5 py-6 text-sm text-gray-400 text-center">
-                      Seleccioná un evento para ver los pilotos disponibles.
+                      Selecciona un evento para ver los pilotos disponibles.
                     </p>
                   ) : pilotosElegibles.length === 0 ? (
                     <p className="px-5 py-6 text-sm text-gray-400 text-center">
@@ -1185,7 +1185,7 @@ export default function AdminPage() {
               <p className="text-4xl mb-4">👥</p>
               <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
               <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
-                Seleccioná un campeonato y una fecha arriba para ver los pilotos del evento.
+                Selecciona un campeonato y una fecha arriba para ver los pilotos del evento.
               </p>
             </div>
           );

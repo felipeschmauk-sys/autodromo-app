@@ -319,7 +319,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
               <div className="flex items-center justify-center gap-2 mt-2.5">
                 <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 text-xs px-3 py-1.5 rounded-full">
                   <span>✋</span>
-                  Arrastrá los marcadores bicolor del mapa para mover los límites entre sectores
+                  Arrastra los marcadores bicolor del mapa para mover los límites entre sectores
                 </span>
               </div>
             )}
@@ -463,7 +463,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
 
       {cantidad === 1 && !cargando && (
         <p className="text-xs text-gray-400 text-center">
-          Seleccioná 2 o más sectores para activar el control de banderas por zona
+          Selecciona 2 o más sectores para activar el control de banderas por zona
         </p>
       )}
     </div>

@@ -253,7 +253,7 @@ export default function AdminMensajes() {
               value={texto}
               onChange={e => setTexto(e.target.value)}
               onKeyDown={e => e.key === "Enter" && enviar()}
-              placeholder="Escribí el mensaje…"
+              placeholder="Escribe el mensaje…"
               className="flex-1 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white placeholder-gray-600 focus:outline-none focus:border-indigo-500 transition-colors"
             />
             <button

@@ -570,7 +570,7 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                       <span className="text-lg flex-shrink-0">⚠️</span>
                       <p className="text-xs text-amber-700 font-medium leading-snug">
                         Este evento no tiene circuito asignado. Selecciona uno de la lista
-                        y tócale &ldquo;Activar&rdquo; para asignárselo.
+                        y presiona &ldquo;Activar&rdquo; para asignárselo.
                       </p>
                     </div>
                   )}
@@ -618,7 +618,7 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
               {!seleccionado ? (
                 <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center py-14 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                   <p className="text-3xl mb-3">🏁</p>
-                  <p className="text-sm font-semibold text-gray-500">Seleccioná un circuito</p>
+                  <p className="text-sm font-semibold text-gray-500">Selecciona un circuito</p>
                   <p className="text-xs text-gray-400 mt-1.5">o creá uno nuevo para configurarlo</p>
                 </div>
               ) : (
