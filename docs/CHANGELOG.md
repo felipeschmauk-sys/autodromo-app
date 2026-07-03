@@ -3,6 +3,17 @@
 
 ---
 
+## [0.5.8] — 2 Julio 2026
+### Agregado
+- Migas de navegación en el header del panel: "🏠 Eventos › campeonato › fecha".
+  Eventos vuelve al menú inicial (limpia contexto), el campeonato vuelve a la
+  lista de fechas, la fecha entra a su panel de operación
+- Botón "🏁 Operar →" en cada fecha (lista de Eventos): setea el contexto
+  completo y salta directo a Dirección, sin pasar por los menús desplegables
+- Los menús desplegables del header siguen disponibles como alternativa
+
+---
+
 ## [0.5.7] — 2 Julio 2026
 ### Cambiado
 - "Pista habilitada — X de N cupos" y "Capacidad de pista X/N" ahora cuentan

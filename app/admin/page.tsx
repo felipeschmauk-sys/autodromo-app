@@ -279,6 +279,38 @@ export default function AdminPage() {
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento]);
 
+  // ── Navegación rápida: migas del header + "Operar esta fecha" ────────────
+  const irAlInicioEventos = useCallback(() => {
+    setContexto({ campeonatoId: null, campeonatoNombre: "", fechaId: null, fechaNombre: "", tipo: null });
+    setFechasOpt([]);
+    setCircuitoIdActivo(null);
+    setTab("eventos");
+  }, []);
+
+  const volverAlCampeonato = useCallback(() => {
+    setContexto(prev => ({ ...prev, fechaId: null, fechaNombre: "", tipo: null }));
+    setCircuitoIdActivo(null);
+    setTab("eventos");
+  }, []);
+
+  // Entra directo a operar una fecha desde la lista de Eventos
+  const operarFecha = useCallback((campeonato: { id: string; nombre: string }, fecha: { id: string; nombre: string; tipo: string | null }) => {
+    const tipo = (fecha.tipo || null) as Contexto["tipo"];
+    setContexto({
+      campeonatoId:     campeonato.id,
+      campeonatoNombre: campeonato.nombre,
+      fechaId:          fecha.id,
+      fechaNombre:      fecha.nombre,
+      tipo,
+    });
+    cargarFechasDeContexto(campeonato.id); // rellena el selector de fechas del header
+    cargarPilotosEvento(fecha.id);
+    const porFecha: Record<string, string> = JSON.parse(localStorage.getItem("circuitosByFecha") || "{}");
+    setCircuitoIdActivo(porFecha[fecha.id] ?? null);
+    const tabsDisp = TABS_POR_TIPO[tipo || "sin_contexto"] || TABS_POR_TIPO.sin_contexto;
+    setTab(tabsDisp[0].id);
+  }, [cargarFechasDeContexto, cargarPilotosEvento]);
+
   // ── Sesiones visibles según el evento activo ─────────────────────────────
   // Con una fecha seleccionada, las listas muestran solo pilotos inscritos en
   // ella (una fecha nueva parte limpia). Los contadores de CAPACIDAD siguen
@@ -572,11 +604,49 @@ export default function AdminPage() {
       <header className="bg-gray-900 text-white sticky top-0 z-50">
         {/* Fila 1: título + estado */}
         <div className="px-5 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="text-xl">🏁</span>
-            <div>
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="text-xl flex-shrink-0">🏁</span>
+            <div className="flex-shrink-0">
               <div className="font-bold text-sm leading-none">Panel Maestro</div>
               <div className="text-xs text-gray-400 leading-none mt-0.5">Race Control</div>
+            </div>
+
+            {/* Migas de navegación: Eventos › campeonato › fecha */}
+            <div className="flex items-center gap-1.5 ml-3 text-xs min-w-0">
+              <button
+                onClick={irAlInicioEventos}
+                title="Volver a la lista de eventos"
+                className="flex-shrink-0 bg-gray-800 border border-gray-700 text-gray-300 hover:text-white hover:border-gray-500 rounded-lg px-2.5 py-1 transition-colors"
+              >
+                🏠 Eventos
+              </button>
+              {contexto.campeonatoNombre && (
+                <>
+                  <span className="text-gray-600 flex-shrink-0">›</span>
+                  <button
+                    onClick={volverAlCampeonato}
+                    title="Ver fechas de este campeonato"
+                    className="text-gray-300 hover:text-white transition-colors truncate max-w-[150px]"
+                  >
+                    {contexto.campeonatoNombre}
+                  </button>
+                </>
+              )}
+              {contexto.fechaNombre && (
+                <>
+                  <span className="text-gray-600 flex-shrink-0">›</span>
+                  <button
+                    onClick={() => {
+                      const tabsDisp = TABS_POR_TIPO[contexto.tipo || "sin_contexto"];
+                      setTab(tabsDisp[0].id);
+                    }}
+                    title="Operar esta fecha"
+                    className="text-white font-semibold hover:text-indigo-300 transition-colors truncate max-w-[150px]"
+                  >
+                    {contexto.fechaNombre}
+                  </button>
+                </>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -1427,6 +1497,7 @@ export default function AdminPage() {
           <AdminEventos
             contextoFechaId={contexto.fechaId}
             onContextoCambia={cargarCampeonatos}
+            onOperarFecha={operarFecha}
           />
         )}
 

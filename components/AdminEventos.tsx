@@ -70,6 +70,11 @@ const PAGO_BADGE: Record<string, { label: string; color: string }> = {
 interface AdminEventosProps {
   contextoFechaId?: string | null;
   onContextoCambia?: () => void;
+  // Entrar a operar una fecha: el panel setea el contexto y salta a Dirección
+  onOperarFecha?: (
+    campeonato: { id: string; nombre: string },
+    fecha: { id: string; nombre: string; tipo: string | null },
+  ) => void;
 }
 
 const TIPO_EVENTO_OPTS = [
@@ -79,7 +84,7 @@ const TIPO_EVENTO_OPTS = [
 ];
 
 // ── Componente principal ───────────────────────────────────────
-export default function AdminEventos({ contextoFechaId, onContextoCambia }: AdminEventosProps) {
+export default function AdminEventos({ contextoFechaId, onContextoCambia, onOperarFecha }: AdminEventosProps) {
   const [campeonatos, setCampeonatos]     = useState<Campeonato[]>([]);
   const [fechas, setFechas]               = useState<FechaEvento[]>([]);
   const [inscripciones, setInscripciones] = useState<Inscripcion[]>([]);
@@ -609,6 +614,17 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia }: Admi
                           className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition">
                           Inscripciones →
                         </button>
+                        {onOperarFecha && f.estado !== "finalizado" && (
+                          <button
+                            onClick={() => onOperarFecha(
+                              { id: selectedCamp!, nombre: campeonatos.find(c => c.id === selectedCamp)?.nombre || "" },
+                              { id: f.id, nombre: f.nombre, tipo: f.tipo ?? null },
+                            )}
+                            title="Entrar al panel de control de esta fecha"
+                            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-gray-700 transition">
+                            🏁 Operar →
+                          </button>
+                        )}
                       </div>
                     </div>
                     {/* Cambio de estado rápido */}
