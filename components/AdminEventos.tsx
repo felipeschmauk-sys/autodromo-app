@@ -564,7 +564,21 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
+                          {/* El nombre de la fecha es el link para entrar a operarla */}
+                          {onOperarFecha && f.estado !== "finalizado" ? (
+                            <button
+                              onClick={() => onOperarFecha(
+                                { id: selectedCamp!, nombre: campeonatos.find(c => c.id === selectedCamp)?.nombre || "" },
+                                { id: f.id, nombre: f.nombre, tipo: f.tipo ?? null },
+                              )}
+                              title="Entrar al panel de control de esta fecha"
+                              className="text-sm font-semibold text-gray-900 hover:text-indigo-600 hover:underline underline-offset-2 transition text-left"
+                            >
+                              {f.nombre}
+                            </button>
+                          ) : (
+                            <p className="text-sm font-semibold text-gray-900">{f.nombre}</p>
+                          )}
                           {f.tipo && (
                             <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                               f.tipo === "racing"    ? "bg-red-100 text-red-700" :
@@ -614,17 +628,6 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
                           className="text-xs bg-indigo-600 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-indigo-700 transition">
                           Inscripciones →
                         </button>
-                        {onOperarFecha && f.estado !== "finalizado" && (
-                          <button
-                            onClick={() => onOperarFecha(
-                              { id: selectedCamp!, nombre: campeonatos.find(c => c.id === selectedCamp)?.nombre || "" },
-                              { id: f.id, nombre: f.nombre, tipo: f.tipo ?? null },
-                            )}
-                            title="Entrar al panel de control de esta fecha"
-                            className="text-xs bg-gray-900 text-white px-3 py-1.5 rounded-lg font-semibold hover:bg-gray-700 transition">
-                            🏁 Operar →
-                          </button>
-                        )}
                       </div>
                     </div>
                     {/* Cambio de estado rápido */}
@@ -792,9 +795,14 @@ function CampeonatoCard({
     }`}>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <p className={`text-sm font-semibold truncate ${c.activo ? "text-gray-900" : "text-gray-500"}`}>
+          {/* El nombre del campeonato es el link a sus fechas */}
+          <button
+            onClick={() => onVerFechas(c.id)}
+            title="Ver fechas de este campeonato"
+            className={`text-sm font-semibold truncate text-left hover:text-indigo-600 hover:underline underline-offset-2 transition ${c.activo ? "text-gray-900" : "text-gray-500"}`}
+          >
             {c.nombre}
-          </p>
+          </button>
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium border ${
             c.activo ? "bg-green-50 text-green-700 border-green-200"
                      : "bg-gray-100 text-gray-400 border-gray-200"
