@@ -662,7 +662,7 @@ export default function AdminPage() {
             <p className="text-white font-semibold text-sm">Sin evento activo</p>
             <p className="text-gray-400 text-xs leading-relaxed">
               Selecciona un campeonato y una fecha en el selector de arriba,<br />
-              o creá uno nuevo desde la pestaña Eventos.
+              o crea uno nuevo desde la pestaña Eventos.
             </p>
             <button
               onClick={() => setTab("eventos")}

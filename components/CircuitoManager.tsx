@@ -586,15 +586,15 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold truncate">{c.nombre}</p>
-                        {c.id === circuitoAsignadoId ? (
-                          <span className="flex-shrink-0 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">
-                            Este evento
-                          </span>
-                        ) : c.id === activoId ? (
+                        {/* Con contexto de evento, "Activo" = asignado a ESTE evento.
+                            El activo global solo se muestra sin contexto (legado). */}
+                        {(circuitoAsignadoId !== undefined
+                          ? c.id === circuitoAsignadoId
+                          : c.id === activoId) && (
                           <span className="flex-shrink-0 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
                             Activo
                           </span>
-                        ) : null}
+                        )}
                       </div>
                       {c.ciudad && (
                         <p className={`text-xs mt-0.5 ${seleccionado?.id === c.id ? "text-gray-400" : "text-gray-400"}`}>
@@ -619,7 +619,7 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                 <div className="h-full min-h-[240px] flex flex-col items-center justify-center text-center py-14 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
                   <p className="text-3xl mb-3">🏁</p>
                   <p className="text-sm font-semibold text-gray-500">Selecciona un circuito</p>
-                  <p className="text-xs text-gray-400 mt-1.5">o creá uno nuevo para configurarlo</p>
+                  <p className="text-xs text-gray-400 mt-1.5">o crea uno nuevo para configurarlo</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -661,12 +661,18 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                     </div>
                   </div>
 
-                  {/* Botón activar */}
+                  {/* Botón activar — con contexto de evento, el estado "activo"
+                      es el circuito asignado a ESTE evento */}
+                  {(() => {
+                    const activoAqui = circuitoAsignadoId !== undefined
+                      ? seleccionado.id === circuitoAsignadoId
+                      : seleccionado.id === activoId;
+                    return (
                   <button
                     onClick={() => activar(seleccionado)}
                     disabled={activando}
                     className={`w-full py-4 font-bold rounded-xl text-sm transition-colors ${
-                      seleccionado.id === activoId
+                      activoAqui
                         ? "bg-green-600 hover:bg-green-700 text-white"
                         : "bg-gray-900 hover:bg-gray-700 text-white"
                     } disabled:opacity-50 disabled:cursor-not-allowed`}
@@ -676,12 +682,14 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                         <span className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                         Activando...
                       </span>
-                    ) : seleccionado.id === activoId ? (
+                    ) : activoAqui ? (
                       "✓ Circuito activo — Volver a activar"
                     ) : (
                       "⚡ Activar en el sistema"
                     )}
                   </button>
+                    );
+                  })()}
                   <p className="text-xs text-gray-400 text-center -mt-2">
                     Aplica trazado y geocercas de este circuito al sistema en tiempo real
                   </p>
