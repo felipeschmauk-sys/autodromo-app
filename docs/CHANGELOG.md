@@ -3,6 +3,18 @@
 
 ---
 
+## [0.5.7] — 2 Julio 2026
+### Cambiado
+- "Pista habilitada — X de N cupos" y "Capacidad de pista X/N" ahora cuentan
+  las sesiones del evento seleccionado (antes contaban todas las sesiones
+  activas del sistema, incluidas las de otras fechas)
+- Badge "Activo" en la biblioteca de circuitos: solo el circuito asignado al
+  evento actual (el activo global ya no se muestra dentro de un evento)
+- Los bloqueos del escáner QR siguen usando el conteo global a propósito:
+  reflejan la validación real de capacidad en auth.ts
+
+---
+
 ## [0.5.6] — 2 Julio 2026
 ### Corregido
 - Más fugas de "fecha nueva sucia" (complemento de 0.5.5):

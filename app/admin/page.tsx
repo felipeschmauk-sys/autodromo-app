@@ -730,7 +730,7 @@ export default function AdminPage() {
                        : "🟢 PISTA HABILITADA"}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {sesiones.length} de {maxPilotos} cupos activos
+                      {sesionesVisibles.length} de {maxPilotos} cupos activos
                       {cargandoBandera && <span className="ml-2 text-xs text-gray-400">Enviando...</span>}
                     </p>
                   </div>
@@ -876,16 +876,16 @@ export default function AdminPage() {
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad de pista</span>
-                <span className="text-sm font-bold text-gray-900">{sesiones.length} / {maxPilotos}</span>
+                <span className="text-sm font-bold text-gray-900">{sesionesVisibles.length} / {maxPilotos}</span>
               </div>
               <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    sesiones.length / maxPilotos >= 0.9 ? "bg-red-500"
-                    : sesiones.length / maxPilotos >= 0.7 ? "bg-amber-400"
+                    sesionesVisibles.length / maxPilotos >= 0.9 ? "bg-red-500"
+                    : sesionesVisibles.length / maxPilotos >= 0.7 ? "bg-amber-400"
                     : "bg-green-500"
                   }`}
-                  style={{ width: `${Math.min(100, (sesiones.length / maxPilotos) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (sesionesVisibles.length / maxPilotos) * 100)}%` }}
                 />
               </div>
             </div>
