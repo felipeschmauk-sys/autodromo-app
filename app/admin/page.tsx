@@ -391,6 +391,15 @@ export default function AdminPage() {
     setTab("eventos");
   }, []);
 
+  // Portada del panel: lo que se ve al abrir la página por primera vez
+  // (contexto limpio, pantalla "Sin evento activo" con acceso a Eventos)
+  const irAlHome = useCallback(() => {
+    setContexto({ campeonatoId: null, campeonatoNombre: "", fechaId: null, fechaNombre: "", tipo: null });
+    setFechasOpt([]);
+    setCircuitoIdActivo(null);
+    setTab("direccion");
+  }, []);
+
   const volverAlCampeonato = useCallback(() => {
     setContexto(prev => ({ ...prev, fechaId: null, fechaNombre: "", tipo: null }));
     setCircuitoIdActivo(null);
@@ -730,9 +739,9 @@ export default function AdminPage() {
         {/* Fila 1: título + estado */}
         <div className="px-5 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
-            {/* Logo + título: clic vuelve al inicio (lista de eventos) */}
+            {/* Logo + título: clic vuelve a la portada del panel */}
             <button
-              onClick={irAlInicioEventos}
+              onClick={irAlHome}
               title="Volver al inicio"
               className="flex items-center gap-3 flex-shrink-0 text-left hover:opacity-80 transition-opacity"
             >
