@@ -1197,7 +1197,7 @@ export default function Home() {
             <div className="bg-indigo-700 text-white px-5 py-4 flex items-center gap-3">
               <span className="text-2xl">🏎</span>
               <div>
-                <div className="font-semibold text-sm">Autódromo Las Vizcachas</div>
+                <div className="font-semibold text-sm">Autódromo App</div>
                 <div className="text-xs opacity-75">
                   {stage === "login"    && "Acceso"}
                   {stage === "registro" && `Registro — Paso ${regPaso} de 2`}
@@ -1224,11 +1224,11 @@ export default function Home() {
                   </div>
                   <div className="space-y-3">
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Correo electrónico</label>
+                      <label className="text-xs text-gray-700 font-medium">Correo electrónico</label>
                       <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="email" placeholder="tu@correo.cl" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500 font-medium">Contraseña</label>
+                      <label className="text-xs text-gray-700 font-medium">Contraseña</label>
                       <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="password" placeholder="••••••••" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} onKeyDown={e => e.key === "Enter" && handleLogin()} />
                     </div>
                     {error && <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-xl px-3 py-2">{error}</div>}
@@ -1251,24 +1251,24 @@ export default function Home() {
                   <div className="text-sm font-semibold text-gray-700">Datos personales</div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-xs text-gray-500">Nombre completo <span className="text-red-500">*</span></label>
+                      <label className="text-xs text-gray-700">Nombre completo <span className="text-red-500">*</span></label>
                       <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="Felipe Schmauk" value={regNombre} onChange={e => setRegNombre(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">RUT <span className="text-red-500">*</span></label>
+                      <label className="text-xs text-gray-700">RUT <span className="text-red-500">*</span></label>
                       <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="12.345.678-9" value={regRut} onChange={e => setRegRut(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Correo <span className="text-red-500">*</span></label>
+                      <label className="text-xs text-gray-700">Correo <span className="text-red-500">*</span></label>
                       <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="email" placeholder="tu@correo.cl" value={regEmail} onChange={e => setRegEmail(e.target.value)} />
                     </div>
                     <div>
-                      <label className="text-xs text-gray-500">Teléfono <span className="text-red-500">*</span></label>
+                      <label className="text-xs text-gray-700">Teléfono <span className="text-red-500">*</span></label>
                       <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="text" placeholder="+56 9 1234 5678" value={regTelefono} onChange={e => setRegTelefono(e.target.value)} />
                     </div>
                   </div>
                   <div>
-                    <label className="text-xs text-gray-500">Contraseña <span className="text-red-500">*</span></label>
+                    <label className="text-xs text-gray-700">Contraseña <span className="text-red-500">*</span></label>
                     <input className="mt-1 w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400" type="password" placeholder="Mínimo 8 caracteres" value={regPassword} onChange={e => setRegPassword(e.target.value)} />
                   </div>
                   <div className="border-t pt-4">

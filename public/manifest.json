@@ -1,7 +1,7 @@
 {
-  "name": "Autódromo Las Vizcachas",
+  "name": "Autódromo App",
   "short_name": "Autódromo",
-  "description": "App del piloto — Autódromo Las Vizcachas",
+  "description": "App del piloto — control de acceso y operación de pista",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

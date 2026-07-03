@@ -3,6 +3,23 @@
 
 ---
 
+## [0.7.1] — 3 Julio 2026
+### Corregido
+- Letras casi invisibles en teléfonos con modo oscuro: la plantilla de Next.js
+  invertía el color de texto base con prefers-color-scheme y quedaba blanco
+  sobre las tarjetas blancas. Eliminado el bloque + `color-scheme: light` +
+  base de contraste para inputs/placeholders con `:where()` (no pisa los
+  estilos oscuros del panel admin)
+
+### Cambiado
+- Marca genérica "Autódromo App" en título, header del piloto y manifest PWA
+  (antes decía "Autódromo Las Vizcachas" fijo — es solo una pista más de las
+  que puede operar la app). La lista de autódromos del formulario de eventos
+  no cambia: ahí Las Vizcachas es una opción de dato, no marca
+- Etiquetas de formularios de login/registro más oscuras (gray-700)
+
+---
+
 ## [0.7.0] — 3 Julio 2026
 ### Agregado
 - Log de acciones real y persistente (tabla `log_acciones`, migración:

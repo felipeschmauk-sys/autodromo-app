@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Autódromo Las Vizcachas",
-  description: "App del piloto — Autódromo Las Vizcachas",
+  title: "Autódromo App",
+  description: "App del piloto — control de acceso y operación de pista",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
