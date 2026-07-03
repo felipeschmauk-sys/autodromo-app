@@ -790,7 +790,12 @@ export default function AdminPage() {
               </div>
             </div>
             {/* ── CONTROL DE SECTORES ── */}
-            {sectores.length > 0 && (
+            {circuitoIdActivo === null ? (
+              <div className="bg-white rounded-2xl border border-gray-200 px-5 py-6 text-center">
+                <p className="text-sm text-gray-400">Sin circuito asignado a este evento</p>
+                <p className="text-xs text-gray-400 mt-1">Actívale uno en Config → Biblioteca de circuitos</p>
+              </div>
+            ) : sectores.length > 0 && (
               <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                 <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1449,6 +1454,7 @@ export default function AdminPage() {
             <CircuitoManager
               onMaxPilotosChange={setMaxPilotos}
               onCircuitoActivado={handleCircuitoActivado}
+              circuitoAsignadoId={contexto.fechaId ? circuitoIdActivo : undefined}
             />
 
             {/* Sectores de pista */}

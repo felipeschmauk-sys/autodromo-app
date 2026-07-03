@@ -326,9 +326,13 @@ interface CircuitoManagerProps {
   /** Llamado con el id del circuito recién activado. Permite al padre actualizar
    *  DireccionCarrera y persistir la asociación fecha→circuito. */
   onCircuitoActivado?: (circuitoId: string) => void;
+  // Circuito asignado al evento activo del panel:
+  // undefined = sin contexto de evento (no mostrar aviso)
+  // null      = evento sin circuito asignado (mostrar aviso)
+  circuitoAsignadoId?: string | null;
 }
 
-export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado }: CircuitoManagerProps) {
+export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado, circuitoAsignadoId }: CircuitoManagerProps) {
   const [circuitos,    setCircuitos]    = useState<Circuito[]>([]);
   const [busqueda,     setBusqueda]     = useState("");
   const [cargando,     setCargando]     = useState(true);
@@ -561,6 +565,15 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                 </div>
               ) : (
                 <div className="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
+                  {circuitoAsignadoId === null && (
+                    <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center gap-2.5">
+                      <span className="text-lg flex-shrink-0">⚠️</span>
+                      <p className="text-xs text-amber-700 font-medium leading-snug">
+                        Este evento no tiene circuito asignado. Selecciona uno de la lista
+                        y tócale &ldquo;Activar&rdquo; para asignárselo.
+                      </p>
+                    </div>
+                  )}
                   {filtrados.map(c => (
                     <button
                       key={c.id}
@@ -573,11 +586,15 @@ export default function CircuitoManager({ onMaxPilotosChange, onCircuitoActivado
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="text-sm font-semibold truncate">{c.nombre}</p>
-                        {c.id === activoId && (
+                        {c.id === circuitoAsignadoId ? (
+                          <span className="flex-shrink-0 text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-semibold">
+                            Este evento
+                          </span>
+                        ) : c.id === activoId ? (
                           <span className="flex-shrink-0 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">
                             Activo
                           </span>
-                        )}
+                        ) : null}
                       </div>
                       {c.ciudad && (
                         <p className={`text-xs mt-0.5 ${seleccionado?.id === c.id ? "text-gray-400" : "text-gray-400"}`}>

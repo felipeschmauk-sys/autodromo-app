@@ -183,6 +183,11 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
 
   // ── Cargar sectores y suscribir cambios ────────────────────────────────────
   useEffect(() => {
+    if (circuitoId === null) {
+      // Evento sin circuito asignado: sin sectores (los globales son de otra fecha)
+      setSectores([]);
+      return;
+    }
     const load = async () => {
       const { data } = await supabase.from("sectores_pista").select("*").order("orden");
       // Solo actualizar si cambió de verdad — evita redibujar el mapa en cada evento
@@ -194,7 +199,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
       .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" }, load)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
-  }, []);
+  }, [circuitoId]);
 
   // ── Estado de pista (bandera global) ──────────────────────────────────────
   useEffect(() => {
@@ -397,7 +402,14 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-gray-700">
             <p className="text-2xl">🗺</p>
-            <p className="text-sm">Sin trazado configurado</p>
+            {circuitoId === null ? (
+              <>
+                <p className="text-sm">Sin circuito asignado a este evento</p>
+                <p className="text-xs text-gray-600">Actívale uno en Config → Biblioteca de circuitos</p>
+              </>
+            ) : (
+              <p className="text-sm">Sin trazado configurado</p>
+            )}
           </div>
         )}
       </div>

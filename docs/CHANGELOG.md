@@ -3,6 +3,18 @@
 
 ---
 
+## [0.5.6] — 2 Julio 2026
+### Corregido
+- Más fugas de "fecha nueva sucia" (complemento de 0.5.5):
+  - "Control por sector" del panel mostraba los sectores globales aunque el
+    evento no tuviera circuito; ahora muestra "Sin circuito asignado a este evento"
+  - DireccionCarrera también limpia los sectores (no solo el trazado) cuando
+    el evento no tiene circuito
+  - Config/Biblioteca de circuitos: aviso ámbar cuando el evento no tiene
+    circuito asignado + insignia "Este evento" en el circuito asignado
+
+---
+
 ## [0.5.5] — 2 Julio 2026
 ### Corregido
 - Fecha nueva partía "sucia" con la pista y los pilotos de la última fecha:
