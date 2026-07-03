@@ -9,6 +9,7 @@ import {
   cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { registrarLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ssr: false,
@@ -304,15 +305,83 @@ export default function AdminPage() {
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento, resolverCircuitoDeFecha]);
 
+  // ── Log de acciones de pista ──────────────────────────────────────────────
+  interface LogRow { id: string; tipo: string; descripcion: string; creado_at: string; }
+  const [logAcciones, setLogAcciones] = useState<LogRow[]>([]);
+
+  const cargarLog = useCallback(async (fechaId: string) => {
+    const { data, error } = await supabase
+      .from("log_acciones")
+      .select("id, tipo, descripcion, creado_at")
+      .eq("fecha_id", fechaId)
+      .order("creado_at", { ascending: false })
+      .limit(80);
+    if (!error && data) setLogAcciones(data as LogRow[]);
+  }, []);
+
+  // Log en vivo: Realtime filtrado por el evento + polling de respaldo
+  useEffect(() => {
+    if (!autenticado || !contexto.fechaId) { setLogAcciones([]); return; }
+    const fid = contexto.fechaId;
+    cargarLog(fid);
+    const ch = supabase
+      .channel("admin-log-live")
+      .on("postgres_changes",
+        { event: "INSERT", schema: "public", table: "log_acciones", filter: `fecha_id=eq.${fid}` },
+        () => { cargarLog(fid); })
+      .subscribe();
+    const poll = setInterval(() => cargarLog(fid), 15_000);
+    return () => { supabase.removeChannel(ch); clearInterval(poll); };
+  }, [autenticado, contexto.fechaId, cargarLog]);
+
+  // Descarga el log completo de la tanda como CSV (abre en Excel)
+  const descargarLog = useCallback(async () => {
+    if (!contexto.fechaId) return;
+    const { data } = await supabase
+      .from("log_acciones")
+      .select("tipo, descripcion, creado_at")
+      .eq("fecha_id", contexto.fechaId)
+      .order("creado_at", { ascending: true });
+    const rows = data || [];
+    if (!rows.length) return;
+    const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
+    const csv = "﻿" + ["Fecha;Hora;Tipo;Acción"]
+      .concat(rows.map((r: any) => {
+        const d = new Date(r.creado_at);
+        return [
+          d.toLocaleDateString("es-CL"),
+          d.toLocaleTimeString("es-CL"),
+          r.tipo,
+          r.descripcion,
+        ].map(esc).join(";");
+      }))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `log-${(contexto.fechaNombre || "evento").replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [contexto.fechaId, contexto.fechaNombre]);
+
   // ── Bandera personal por piloto (menú en "Pilotos en sesión") ────────────
   const [menuBanderaPiloto, setMenuBanderaPiloto] = useState<string | null>(null); // sesion.id abierta
 
-  const toggleBanderaPiloto = useCallback(async (sesionId: string, bandera: string, actual: string | null) => {
+  const toggleBanderaPiloto = useCallback(async (sesionId: string, bandera: string, actual: string | null, nombrePiloto: string, pilotoId: string) => {
     // Toggle: clic en la activa la quita; el piloto la ve/deja de ver al instante
     const nueva = actual === bandera ? null : bandera;
     await supabase.from("sesiones").update({ bandera_piloto: nueva }).eq("id", sesionId);
     cargarSesiones();
-  }, [cargarSesiones]);
+    registrarLog({
+      fecha_id: contexto.fechaId,
+      piloto_id: pilotoId,
+      tipo: "bandera_piloto",
+      descripcion: nueva
+        ? `Bandera personal ${NOMBRE_BANDERA[nueva] || nueva} → ${nombrePiloto}`
+        : `Se quitó la bandera personal de ${nombrePiloto}`,
+    });
+  }, [cargarSesiones, contexto.fechaId]);
 
   // ── Navegación rápida: migas del header + "Operar esta fecha" ────────────
   const irAlInicioEventos = useCallback(() => {
@@ -416,7 +485,13 @@ export default function AdminPage() {
       .from("sectores_pista")
       .update({ bandera: nuevaBandera })
       .eq("id", id);
-  }, []);
+    const nombreSector = sectores.find(s => s.id === id)?.nombre || "Sector";
+    registrarLog({
+      fecha_id: contexto.fechaId,
+      tipo: "bandera_sector",
+      descripcion: `${nombreSector}: bandera ${NOMBRE_BANDERA[nuevaBandera] || nuevaBandera} (director)`,
+    });
+  }, [sectores, contexto.fechaId]);
 
   const aplicarBandera = useCallback(async (nuevaBandera: string) => {
     setCargandoBandera(true);
@@ -430,11 +505,17 @@ export default function AdminPage() {
         console.error("Error actualizando bandera:", error);
         // Revertir si falla
         cargarBandera();
+      } else {
+        registrarLog({
+          fecha_id: contexto.fechaId,
+          tipo: "bandera_global",
+          descripcion: `Bandera global: ${NOMBRE_BANDERA[nuevaBandera] || nuevaBandera}`,
+        });
       }
     } finally {
       setCargandoBandera(false);
     }
-  }, [cargarBandera]);
+  }, [cargarBandera, contexto.fechaId]);
 
   useEffect(() => {
     if (!autenticado) return;
@@ -526,6 +607,12 @@ export default function AdminPage() {
     if (!validacion?.qr_id || !validacion?.piloto?.id) return;
     try {
       await confirmarIngreso(validacion.qr_id, validacion.piloto.id);
+      registrarLog({
+        fecha_id: contexto.fechaId,
+        piloto_id: validacion.piloto.id,
+        tipo: "ingreso",
+        descripcion: `${validacion.piloto.nombre} — QR validado, ingreso a pista autorizado`,
+      });
       setQrStep("confirmed");
       await cargarSesiones();
       setTimeout(() => { setQrStep("idle"); setValidacion(null); }, 3000);
@@ -1072,6 +1159,12 @@ export default function AdminPage() {
                             onClick={async () => {
                               if (!confirm(`¿Retirar a ${nombre} de pista?`)) return;
                               await cerrarSesionAdmin(s.piloto_id);
+                              registrarLog({
+                                fecha_id: contexto.fechaId,
+                                piloto_id: s.piloto_id,
+                                tipo: "retiro",
+                                descripcion: `${nombre} retirado de pista por el administrador`,
+                              });
                               cargarSesiones();
                             }}
                             className="text-xs text-red-500 hover:text-red-700 border border-red-200 hover:border-red-400 px-2.5 py-1 rounded-lg transition-colors"
@@ -1091,7 +1184,7 @@ export default function AdminPage() {
                               {banderasDisp.map(b => (
                                 <button
                                   key={b.value}
-                                  onClick={() => toggleBanderaPiloto(s.id, b.value, banderaActual)}
+                                  onClick={() => toggleBanderaPiloto(s.id, b.value, banderaActual, nombre, s.piloto_id)}
                                   title={banderaActual === b.value ? "Quitar bandera" : b.label}
                                   className={`text-xs font-semibold px-2.5 py-1.5 rounded-lg border transition-colors ${
                                     banderaActual === b.value
@@ -1112,21 +1205,27 @@ export default function AdminPage() {
               )}
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100">
+              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Log de acciones</span>
+                <button
+                  onClick={descargarLog}
+                  disabled={logAcciones.length === 0}
+                  title="Descargar el registro completo de la tanda (CSV, se abre en Excel)"
+                  className="text-xs border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 rounded-lg transition-colors font-medium"
+                >
+                  ⬇ Descargar CSV
+                </button>
               </div>
-              <div className="divide-y divide-gray-50">
-                {sesionesVisibles.slice(0, 5).map(s => (
-                  <div key={s.id} className="px-5 py-3 flex items-center gap-3">
-                    <span className="text-xs text-gray-400 w-12 flex-shrink-0">
-                      {new Date(s.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+              <div className="divide-y divide-gray-50 max-h-[340px] overflow-y-auto">
+                {logAcciones.map(l => (
+                  <div key={l.id} className="px-5 py-2.5 flex items-start gap-3">
+                    <span className="text-xs text-gray-400 w-16 flex-shrink-0 tabular-nums pt-0.5">
+                      {new Date(l.creado_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                     </span>
-                    <span className="text-sm text-gray-600">
-                      {s.piloto?.nombre || `Piloto ${s.piloto_id.slice(0, 6)}`} — QR escaneado. Acceso autorizado.
-                    </span>
+                    <span className="text-sm text-gray-600 leading-snug">{l.descripcion}</span>
                   </div>
                 ))}
-                {sesionesVisibles.length === 0 && (
+                {logAcciones.length === 0 && (
                   <div className="px-5 py-6 text-center text-gray-400 text-sm">Sin registros aún</div>
                 )}
               </div>

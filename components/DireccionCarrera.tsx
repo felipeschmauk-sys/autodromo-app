@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { getTrazadoActivo, sectorContienePunto, type Coordenada } from "@/lib/gps";
+import { registrarLog } from "@/lib/log";
 
 const LeafletAdminMap = dynamic(() => import("@/components/LeafletAdminMap"), { ssr: false });
 
@@ -125,6 +126,13 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
       if (pId === pilotoId) {
         autoYellowRef.current.delete(sectorId);
         await supabase.from("sectores_pista").update({ bandera: "verde" }).eq("id", sectorId);
+        const nombreSector = sectoresRef.current.find(s => s.id === sectorId)?.nombre || "sector";
+        registrarLog({
+          fecha_id: fechaId ?? null,
+          piloto_id: pilotoId,
+          tipo: "auto_yellow",
+          descripcion: `🤖 ${nombreSector} vuelve a verde — pista despejada (automático)`,
+        });
       }
     }
   }
@@ -150,6 +158,12 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
       if (sector && sector.bandera === "verde" && !autoYellowRef.current.has(sector.id)) {
         autoYellowRef.current.set(sector.id, pilotoId);
         await supabase.from("sectores_pista").update({ bandera: "amarilla" }).eq("id", sector.id);
+        registrarLog({
+          fecha_id: fechaId ?? null,
+          piloto_id: pilotoId,
+          tipo: "auto_yellow",
+          descripcion: `🤖 Amarilla automática en ${sector.nombre} — auto detenido en pista`,
+        });
       }
     } else if (velocidad > 8) {
       // Histéresis: recién sobre 8 km/h se considera "en movimiento" y se

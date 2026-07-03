@@ -3,6 +3,19 @@
 
 ---
 
+## [0.7.0] — 3 Julio 2026
+### Agregado
+- Log de acciones real y persistente (tabla `log_acciones`, migración:
+  `docs/task-log-acciones-migration.sql`). Registra: banderas globales,
+  banderas por sector (director), amarillas automáticas (activación y
+  reversión), banderas personales por piloto (asignar/quitar), ingresos
+  por QR y retiros de pista
+- Log en vivo en Dirección (Realtime + polling de respaldo), separado por
+  evento, con hora exacta de cada acción
+- Botón "⬇ Descargar CSV": resumen completo de la tanda, abre en Excel
+
+---
+
 ## [0.6.1] — 3 Julio 2026
 ### Corregido
 - El piloto veía una pista distinta a la del evento: la asociación
