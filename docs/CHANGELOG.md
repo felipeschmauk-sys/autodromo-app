@@ -8,8 +8,9 @@
 - Migas de navegación en el header del panel: "🏠 Eventos › campeonato › fecha".
   Eventos vuelve al menú inicial (limpia contexto), el campeonato vuelve a la
   lista de fechas, la fecha entra a su panel de operación
-- Botón "🏁 Operar →" en cada fecha (lista de Eventos): setea el contexto
-  completo y salta directo a Dirección, sin pasar por los menús desplegables
+- El nombre de la fecha es el link para entrar a operarla (setea el contexto
+  completo y salta a Dirección); el nombre del campeonato abre sus fechas.
+  Fechas finalizadas quedan como texto plano (no operables)
 - Los menús desplegables del header siguen disponibles como alternativa
 
 ---
