@@ -229,6 +229,171 @@ function findClosestIdx(lat: number, lng: number, trazado: Coordenada[]): number
 }
 
 // ── Componente: Speed Card (zona amarilla portrait) ──────────
+// ── PIZARRA LANDSCAPE — Rediseño visual del modo conducción ─────────────
+// Capa 100% presentacional: recibe la bandera efectiva YA resuelta por la
+// jerarquía existente (cuadros > roja > personal > sector > global), el
+// trazado y los sectores. No contiene lógica de negocio ni suscripciones.
+// El color de fondo domina la pantalla; el circuito flota como SVG.
+function PizarraLandscape({
+  trazado,
+  sectores,
+  bandera,
+  esPersonal,
+}: {
+  trazado: Coordenada[];
+  sectores: Sector[];
+  bandera: string;
+  esPersonal: boolean;
+}) {
+  // Fondo por bandera (el color ES la información)
+  const FONDOS: Record<string, string> = {
+    verde:          "#15803d",
+    amarilla:       "#f5b400",
+    amarilla_doble: "#f5b400",
+    roja:           "#b91c1c",
+    safety_car:     "#c2570b",
+    azul:           "#1d4ed8",
+    negra:          "#000000",
+    negra_blanco:   "linear-gradient(135deg, #ffffff 50%, #000000 50%)",
+    taller:         "#000000",
+    cuadros:        "repeating-conic-gradient(#18181b 0% 25%, #fafafa 0% 50%) 50% / 130px 130px",
+    rayas:          "repeating-linear-gradient(90deg, #f5b400 0 90px, #dc2626 90px 180px)",
+    blanca:         "#e5e7eb",
+  };
+  const TEXTOS: Record<string, string> = {
+    verde:          "Circulación normal habilitada",
+    amarilla:       "Circulación sector amarillo",
+    amarilla_doble: "Circulación sector amarillo",
+    roja:           "Detención total de la pista",
+    safety_car:     "Seguir al Safety Car — no adelantar",
+    azul:           "Dejar pasar a un piloto más rápido",
+    negra:          "Bandera negra",
+    negra_blanco:   "Bandera de advertencia",
+    taller:         "Bandera de taller",
+    cuadros:        "Fin de la sesión / carrera",
+    rayas:          "Superficie deslizante",
+    blanca:         "Último giro",
+  };
+  const ICONOS: Record<string, string> = {
+    negra: "⚑", negra_blanco: "⚑", cuadros: "🏁", rayas: "❚❚", taller: "●",
+  };
+
+  const fondo  = FONDOS[bandera] || FONDOS.verde;
+  const texto  = TEXTOS[bandera] || "";
+  const icono  = ICONOS[bandera] || "✓";
+  const oscuro = bandera === "blanca"; // único fondo claro sin zonas oscuras
+
+  // Circuito: blanco sobre negro/cuadros, rojo sobre rojo (con borde blanco),
+  // verde en el resto
+  const colorCircuito =
+    bandera === "negra" || bandera === "cuadros" ? "#ffffff"
+    : bandera === "roja" ? "#ef4444"
+    : "#22c55e";
+
+  // Los tramos de sector mantienen su información visual sobre el circuito
+  // verde (misma condición de datos que hoy: sectores con bandera ≠ verde)
+  const mostrarSectores = !["roja", "negra", "cuadros"].includes(bandera);
+  const COLOR_SECTOR: Record<string, string> = { amarilla: "#facc15", rayas: "#f97316", roja: "#ef4444" };
+
+  // Proyección lat/lng → SVG (misma técnica del mapa de la vista vertical)
+  const W = 1000, H = 520, PAD = 80;
+  let svg: React.ReactNode = null;
+  if (trazado.length >= 2) {
+    const lats = trazado.map(c => c.lat);
+    const lngs = trazado.map(c => c.lng);
+    const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs), maxLng = Math.max(...lngs);
+    const dLat = maxLat - minLat || 0.0001;
+    const dLng = maxLng - minLng || 0.0001;
+    const scale = Math.min((W - PAD * 2) / dLng, (H - PAD * 2) / dLat);
+    const offX  = (W - dLng * scale) / 2;
+    const offY  = (H - dLat * scale) / 2;
+    const toX = (lng: number) => offX + (lng - minLng) * scale;
+    const toY = (lat: number) => H - offY - (lat - minLat) * scale;
+    const path = (pts: Coordenada[]) =>
+      pts.map((c, i) => `${i === 0 ? "M" : "L"} ${toX(c.lng).toFixed(1)} ${toY(c.lat).toFixed(1)}`).join(" ");
+    const fullPath = path(trazado);
+
+    svg = (
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        style={{
+          width: "min(90vw, 1500px)",
+          maxHeight: "68vh",
+          filter: "drop-shadow(0 10px 16px rgba(0,0,0,0.35))",
+        }}
+      >
+        {/* Círculo naranjo de la bandera de taller, detrás del circuito */}
+        {bandera === "taller" && <circle cx={W / 2} cy={H / 2} r={H * 0.44} fill="#f97316" />}
+        {/* Borde blanco elevado + trazo principal */}
+        <path d={fullPath} fill="none" stroke="#ffffff" strokeWidth={30} strokeLinecap="round" strokeLinejoin="round" opacity={0.95} />
+        <path d={fullPath} fill="none" stroke={colorCircuito} strokeWidth={21} strokeLinecap="round" strokeLinejoin="round" />
+        {mostrarSectores && sectores.map(s =>
+          s.bandera !== "verde" && (
+            <path
+              key={s.id}
+              d={path(sectorSlice(trazado, s.punto_inicio, s.punto_fin))}
+              fill="none"
+              stroke={COLOR_SECTOR[s.bandera] || "#facc15"}
+              strokeWidth={21}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )
+        )}
+      </svg>
+    );
+  }
+
+  return (
+    <div
+      className="fixed inset-0 flex flex-col"
+      style={{ zIndex: 2000, background: fondo, maxWidth: "none" }}
+    >
+      {/* Circuito flotante, levemente sobre el centro */}
+      <div className="flex-1 flex items-center justify-center overflow-hidden" style={{ paddingBottom: "2vh" }}>
+        {svg}
+      </div>
+
+      {/* Texto inferior: solo icono + texto, sin cajas */}
+      <div className="flex flex-col items-center gap-1.5" style={{ paddingBottom: "5vh" }}>
+        <div className="flex items-center gap-3.5">
+          <span
+            className="w-10 h-10 rounded-full border-2 flex items-center justify-center text-lg font-bold flex-shrink-0"
+            style={{
+              borderColor: oscuro ? "#111827" : "rgba(255,255,255,0.9)",
+              color:       oscuro ? "#111827" : "#ffffff",
+              textShadow:  oscuro ? "none" : "0 2px 6px rgba(0,0,0,0.45)",
+            }}
+          >
+            {icono}
+          </span>
+          <span
+            className="text-2xl font-bold tracking-tight"
+            style={{
+              color:      oscuro ? "#111827" : "#ffffff",
+              textShadow: oscuro ? "none" : "0 2px 8px rgba(0,0,0,0.45)",
+            }}
+          >
+            {texto}
+          </span>
+        </div>
+        {esPersonal && (
+          <span
+            className="text-xs font-bold tracking-widest"
+            style={{
+              color:      oscuro ? "rgba(17,24,39,0.7)" : "rgba(255,255,255,0.85)",
+              textShadow: oscuro ? "none" : "0 1px 4px rgba(0,0,0,0.4)",
+            }}
+          >
+            DIRIGIDA A TI
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function SpeedCard({
   geocercaCoords,
   recintoCoords = [],
@@ -1803,39 +1968,15 @@ export default function Home() {
           )}
 
           {/* ══ LANDSCAPE — MODO CONDUCCIÓN ══ */}
+          {/* Rediseño solo visual: misma bandera efectiva (jerarquía existente),
+              mismos trazado y sectores — cambia únicamente la presentación */}
           {isLandscape && (
-            <div className="fixed inset-0 bg-gray-950 flex" style={{ maxWidth: "none", zIndex: 2000 }}>
-
-              {/* Circuito — 70% */}
-              <div className="flex items-center justify-center bg-gray-950" style={{ width: "70%" }}>
-                <LeafletPilotMap
-                  trazado={trazado}
-                  bandera={estadoPista.bandera}
-                  sectores={sectores}
-                  height={viewportH - 32}
-                />
-              </div>
-
-              {/* Panel bandera — 30% (color sólido, sin pulso, sin badge GPS) */}
-              <div
-                className={`flex flex-col items-center justify-center p-6 border-l ${flag.bg} ${flag.border}`}
-                style={{ width: "30%" }}
-              >
-                <span className="text-6xl mb-5 leading-none">{flag.emoji}</span>
-                <p className={`text-2xl font-black tracking-widest text-center leading-tight ${flag.color}`}>
-                  {flag.title}
-                </p>
-                <p className={`text-sm mt-3 text-center leading-snug font-semibold ${flag.subColor}`}>
-                  {flag.desc}
-                </p>
-                {flagEsPersonal && (
-                  <span className={`mt-3 text-[10px] font-bold tracking-widest px-2.5 py-1 rounded-full bg-black/20 ${flag.color}`}>
-                    DIRIGIDA A TI
-                  </span>
-                )}
-              </div>
-
-            </div>
+            <PizarraLandscape
+              trazado={trazado}
+              sectores={sectores}
+              bandera={banderaEfectiva}
+              esPersonal={flagEsPersonal}
+            />
           )}
 
           {/* ── HEADER ── */}

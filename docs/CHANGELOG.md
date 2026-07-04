@@ -3,6 +3,21 @@
 
 ---
 
+## [0.8.0] — 3 Julio 2026
+### Cambiado
+- Rediseño 100% visual del modo conducción (vista horizontal del piloto):
+  el color de la bandera domina toda la pantalla, el circuito flota como SVG
+  grueso con sombra al centro, y abajo va solo icono + texto sin cajas.
+  Fondos por bandera: verde/amarillo/rojo/azul sólidos, negra (circuito
+  blanco), advertencia (diagonal blanco/negro), taller (círculo naranjo
+  sobre negro), cuadros (ajedrez plano), rayas (franjas verticales
+  amarillo/rojo). Los sectores siguen pintándose sobre el circuito.
+  Sin cambios de lógica: misma jerarquía de banderas, mismos datos,
+  solo se reemplazó la capa de presentación (LeafletPilotMap 70% + panel
+  30% → PizarraLandscape)
+
+---
+
 ## [0.7.1] — 3 Julio 2026
 ### Corregido
 - Letras casi invisibles en teléfonos con modo oscuro: la plantilla de Next.js
