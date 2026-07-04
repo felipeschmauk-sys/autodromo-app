@@ -1607,7 +1607,14 @@ export default function AdminPage() {
           const porPago      = pilotosEvento.filter(p => p.estado_insc === "inscrito" && p.pago_estado === "pendiente");
           const porHabilitar = pilotosEvento.filter(p => p.estado_insc === "inscrito" && p.pago_estado === "confirmado_admin");
           const confirmados  = pilotosEvento.filter(p => p.estado_insc === "confirmado");
-          const enPistaArr   = pilotosEvento.filter(p => sesiones.some(s => s.piloto_id === p.piloto_id));
+          // "En pista" = estado GPS real (mismo criterio que los badges),
+          // no solo tener una sesión abierta: una sesión zombie sin señal
+          // o un piloto en el recinto NO cuentan como en pista
+          void gpsTick;
+          const enPistaArr = pilotosEvento.filter(p =>
+            sesiones.some(s => s.piloto_id === p.piloto_id) &&
+            estadoGpsPiloto(p.piloto_id).label === "En pista"
+          );
           const rechazados   = pilotosEvento.filter(p => p.estado_insc === "rechazado");
 
           const totalPendientes = porAprobar.length + porPago.length + porHabilitar.length;
