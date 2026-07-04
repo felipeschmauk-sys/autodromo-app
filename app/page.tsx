@@ -329,19 +329,30 @@ function PizarraLandscape({
         {/* Borde blanco elevado + trazo principal */}
         <path d={fullPath} fill="none" stroke="#ffffff" strokeWidth={30} strokeLinecap="round" strokeLinejoin="round" opacity={0.95} />
         <path d={fullPath} fill="none" stroke={colorCircuito} strokeWidth={21} strokeLinecap="round" strokeLinejoin="round" />
-        {mostrarSectores && sectores.map(s =>
-          s.bandera !== "verde" && (
+        {mostrarSectores && sectores.map(s => {
+          if (s.bandera === "verde") return null;
+          const d = path(sectorSlice(trazado, s.punto_inicio, s.punto_fin));
+          // Rayas: base amarilla + tramos rojos intercalados (franjas)
+          if (s.bandera === "rayas") {
+            return (
+              <g key={s.id}>
+                <path d={d} fill="none" stroke="#facc15" strokeWidth={21} strokeLinecap="round" strokeLinejoin="round" />
+                <path d={d} fill="none" stroke="#ef4444" strokeWidth={21} strokeDasharray="14 14" strokeLinejoin="round" />
+              </g>
+            );
+          }
+          return (
             <path
               key={s.id}
-              d={path(sectorSlice(trazado, s.punto_inicio, s.punto_fin))}
+              d={d}
               fill="none"
               stroke={COLOR_SECTOR[s.bandera] || "#facc15"}
               strokeWidth={21}
               strokeLinecap="round"
               strokeLinejoin="round"
             />
-          )
-        )}
+          );
+        })}
       </svg>
     );
   }
