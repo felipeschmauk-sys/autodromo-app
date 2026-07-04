@@ -859,6 +859,53 @@ export default function Home() {
   const [banderaPersonal, setBanderaPersonal] = useState<string | null>(null);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
+  // ── Prueba de conocimientos POR CAMPEONATO ─────────────────────
+  // Se rinde la primera vez que el piloto entra a un evento de cada
+  // campeonato (no al registrarse). pendingEvento guarda a dónde iba
+  // el piloto para continuar automáticamente después de aprobar.
+  const [pruebasCampeonato, setPruebasCampeonato] = useState<Set<string>>(new Set());
+  const [pendingEvento, setPendingEvento] = useState<{ insc: InscripcionItem; fecha: FechaItem; campNombre: string } | null>(null);
+
+  const cargarPruebasCampeonato = async (pilotoId: string) => {
+    try {
+      const { data } = await supabase
+        .from("pruebas_piloto")
+        .select("campeonato_id")
+        .eq("piloto_id", pilotoId);
+      setPruebasCampeonato(new Set((data || []).map((r: any) => r.campeonato_id)));
+    } catch { setPruebasCampeonato(new Set()); }
+  };
+
+  const registrarPruebaCampeonato = async (pilotoId: string, campeonatoId: string) => {
+    try {
+      await supabase.from("pruebas_piloto").upsert(
+        { piloto_id: pilotoId, campeonato_id: campeonatoId },
+        { onConflict: "piloto_id,campeonato_id" },
+      );
+      setPruebasCampeonato(prev => new Set(prev).add(campeonatoId));
+    } catch { /* tabla sin migrar: no bloquear el acceso */ }
+  };
+
+  // Tras aprobar la prueba: si venía entrando a un evento, continuar directo
+  const continuarTrasPrueba = () => {
+    if (pendingEvento) {
+      const pe = pendingEvento;
+      setPendingEvento(null);
+      setSecView("main");
+      setEventoActivo({
+        inscripcionId:    pe.insc.id,
+        fechaId:          pe.fecha.id,
+        campeonatoNombre: pe.campNombre,
+        fechaNombre:      pe.fecha.nombre,
+        tipo:             pe.fecha.tipo,
+        estadoInsc:       pe.insc.estado,
+      });
+      setStage("app");
+    } else {
+      setStage("eventos");
+    }
+  };
+
   // ── Perfil: edición de contacto, autos y estadísticas ──────────
   const [authEmail, setAuthEmail]     = useState<string>("");
   useEffect(() => {
@@ -958,8 +1005,9 @@ export default function Home() {
         setPilotoData(data);
         setEstadoPiloto(data.prueba_aprobada ? "habilitado" : "deshabilitado");
         // Si no aprobó la prueba va directo a prueba; si sí aprobó va a seleccionar evento
-        if (!data.prueba_aprobada) { setStage("prueba"); }
-        else { setStage("eventos"); cargarCampeonatos(); cargarMisInscripciones(data.id); }
+        // Directo a eventos: Perfil y Reglas disponibles sin evento;
+        // la prueba se rinde al entrar a un campeonato por primera vez
+        setStage("eventos"); cargarCampeonatos(); cargarMisInscripciones(data.id); cargarPruebasCampeonato(data.id);
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1022,6 +1070,14 @@ export default function Home() {
   };
 
   const entrarAlEvento = (insc: InscripcionItem, fecha: FechaItem, campNombre: string) => {
+    // Prueba POR CAMPEONATO: si este campeonato aún no está aprobado,
+    // rendir la prueba primero y luego continuar automáticamente al evento
+    if (fecha.campeonato_id && !pruebasCampeonato.has(fecha.campeonato_id)) {
+      setPendingEvento({ insc, fecha, campNombre });
+      setStage("prueba");
+      return;
+    }
+    setSecView("main");
     setEventoActivo({
       inscripcionId:    insc.id,
       fechaId:          fecha.id,
@@ -1352,8 +1408,15 @@ export default function Home() {
     if (ok) {
       setEstadoPiloto("habilitado");
       const piloto = await getPiloto();
-      if (piloto) { await aprobarPrueba(piloto.id); setPilotoData({ ...piloto, prueba_aprobada: true }); }
-      setTimeout(() => { cargarCampeonatos(); if (piloto) cargarMisInscripciones(piloto.id); setStage("eventos"); }, 1800);
+      if (piloto) {
+        await aprobarPrueba(piloto.id);
+        setPilotoData({ ...piloto, prueba_aprobada: true });
+        // Registrar el campeonato aprobado (prueba por campeonato)
+        if (pendingEvento?.fecha.campeonato_id) {
+          await registrarPruebaCampeonato(piloto.id, pendingEvento.fecha.campeonato_id);
+        }
+      }
+      setTimeout(() => { cargarCampeonatos(); if (piloto) cargarMisInscripciones(piloto.id); continuarTrasPrueba(); }, 1800);
     }
   };
   const reintentar = () => {
@@ -1362,6 +1425,271 @@ export default function Home() {
   };
   const toggleCheck = (i: number) => { const c = [...checks]; c[i] = !c[i]; setChecks(c); };
 
+  // ── Render compartido: Perfil (se usa en stage app y en eventos) ──
+  const renderPerfil = () => {
+              const autos: Array<{ id: string; marca: string; modelo: string }> = (pilotoData as any)?.vehiculos || [];
+              const autoActivoId: string | null = (pilotoData as any)?.vehiculo_activo_id ?? null;
+              const st = statsPerfil;
+              const xp = st ? Math.round(st.eventos * 100 + st.minutos + st.km) : 0;
+              const nivel = Math.max(1, Math.floor(xp / 500));
+              const paraSiguiente = (nivel + 1) * 500 - xp;
+              const pctNivel = Math.min(100, Math.round(((xp - nivel * 500 + 500) / 500) * 100));
+              const nombreAuto = (id: string | null) => {
+                if (id === null) return "Sin auto asignado";
+                const a = autos.find(v => v.id === id);
+                return a ? `${a.marca} ${a.modelo}` : "Auto eliminado";
+              };
+              return (
+              <div className="px-4 py-4 space-y-4 bg-gray-100 min-h-full">
+
+                {/* Cabecera: identidad + RUT fijo */}
+                <div className="flex items-center gap-4 py-1">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl font-bold">{iniciales}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-900 font-bold text-lg leading-none">{nombreMostrar}</p>
+                    <p className="text-gray-400 text-xs mt-1">🔒 RUT {pilotoData?.rut || "—"} · fijo e intransferible</p>
+                  </div>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${
+                    habilitado ? "bg-green-100 text-green-700"
+                    : estadoPiloto === "pendiente" ? "bg-amber-100 text-amber-700"
+                    : "bg-red-100 text-red-600"
+                  }`}>
+                    {habilitado ? "Habilitado" : estadoPiloto === "pendiente" ? "Prueba pendiente" : "No habilitado"}
+                  </span>
+                </div>
+
+                {msgPerfil && (
+                  <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs rounded-xl px-4 py-2.5">{msgPerfil}</div>
+                )}
+
+                {/* Datos de contacto (editables) */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Datos de contacto</p>
+                  <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
+                    {([["correo", "Correo · una cuenta por correo", authEmail], ["telefono", "Teléfono", pilotoData?.telefono]] as const).map(([campo, label, valor]) => (
+                      <div key={campo} className="flex items-center gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-400">{label}</p>
+                          {editCampo === campo ? (
+                            <input
+                              autoFocus
+                              type={campo === "correo" ? "email" : "tel"}
+                              value={valorCampo}
+                              onChange={e => setValorCampo(e.target.value)}
+                              className="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
+                          ) : (
+                            <p className="text-sm text-gray-900 font-medium truncate">{valor || "—"}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (editCampo === campo) { guardarCampoPerfil(); }
+                            else { setEditCampo(campo); setValorCampo(String(valor || "")); }
+                          }}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex-shrink-0 ${
+                            editCampo === campo
+                              ? "bg-indigo-600 border-indigo-600 text-white"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          {editCampo === campo ? "Guardar" : "✏️"}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Mis autos */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mis autos</p>
+                    <button onClick={() => setShowFormAuto(v => !v)}
+                      className="text-xs font-semibold text-indigo-600 border border-indigo-200 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition">
+                      + Agregar auto
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {autos.map(a => {
+                      const activo = a.id === autoActivoId;
+                      return (
+                        <button key={a.id} onClick={() => toggleAutoActivo(a.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition ${
+                            activo ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:border-gray-300"
+                          }`}>
+                          <span className="text-lg flex-shrink-0">🚗</span>
+                          <span className={`flex-1 text-sm font-semibold ${activo ? "text-indigo-700" : "text-gray-900"}`}>
+                            {a.marca} {a.modelo}
+                          </span>
+                          <span className={`text-xs flex-shrink-0 ${activo ? "text-indigo-600 font-semibold" : "text-gray-400"}`}>
+                            {activo ? "✓ Auto activo" : "Tocar para activar"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {autos.length === 0 && (
+                      <p className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-2xl px-4 py-4 text-center">
+                        Sin autos registrados — los datos quedan asociados solo al piloto
+                      </p>
+                    )}
+                  </div>
+                  {showFormAuto && (
+                    <div className="mt-2 bg-white border border-gray-300 rounded-2xl px-4 py-3 space-y-2">
+                      <div className="flex gap-2">
+                        <input placeholder="Marca" value={autoMarca} onChange={e => setAutoMarca(e.target.value)}
+                          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                        <input placeholder="Modelo" value={autoModelo} onChange={e => setAutoModelo(e.target.value)}
+                          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                      </div>
+                      <button onClick={guardarAutoNuevo}
+                        className="w-full bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition">
+                        Guardar auto
+                      </button>
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-400 mt-2 px-1 leading-relaxed">
+                    El auto activo recibe los km y minutos de cada sesión. Sin auto activo, los datos quedan asociados solo al piloto.
+                  </p>
+                </div>
+
+                {/* Estadísticas en pista */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Estadísticas en pista</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      [String(st?.eventos ?? "—"), "eventos"],
+                      [String(st?.minutos ?? "—"), "min en pista"],
+                      [String(st?.km ?? "—"), "km recorridos"],
+                      [st ? `${st.velMax}` : "—", "vel. máx (km/h)"],
+                    ].map(([v, l]) => (
+                      <div key={l} className="bg-white border border-gray-200 rounded-2xl px-3 py-3 text-center">
+                        <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">{v}</p>
+                        <p className="text-xs text-gray-400 mt-1">{l}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 bg-white border border-gray-200 rounded-2xl px-4 py-3.5">
+                    <div className="flex items-baseline justify-between">
+                      <p className="text-sm font-semibold text-gray-900">⭐ Experiencia total</p>
+                      <p className="text-sm text-gray-500"><span className="font-bold text-gray-900 tabular-nums">{xp.toLocaleString("es-CL")}</span> XP · Nivel {nivel}</p>
+                    </div>
+                    <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${pctNivel}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      {paraSiguiente} XP para nivel {nivel + 1} · suma eventos, minutos y km de todo tu historial
+                    </p>
+                  </div>
+                </div>
+
+                {/* Historial por auto */}
+                {st && st.porAuto.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Historial por auto</p>
+                    <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
+                      {st.porAuto.map(r => (
+                        <div key={r.vehiculo_id ?? "sin-auto"} className="flex items-center gap-3 px-4 py-2.5">
+                          <span className="text-sm flex-shrink-0">{r.vehiculo_id ? "🚗" : "👤"}</span>
+                          <span className="flex-1 text-xs font-medium text-gray-700 truncate">
+                            {nombreAuto(r.vehiculo_id)}
+                            {r.vehiculo_id && r.vehiculo_id === autoActivoId && (
+                              <span className="text-indigo-600 font-semibold"> · activo</span>
+                            )}
+                          </span>
+                          <span className="text-xs text-gray-500 tabular-nums">{Math.round(r.km * 10) / 10} km</span>
+                          <span className="text-xs text-gray-500 tabular-nums w-14 text-right">{r.minutos} min</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!habilitado && (
+                  <button onClick={() => setStage("prueba")} className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-semibold hover:bg-indigo-700 transition">
+                    Ir a la prueba de conocimientos →
+                  </button>
+                )}
+
+                <button onClick={handleCerrarSesion} className="w-full border border-red-200 text-red-500 py-3 rounded-2xl text-sm font-medium hover:bg-red-50 transition">
+                  Cerrar sesión
+                </button>
+              </div>
+              );
+  };
+
+  // ── Render compartido: Reglas ──
+  const renderReglamento = () => (
+              <div className="px-4 py-4 space-y-3 pb-8">
+                {/* Header */}
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3">
+                  <p className="text-white text-xs font-bold uppercase tracking-widest mb-0.5">Reglamento TCC 2026</p>
+                  <p className="text-gray-500 text-xs">Turismo Carretera Chileno · Documento oficial de temporada</p>
+                </div>
+
+                {/* Protocolo de banderas — mantiene diseño original */}
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                  <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
+                    <span className="text-sm">🚩</span>
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Protocolo de Banderas</span>
+                  </div>
+                  <div className="divide-y divide-gray-800">
+                    {BANDERAS_INFO.map((b, i) => (
+                      <div key={i} className="p-4 flex gap-3 items-start">
+                        <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0`} />
+                        <div>
+                          <p className="text-white text-xs font-semibold">{b.nombre}</p>
+                          <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{b.desc}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Resto del reglamento TCC */}
+                {REGLAMENTO_TCC.filter(s => s.titulo !== "Protocolo de banderas").map((sec, si) => (
+                  <div key={si} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+                    <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
+                      <span className="text-sm">{sec.icono}</span>
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">{sec.titulo}</span>
+                    </div>
+                    <div className="divide-y divide-gray-800/60">
+                      {sec.items.map((item, ii) => (
+                        <div key={ii} className="px-4 py-2.5 text-xs text-gray-400 leading-relaxed">
+                          {item}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-xs text-gray-600">
+                  📋 Reglamento Deportivo y Técnico TCC 2026 · Documento final de trabajo
+                </div>
+              </div>
+  );
+
+  // ── Render compartido: barra de navegación inferior ──
+  const renderBottomNav = () => !isLandscape && (
+            <div className="border-t border-gray-200 bg-white flex items-center justify-around px-1 py-1.5">
+              {([
+                { id: "main",        emoji: "🏁", label: "Pista"    },
+                { id: "perfil",      emoji: "👤", label: "Perfil"   },
+                { id: "reglamento",  emoji: "📄", label: "Reglas"   },
+              ] as { id: SecView; emoji: string; label: string }[]).map(item => (
+                <button
+                  key={item.id}
+                  onClick={() => setSecView(item.id)}
+                  className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${
+                    secView === item.id ? "text-indigo-700" : "text-gray-400 hover:text-gray-600"
+                  }`}
+                >
+                  <span className="text-xl">{item.emoji}</span>
+                  <span className="text-xs font-medium">{item.label}</span>
+                </button>
+              ))}
+            </div>
+  );
+
   const handleLogin = async () => {
     setError(""); setLoading(true);
     const result = await loginPiloto(loginEmail, loginPassword);
@@ -1369,8 +1697,10 @@ export default function Home() {
     const data = await getPiloto();
     setPilotoData(data);
     setEstadoPiloto(data?.prueba_aprobada ? "habilitado" : "deshabilitado");
-    if (!data?.prueba_aprobada) { setStage("prueba"); }
-    else { cargarCampeonatos(); if (data?.id) cargarMisInscripciones(data.id); setStage("eventos"); }
+    // Directo a eventos: la prueba se rinde al entrar a cada campeonato
+    cargarCampeonatos();
+    if (data?.id) { cargarMisInscripciones(data.id); cargarPruebasCampeonato(data.id); }
+    setStage("eventos");
     setLoading(false);
   };
   const handleRegistro = async () => {
@@ -1383,7 +1713,11 @@ export default function Home() {
       setPilotoData(piloto);
       for (const auto of autos) { if (auto.marca && auto.modelo) await agregarVehiculo(piloto.id, auto.marca, auto.modelo); }
     }
-    setEstadoPiloto("deshabilitado"); setStage("prueba"); setSubTab("prueba"); setLoading(false);
+    // Registro directo a eventos: la prueba se rinde al entrar a cada campeonato
+    setEstadoPiloto("deshabilitado");
+    cargarCampeonatos();
+    if (piloto?.id) { cargarMisInscripciones(piloto.id); cargarPruebasCampeonato(piloto.id); }
+    setStage("eventos"); setLoading(false);
   };
   const handleCerrarSesion = async () => {
     await cerrarSesion(); setPilotoData(null); setStage("login");
@@ -1392,6 +1726,7 @@ export default function Home() {
   };
 
   const volverAEventos = () => {
+    setSecView("main");
     setEventoActivo(null);
     setEventView("campeonatos");
     setSelectedCampId(null);
@@ -1686,10 +2021,13 @@ export default function Home() {
                             if (piloto) {
                               await aprobarPrueba(piloto.id);
                               setPilotoData({ ...piloto, prueba_aprobada: true });
+                              if (pendingEvento?.fecha.campeonato_id) {
+                                await registrarPruebaCampeonato(piloto.id, pendingEvento.fecha.campeonato_id);
+                              }
                             }
                             cargarCampeonatos();
                             if (piloto) cargarMisInscripciones(piloto.id);
-                            setStage("eventos");
+                            continuarTrasPrueba();
                             setLoading(false);
                           }}
                           disabled={loading}
@@ -1759,7 +2097,13 @@ export default function Home() {
               <button onClick={handleCerrarSesion} className="text-xs text-gray-500 hover:text-gray-300 transition">Salir</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {secView === "perfil" && (
+              <div className="flex-1 overflow-y-auto bg-gray-100 text-gray-900">{renderPerfil()}</div>
+            )}
+            {secView === "reglamento" && (
+              <div className="flex-1 overflow-y-auto">{renderReglamento()}</div>
+            )}
+            <div className={`flex-1 overflow-y-auto p-4 space-y-3 ${secView !== "main" ? "hidden" : ""}`}>
 
               {/* ── Vista campeonatos ── */}
               {eventView === "campeonatos" && (
@@ -1877,6 +2221,8 @@ export default function Home() {
                 </>
               )}
             </div>
+
+            {renderBottomNav()}
           </div>
         );
       })()}
@@ -2178,273 +2524,17 @@ export default function Home() {
             )}
 
             {/* ── VISTA PERFIL ── */}
-            {secView === "perfil" && (() => {
-              const autos: Array<{ id: string; marca: string; modelo: string }> = (pilotoData as any)?.vehiculos || [];
-              const autoActivoId: string | null = (pilotoData as any)?.vehiculo_activo_id ?? null;
-              const st = statsPerfil;
-              const xp = st ? Math.round(st.eventos * 100 + st.minutos + st.km) : 0;
-              const nivel = Math.max(1, Math.floor(xp / 500));
-              const paraSiguiente = (nivel + 1) * 500 - xp;
-              const pctNivel = Math.min(100, Math.round(((xp - nivel * 500 + 500) / 500) * 100));
-              const nombreAuto = (id: string | null) => {
-                if (id === null) return "Sin auto asignado";
-                const a = autos.find(v => v.id === id);
-                return a ? `${a.marca} ${a.modelo}` : "Auto eliminado";
-              };
-              return (
-              <div className="px-4 py-4 space-y-4">
-
-                {/* Cabecera: identidad + RUT fijo */}
-                <div className="flex items-center gap-4 py-1">
-                  <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl font-bold">{iniciales}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-gray-900 font-bold text-lg leading-none">{nombreMostrar}</p>
-                    <p className="text-gray-400 text-xs mt-1">🔒 RUT {pilotoData?.rut || "—"} · fijo e intransferible</p>
-                  </div>
-                  <span className={`text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${
-                    habilitado ? "bg-green-100 text-green-700"
-                    : estadoPiloto === "pendiente" ? "bg-amber-100 text-amber-700"
-                    : "bg-red-100 text-red-600"
-                  }`}>
-                    {habilitado ? "Habilitado" : estadoPiloto === "pendiente" ? "Prueba pendiente" : "No habilitado"}
-                  </span>
-                </div>
-
-                {msgPerfil && (
-                  <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs rounded-xl px-4 py-2.5">{msgPerfil}</div>
-                )}
-
-                {/* Datos de contacto (editables) */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Datos de contacto</p>
-                  <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
-                    {([["correo", "Correo · una cuenta por correo", authEmail], ["telefono", "Teléfono", pilotoData?.telefono]] as const).map(([campo, label, valor]) => (
-                      <div key={campo} className="flex items-center gap-3 px-4 py-3">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs text-gray-400">{label}</p>
-                          {editCampo === campo ? (
-                            <input
-                              autoFocus
-                              type={campo === "correo" ? "email" : "tel"}
-                              value={valorCampo}
-                              onChange={e => setValorCampo(e.target.value)}
-                              className="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
-                            />
-                          ) : (
-                            <p className="text-sm text-gray-900 font-medium truncate">{valor || "—"}</p>
-                          )}
-                        </div>
-                        <button
-                          onClick={() => {
-                            if (editCampo === campo) { guardarCampoPerfil(); }
-                            else { setEditCampo(campo); setValorCampo(String(valor || "")); }
-                          }}
-                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex-shrink-0 ${
-                            editCampo === campo
-                              ? "bg-indigo-600 border-indigo-600 text-white"
-                              : "border-gray-200 text-gray-500 hover:border-gray-300"
-                          }`}
-                        >
-                          {editCampo === campo ? "Guardar" : "✏️"}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Mis autos */}
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mis autos</p>
-                    <button onClick={() => setShowFormAuto(v => !v)}
-                      className="text-xs font-semibold text-indigo-600 border border-indigo-200 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition">
-                      + Agregar auto
-                    </button>
-                  </div>
-                  <div className="space-y-2">
-                    {autos.map(a => {
-                      const activo = a.id === autoActivoId;
-                      return (
-                        <button key={a.id} onClick={() => toggleAutoActivo(a.id)}
-                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition ${
-                            activo ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:border-gray-300"
-                          }`}>
-                          <span className="text-lg flex-shrink-0">🚗</span>
-                          <span className={`flex-1 text-sm font-semibold ${activo ? "text-indigo-700" : "text-gray-900"}`}>
-                            {a.marca} {a.modelo}
-                          </span>
-                          <span className={`text-xs flex-shrink-0 ${activo ? "text-indigo-600 font-semibold" : "text-gray-400"}`}>
-                            {activo ? "✓ Auto activo" : "Tocar para activar"}
-                          </span>
-                        </button>
-                      );
-                    })}
-                    {autos.length === 0 && (
-                      <p className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-2xl px-4 py-4 text-center">
-                        Sin autos registrados — los datos quedan asociados solo al piloto
-                      </p>
-                    )}
-                  </div>
-                  {showFormAuto && (
-                    <div className="mt-2 bg-white border border-gray-300 rounded-2xl px-4 py-3 space-y-2">
-                      <div className="flex gap-2">
-                        <input placeholder="Marca" value={autoMarca} onChange={e => setAutoMarca(e.target.value)}
-                          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                        <input placeholder="Modelo" value={autoModelo} onChange={e => setAutoModelo(e.target.value)}
-                          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
-                      </div>
-                      <button onClick={guardarAutoNuevo}
-                        className="w-full bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition">
-                        Guardar auto
-                      </button>
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-400 mt-2 px-1 leading-relaxed">
-                    El auto activo recibe los km y minutos de cada sesión. Sin auto activo, los datos quedan asociados solo al piloto.
-                  </p>
-                </div>
-
-                {/* Estadísticas en pista */}
-                <div>
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Estadísticas en pista</p>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      [String(st?.eventos ?? "—"), "eventos"],
-                      [String(st?.minutos ?? "—"), "min en pista"],
-                      [String(st?.km ?? "—"), "km recorridos"],
-                      [st ? `${st.velMax}` : "—", "vel. máx (km/h)"],
-                    ].map(([v, l]) => (
-                      <div key={l} className="bg-white border border-gray-200 rounded-2xl px-3 py-3 text-center">
-                        <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">{v}</p>
-                        <p className="text-xs text-gray-400 mt-1">{l}</p>
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-2 bg-white border border-gray-200 rounded-2xl px-4 py-3.5">
-                    <div className="flex items-baseline justify-between">
-                      <p className="text-sm font-semibold text-gray-900">⭐ Experiencia total</p>
-                      <p className="text-sm text-gray-500"><span className="font-bold text-gray-900 tabular-nums">{xp.toLocaleString("es-CL")}</span> XP · Nivel {nivel}</p>
-                    </div>
-                    <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${pctNivel}%` }} />
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1.5">
-                      {paraSiguiente} XP para nivel {nivel + 1} · suma eventos, minutos y km de todo tu historial
-                    </p>
-                  </div>
-                </div>
-
-                {/* Historial por auto */}
-                {st && st.porAuto.length > 0 && (
-                  <div>
-                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Historial por auto</p>
-                    <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
-                      {st.porAuto.map(r => (
-                        <div key={r.vehiculo_id ?? "sin-auto"} className="flex items-center gap-3 px-4 py-2.5">
-                          <span className="text-sm flex-shrink-0">{r.vehiculo_id ? "🚗" : "👤"}</span>
-                          <span className="flex-1 text-xs font-medium text-gray-700 truncate">
-                            {nombreAuto(r.vehiculo_id)}
-                            {r.vehiculo_id && r.vehiculo_id === autoActivoId && (
-                              <span className="text-indigo-600 font-semibold"> · activo</span>
-                            )}
-                          </span>
-                          <span className="text-xs text-gray-500 tabular-nums">{Math.round(r.km * 10) / 10} km</span>
-                          <span className="text-xs text-gray-500 tabular-nums w-14 text-right">{r.minutos} min</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {!habilitado && (
-                  <button onClick={() => setStage("prueba")} className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-semibold hover:bg-indigo-700 transition">
-                    Ir a la prueba de conocimientos →
-                  </button>
-                )}
-
-                <button onClick={handleCerrarSesion} className="w-full border border-red-200 text-red-500 py-3 rounded-2xl text-sm font-medium hover:bg-red-50 transition">
-                  Cerrar sesión
-                </button>
-              </div>
-              );
-            })()}
+            {secView === "perfil" && renderPerfil()}
 
             {/* ── VISTA SALDO ── */}
 
             {/* ── VISTA REGLAMENTO ── */}
-            {secView === "reglamento" && (
-              <div className="px-4 py-4 space-y-3 pb-8">
-                {/* Header */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl px-4 py-3">
-                  <p className="text-white text-xs font-bold uppercase tracking-widest mb-0.5">Reglamento TCC 2026</p>
-                  <p className="text-gray-500 text-xs">Turismo Carretera Chileno · Documento oficial de temporada</p>
-                </div>
-
-                {/* Protocolo de banderas — mantiene diseño original */}
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                  <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
-                    <span className="text-sm">🚩</span>
-                    <span className="text-xs font-bold text-white uppercase tracking-wider">Protocolo de Banderas</span>
-                  </div>
-                  <div className="divide-y divide-gray-800">
-                    {BANDERAS_INFO.map((b, i) => (
-                      <div key={i} className="p-4 flex gap-3 items-start">
-                        <div className={`${b.color} w-4 h-4 rounded-sm mt-0.5 flex-shrink-0`} />
-                        <div>
-                          <p className="text-white text-xs font-semibold">{b.nombre}</p>
-                          <p className="text-gray-500 text-xs mt-0.5 leading-relaxed">{b.desc}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Resto del reglamento TCC */}
-                {REGLAMENTO_TCC.filter(s => s.titulo !== "Protocolo de banderas").map((sec, si) => (
-                  <div key={si} className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-                    <div className="px-4 py-2.5 border-b border-gray-800 flex items-center gap-2">
-                      <span className="text-sm">{sec.icono}</span>
-                      <span className="text-xs font-bold text-white uppercase tracking-wider">{sec.titulo}</span>
-                    </div>
-                    <div className="divide-y divide-gray-800/60">
-                      {sec.items.map((item, ii) => (
-                        <div key={ii} className="px-4 py-2.5 text-xs text-gray-400 leading-relaxed">
-                          {item}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 text-xs text-gray-600">
-                  📋 Reglamento Deportivo y Técnico TCC 2026 · Documento final de trabajo
-                </div>
-              </div>
-            )}
+            {secView === "reglamento" && renderReglamento()}
 
           </div>
 
           {/* ── BOTTOM NAVIGATION — oculto en landscape ── */}
-          {!isLandscape && (
-            <div className="border-t border-gray-200 bg-white flex items-center justify-around px-1 py-1.5">
-              {([
-                { id: "main",        emoji: "🏁", label: "Pista"    },
-                { id: "perfil",      emoji: "👤", label: "Perfil"   },
-                { id: "reglamento",  emoji: "📄", label: "Reglas"   },
-              ] as { id: SecView; emoji: string; label: string }[]).map(item => (
-                <button
-                  key={item.id}
-                  onClick={() => setSecView(item.id)}
-                  className={`flex flex-col items-center gap-0.5 px-4 py-1.5 rounded-xl transition-all ${
-                    secView === item.id ? "text-indigo-700" : "text-gray-400 hover:text-gray-600"
-                  }`}
-                >
-                  <span className="text-xl">{item.emoji}</span>
-                  <span className="text-xs font-medium">{item.label}</span>
-                </button>
-              ))}
-            </div>
-          )}
+          {renderBottomNav()}
 
           {/* ── BOTÓN QR FLOTANTE — oculto en landscape ── */}
           {!isLandscape && (

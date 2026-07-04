@@ -3,6 +3,18 @@
 
 ---
 
+## [0.10.0] — 4 Julio 2026
+### Cambiado
+- Perfil y Reglas disponibles apenas se abre la app (barra inferior en la
+  pantalla de eventos), sin necesidad de entrar a un evento
+- La prueba de conocimientos ahora es POR CAMPEONATO y se rinde al ENTRAR
+  a un evento de ese campeonato por primera vez (no al registrarse). Tras
+  aprobar, continúa automáticamente al evento al que iba el piloto
+- Tabla `pruebas_piloto` (migración: `docs/task-prueba-por-campeonato-migration.sql`)
+- Login y registro van directo a la lista de eventos
+
+---
+
 ## [0.9.0] — 4 Julio 2026
 ### Agregado
 - Perfil del piloto rediseñado: correo y teléfono editables (RUT fijo, una
