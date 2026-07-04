@@ -934,9 +934,9 @@ export default function AdminPage() {
                       <p className="text-sm font-semibold text-gray-900 truncate">{f.nombre}</p>
                       <p className="text-xs text-gray-400 truncate">{f.campeonatoNombre}</p>
                     </div>
-                    {f.tipo && TIPO_LABEL[f.tipo] && (
-                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${TIPO_COLOR[f.tipo]}`}>
-                        {TIPO_LABEL[f.tipo]}
+                    {f.tipo && TIPO_LABEL[f.tipo as keyof typeof TIPO_LABEL] && (
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${TIPO_COLOR[f.tipo as keyof typeof TIPO_COLOR]}`}>
+                        {TIPO_LABEL[f.tipo as keyof typeof TIPO_LABEL]}
                       </span>
                     )}
                     <span className="text-xs bg-gray-900 text-white font-bold px-3 py-1.5 rounded-lg flex-shrink-0">
