@@ -3,6 +3,23 @@
 
 ---
 
+## [0.9.0] — 4 Julio 2026
+### Agregado
+- Perfil del piloto rediseñado: correo y teléfono editables (RUT fijo, una
+  cuenta por correo), autos del piloto (agregar varios, elegir auto activo o
+  ninguno), estadísticas permanentes (eventos, minutos, km, velocidad máxima),
+  experiencia total con nivel (XP = eventos×100 + minutos + km, 500 XP por
+  nivel) e historial de km/minutos por auto
+- Tabla `historial_pista` + `pilotos.vehiculo_activo_id` (migración:
+  `docs/task-perfil-historial-migration.sql`)
+- Al cerrar cada sesión (Retirar), se cosechan minutos, km recorridos
+  (Haversine sobre el GPS, filtrando saltos >300 m) y velocidad máxima,
+  asignados al auto activo del piloto o solo al piloto si no tiene
+- `distanciaRecorridaKm()` en lib/gps.ts
+- Cambio de correo via Supabase Auth (envía confirmación al correo nuevo)
+
+---
+
 ## [0.8.1] — 3 Julio 2026
 ### Cambiado
 - Safety Car: el circuito completo se pinta amarillo en el modo conducción

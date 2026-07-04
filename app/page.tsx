@@ -859,6 +859,89 @@ export default function Home() {
   const [banderaPersonal, setBanderaPersonal] = useState<string | null>(null);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
+  // ── Perfil: edición de contacto, autos y estadísticas ──────────
+  const [editCampo, setEditCampo]     = useState<null | "correo" | "telefono">(null);
+  const [valorCampo, setValorCampo]   = useState("");
+  const [msgPerfil, setMsgPerfil]     = useState<string | null>(null);
+  const [showFormAuto, setShowFormAuto] = useState(false);
+  const [autoMarca, setAutoMarca]     = useState("");
+  const [autoModelo, setAutoModelo]   = useState("");
+  const [statsPerfil, setStatsPerfil] = useState<{
+    eventos: number; minutos: number; km: number; velMax: number;
+    porAuto: Array<{ vehiculo_id: string | null; km: number; minutos: number }>;
+  } | null>(null);
+
+  const cargarStatsPerfil = async (pilotoId: string) => {
+    try {
+      const { data: hist } = await supabase
+        .from("historial_pista")
+        .select("vehiculo_id, minutos, km, vel_max")
+        .eq("piloto_id", pilotoId);
+      const { count } = await supabase
+        .from("inscripciones")
+        .select("id", { count: "exact", head: true })
+        .eq("piloto_id", pilotoId)
+        .in("estado", ["en_pista", "finalizado"]);
+      const rows = hist || [];
+      const porAutoMap = new Map<string | null, { km: number; minutos: number }>();
+      let minutos = 0, km = 0, velMax = 0;
+      for (const r of rows as any[]) {
+        minutos += r.minutos || 0;
+        km      += Number(r.km) || 0;
+        velMax   = Math.max(velMax, r.vel_max || 0);
+        const key = r.vehiculo_id ?? null;
+        const acc = porAutoMap.get(key) || { km: 0, minutos: 0 };
+        acc.km += Number(r.km) || 0; acc.minutos += r.minutos || 0;
+        porAutoMap.set(key, acc);
+      }
+      setStatsPerfil({
+        eventos: count || 0,
+        minutos, km: Math.round(km * 10) / 10, velMax,
+        porAuto: Array.from(porAutoMap.entries()).map(([vehiculo_id, v]) => ({ vehiculo_id, ...v })),
+      });
+    } catch {
+      // historial_pista sin migrar: mostrar todo en cero
+      setStatsPerfil({ eventos: 0, minutos: 0, km: 0, velMax: 0, porAuto: [] });
+    }
+  };
+
+  const guardarCampoPerfil = async () => {
+    if (!pilotoData?.id || !editCampo) return;
+    const valor = valorCampo.trim();
+    if (!valor) return;
+    if (editCampo === "correo") {
+      const { error } = await supabase.auth.updateUser({ email: valor });
+      if (error) { setMsgPerfil(`No se pudo cambiar el correo: ${error.message}`); return; }
+      await supabase.from("pilotos").update({ email: valor }).eq("id", pilotoData.id);
+      setMsgPerfil("Te enviamos un correo de confirmación a la nueva dirección.");
+    } else {
+      await supabase.from("pilotos").update({ telefono: valor }).eq("id", pilotoData.id);
+      setMsgPerfil("Teléfono actualizado.");
+    }
+    setEditCampo(null);
+    getPiloto().then(d => { if (d) setPilotoData(d); });
+    setTimeout(() => setMsgPerfil(null), 5000);
+  };
+
+  const guardarAutoNuevo = async () => {
+    if (!pilotoData?.id || !autoMarca.trim() || !autoModelo.trim()) return;
+    await agregarVehiculo(pilotoData.id, autoMarca.trim(), autoModelo.trim());
+    setAutoMarca(""); setAutoModelo(""); setShowFormAuto(false);
+    getPiloto().then(d => { if (d) setPilotoData(d); });
+  };
+
+  const toggleAutoActivo = async (vehiculoId: string) => {
+    if (!pilotoData?.id) return;
+    const nuevo = (pilotoData as any)?.vehiculo_activo_id === vehiculoId ? null : vehiculoId;
+    await supabase.from("pilotos").update({ vehiculo_activo_id: nuevo }).eq("id", pilotoData.id);
+    getPiloto().then(d => { if (d) setPilotoData(d); });
+  };
+
+  // Cargar estadísticas al entrar a Perfil
+  useEffect(() => {
+    if (secView === "perfil" && pilotoData?.id) cargarStatsPerfil(pilotoData.id);
+  }, [secView, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Estados de mensajes del director ──
   const [mensajeActivo, setMensajeActivo] = useState<MensajePiloto | null>(null);
   const mensajeDismissRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -2090,39 +2173,183 @@ export default function Home() {
             )}
 
             {/* ── VISTA PERFIL ── */}
-            {secView === "perfil" && (
+            {secView === "perfil" && (() => {
+              const autos: Array<{ id: string; marca: string; modelo: string }> = (pilotoData as any)?.vehiculos || [];
+              const autoActivoId: string | null = (pilotoData as any)?.vehiculo_activo_id ?? null;
+              const st = statsPerfil;
+              const xp = st ? Math.round(st.eventos * 100 + st.minutos + st.km) : 0;
+              const nivel = Math.max(1, Math.floor(xp / 500));
+              const paraSiguiente = (nivel + 1) * 500 - xp;
+              const pctNivel = Math.min(100, Math.round(((xp - nivel * 500 + 500) / 500) * 100));
+              const nombreAuto = (id: string | null) => {
+                if (id === null) return "Sin auto asignado";
+                const a = autos.find(v => v.id === id);
+                return a ? `${a.marca} ${a.modelo}` : "Auto eliminado";
+              };
+              return (
               <div className="px-4 py-4 space-y-4">
-                <div className="flex items-center gap-4 py-2">
-                  <div className="w-14 h-14 rounded-2xl bg-gray-800 flex items-center justify-center text-xl font-bold">{iniciales}</div>
-                  <div>
-                    <p className="text-white font-bold text-lg leading-none">{nombreMostrar}</p>
-                    <p className="text-gray-500 text-sm mt-0.5">{vehiculoMostrar}</p>
-                    <span className={`text-xs px-2 py-0.5 rounded-full inline-block mt-1.5 font-medium border ${
-                      habilitado
-                        ? "bg-green-950 text-green-400 border-green-800"
-                        : estadoPiloto === "pendiente"
-                        ? "bg-amber-950 text-amber-400 border-amber-800"
-                        : "bg-red-950 text-red-400 border-red-800"
-                    }`}>
-                      {habilitado ? "🟢 Habilitado para pista" : estadoPiloto === "pendiente" ? "🟠 Prueba pendiente" : "🔴 No habilitado"}
-                    </span>
+
+                {/* Cabecera: identidad + RUT fijo */}
+                <div className="flex items-center gap-4 py-1">
+                  <div className="w-14 h-14 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl font-bold">{iniciales}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-gray-900 font-bold text-lg leading-none">{nombreMostrar}</p>
+                    <p className="text-gray-400 text-xs mt-1">🔒 RUT {pilotoData?.rut || "—"} · fijo e intransferible</p>
+                  </div>
+                  <span className={`text-xs px-2.5 py-1 rounded-full font-semibold flex-shrink-0 ${
+                    habilitado ? "bg-green-100 text-green-700"
+                    : estadoPiloto === "pendiente" ? "bg-amber-100 text-amber-700"
+                    : "bg-red-100 text-red-600"
+                  }`}>
+                    {habilitado ? "Habilitado" : estadoPiloto === "pendiente" ? "Prueba pendiente" : "No habilitado"}
+                  </span>
+                </div>
+
+                {msgPerfil && (
+                  <div className="bg-indigo-50 border border-indigo-200 text-indigo-700 text-xs rounded-xl px-4 py-2.5">{msgPerfil}</div>
+                )}
+
+                {/* Datos de contacto (editables) */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Datos de contacto</p>
+                  <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
+                    {([["correo", "Correo · una cuenta por correo", pilotoData?.email], ["telefono", "Teléfono", pilotoData?.telefono]] as const).map(([campo, label, valor]) => (
+                      <div key={campo} className="flex items-center gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs text-gray-400">{label}</p>
+                          {editCampo === campo ? (
+                            <input
+                              autoFocus
+                              type={campo === "correo" ? "email" : "tel"}
+                              value={valorCampo}
+                              onChange={e => setValorCampo(e.target.value)}
+                              className="mt-1 w-full border border-gray-300 rounded-lg px-2.5 py-1.5 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                            />
+                          ) : (
+                            <p className="text-sm text-gray-900 font-medium truncate">{valor || "—"}</p>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (editCampo === campo) { guardarCampoPerfil(); }
+                            else { setEditCampo(campo); setValorCampo(String(valor || "")); }
+                          }}
+                          className={`text-xs font-semibold px-3 py-1.5 rounded-lg border transition flex-shrink-0 ${
+                            editCampo === campo
+                              ? "bg-indigo-600 border-indigo-600 text-white"
+                              : "border-gray-200 text-gray-500 hover:border-gray-300"
+                          }`}
+                        >
+                          {editCampo === campo ? "Guardar" : "✏️"}
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 
-
-                <div className="bg-gray-900 border border-gray-800 rounded-2xl divide-y divide-gray-800">
-                  {[
-                    ["RUT",    pilotoData?.rut       || "—"],
-                    ["Correo", pilotoData?.email      || "—"],
-                    ["Teléfono", pilotoData?.telefono || "—"],
-                    ["Prueba", habilitado ? "✓ Aprobada" : "⏳ Pendiente"],
-                  ].map(([k, v]) => (
-                    <div key={k} className="flex justify-between px-4 py-3">
-                      <span className="text-gray-500 text-sm">{k}</span>
-                      <span className="text-gray-300 text-sm font-medium">{v}</span>
+                {/* Mis autos */}
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Mis autos</p>
+                    <button onClick={() => setShowFormAuto(v => !v)}
+                      className="text-xs font-semibold text-indigo-600 border border-indigo-200 px-2.5 py-1 rounded-lg hover:bg-indigo-50 transition">
+                      + Agregar auto
+                    </button>
+                  </div>
+                  <div className="space-y-2">
+                    {autos.map(a => {
+                      const activo = a.id === autoActivoId;
+                      return (
+                        <button key={a.id} onClick={() => toggleAutoActivo(a.id)}
+                          className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl border text-left transition ${
+                            activo ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:border-gray-300"
+                          }`}>
+                          <span className="text-lg flex-shrink-0">🚗</span>
+                          <span className={`flex-1 text-sm font-semibold ${activo ? "text-indigo-700" : "text-gray-900"}`}>
+                            {a.marca} {a.modelo}
+                          </span>
+                          <span className={`text-xs flex-shrink-0 ${activo ? "text-indigo-600 font-semibold" : "text-gray-400"}`}>
+                            {activo ? "✓ Auto activo" : "Tocar para activar"}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {autos.length === 0 && (
+                      <p className="text-xs text-gray-400 border border-dashed border-gray-300 rounded-2xl px-4 py-4 text-center">
+                        Sin autos registrados — los datos quedan asociados solo al piloto
+                      </p>
+                    )}
+                  </div>
+                  {showFormAuto && (
+                    <div className="mt-2 bg-white border border-gray-300 rounded-2xl px-4 py-3 space-y-2">
+                      <div className="flex gap-2">
+                        <input placeholder="Marca" value={autoMarca} onChange={e => setAutoMarca(e.target.value)}
+                          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                        <input placeholder="Modelo" value={autoModelo} onChange={e => setAutoModelo(e.target.value)}
+                          className="flex-1 min-w-0 border border-gray-300 rounded-lg px-2.5 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+                      </div>
+                      <button onClick={guardarAutoNuevo}
+                        className="w-full bg-indigo-600 text-white text-sm font-semibold py-2.5 rounded-xl hover:bg-indigo-700 transition">
+                        Guardar auto
+                      </button>
                     </div>
-                  ))}
+                  )}
+                  <p className="text-xs text-gray-400 mt-2 px-1 leading-relaxed">
+                    El auto activo recibe los km y minutos de cada sesión. Sin auto activo, los datos quedan asociados solo al piloto.
+                  </p>
                 </div>
+
+                {/* Estadísticas en pista */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Estadísticas en pista</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      [String(st?.eventos ?? "—"), "eventos"],
+                      [String(st?.minutos ?? "—"), "min en pista"],
+                      [String(st?.km ?? "—"), "km recorridos"],
+                      [st ? `${st.velMax}` : "—", "vel. máx (km/h)"],
+                    ].map(([v, l]) => (
+                      <div key={l} className="bg-white border border-gray-200 rounded-2xl px-3 py-3 text-center">
+                        <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">{v}</p>
+                        <p className="text-xs text-gray-400 mt-1">{l}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 bg-white border border-gray-200 rounded-2xl px-4 py-3.5">
+                    <div className="flex items-baseline justify-between">
+                      <p className="text-sm font-semibold text-gray-900">⭐ Experiencia total</p>
+                      <p className="text-sm text-gray-500"><span className="font-bold text-gray-900 tabular-nums">{xp.toLocaleString("es-CL")}</span> XP · Nivel {nivel}</p>
+                    </div>
+                    <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${pctNivel}%` }} />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1.5">
+                      {paraSiguiente} XP para nivel {nivel + 1} · suma eventos, minutos y km de todo tu historial
+                    </p>
+                  </div>
+                </div>
+
+                {/* Historial por auto */}
+                {st && st.porAuto.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Historial por auto</p>
+                    <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
+                      {st.porAuto.map(r => (
+                        <div key={r.vehiculo_id ?? "sin-auto"} className="flex items-center gap-3 px-4 py-2.5">
+                          <span className="text-sm flex-shrink-0">{r.vehiculo_id ? "🚗" : "👤"}</span>
+                          <span className="flex-1 text-xs font-medium text-gray-700 truncate">
+                            {nombreAuto(r.vehiculo_id)}
+                            {r.vehiculo_id && r.vehiculo_id === autoActivoId && (
+                              <span className="text-indigo-600 font-semibold"> · activo</span>
+                            )}
+                          </span>
+                          <span className="text-xs text-gray-500 tabular-nums">{Math.round(r.km * 10) / 10} km</span>
+                          <span className="text-xs text-gray-500 tabular-nums w-14 text-right">{r.minutos} min</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {!habilitado && (
                   <button onClick={() => setStage("prueba")} className="w-full bg-indigo-600 text-white py-3 rounded-2xl font-semibold hover:bg-indigo-700 transition">
@@ -2130,11 +2357,12 @@ export default function Home() {
                   </button>
                 )}
 
-                <button onClick={handleCerrarSesion} className="w-full border border-red-900 text-red-500 py-3 rounded-2xl text-sm font-medium hover:bg-red-950 transition">
+                <button onClick={handleCerrarSesion} className="w-full border border-red-200 text-red-500 py-3 rounded-2xl text-sm font-medium hover:bg-red-50 transition">
                   Cerrar sesión
                 </button>
               </div>
-            )}
+              );
+            })()}
 
             {/* ── VISTA SALDO ── */}
 

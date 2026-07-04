@@ -39,6 +39,24 @@ export function sectorLargo(inicio: number, fin: number, total: number): number 
   return inicio <= fin ? fin - inicio : (total - inicio) + fin
 }
 
+// Distancia recorrida en km sobre puntos GPS consecutivos (Haversine).
+// Filtra saltos > 300 m entre lecturas (jitter o pérdida de señal).
+export function distanciaRecorridaKm(puntos: Coordenada[]): number {
+  let total = 0
+  for (let i = 1; i < puntos.length; i++) {
+    const R  = 6371
+    const d1 = (puntos[i].lat - puntos[i - 1].lat) * Math.PI / 180
+    const d2 = (puntos[i].lng - puntos[i - 1].lng) * Math.PI / 180
+    const a  = Math.sin(d1 / 2) ** 2
+             + Math.cos(puntos[i - 1].lat * Math.PI / 180)
+             * Math.cos(puntos[i].lat     * Math.PI / 180)
+             * Math.sin(d2 / 2) ** 2
+    const d  = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    if (d < 0.3) total += d
+  }
+  return Math.round(total * 100) / 100
+}
+
 // ── TRAZADO DE PISTA ──────────────────────────────────────────
 
 export async function getTrazadoActivo(): Promise<Coordenada[] | null> {

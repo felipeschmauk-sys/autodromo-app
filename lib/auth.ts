@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { distanciaRecorridaKm } from '@/lib/gps'
 
 export async function registrarPiloto({
   email, password, nombre, rut, telefono
@@ -225,6 +226,48 @@ export async function validarQRToken(
 }
 
 export async function cerrarSesionAdmin(piloto_id: string) {
+  // Antes de cerrar, cosechar el historial permanente de la sesión:
+  // minutos en pista, km recorridos (GPS) y velocidad máxima. Se asignan
+  // al vehículo activo del piloto (o solo al piloto si no tiene ninguno).
+  // Tolerante a fallos: si historial_pista no está migrada, cierra igual.
+  try {
+    const { data: ses } = await supabase
+      .from('sesiones')
+      .select('id, inicio')
+      .eq('piloto_id', piloto_id)
+      .eq('estado', 'activa')
+      .maybeSingle()
+
+    if (ses?.id) {
+      const { data: ubic } = await supabase
+        .from('ubicaciones_piloto')
+        .select('lat, lng, velocidad')
+        .eq('sesion_id', ses.id)
+        .order('timestamp', { ascending: true })
+        .limit(5000)
+
+      const puntos  = (ubic || []).map(u => ({ lat: u.lat, lng: u.lng }))
+      const velMax  = (ubic || []).reduce((m, u) => Math.max(m, u.velocidad || 0), 0)
+      const minutos = Math.max(0, Math.round((Date.now() - new Date(ses.inicio).getTime()) / 60000))
+
+      const { data: pil } = await supabase
+        .from('pilotos')
+        .select('vehiculo_activo_id')
+        .eq('id', piloto_id)
+        .maybeSingle()
+
+      // sesion_id es UNIQUE: un doble cierre no duplica el historial
+      await supabase.from('historial_pista').insert({
+        piloto_id,
+        sesion_id:   ses.id,
+        vehiculo_id: (pil as any)?.vehiculo_activo_id ?? null,
+        minutos,
+        km:          distanciaRecorridaKm(puntos),
+        vel_max:     velMax,
+      })
+    }
+  } catch { /* noop */ }
+
   const { error } = await supabase
     .from('sesiones')
     .update({ estado: 'inactiva', fin: new Date().toISOString() })
