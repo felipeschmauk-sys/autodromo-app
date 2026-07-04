@@ -3,6 +3,19 @@
 
 ---
 
+## [0.10.2] — 4 Julio 2026
+### Agregado
+- Número de competición del piloto (hasta 3 caracteres, `pilotos.numero`,
+  migración: `docs/task-numero-piloto-migration.sql`): se edita tocando el
+  círculo en el resumen del piloto; vacío = vuelve a las iniciales. Se
+  refleja en los avatares de Pilotos y en "Pilotos en sesión" de Dirección
+
+### Corregido
+- Contador "En pista" de la pestaña Pilotos ahora usa el estado GPS real
+  (sesiones zombie sin señal ya no cuentan)
+
+---
+
 ## [0.10.1] — 4 Julio 2026
 ### Agregado
 - Panel admin, pestaña Pilotos: clic en el nombre de cualquier piloto abre
