@@ -365,6 +365,60 @@ export default function AdminPage() {
     URL.revokeObjectURL(url);
   }, [contexto.fechaId, contexto.fechaNombre]);
 
+  // ── Resumen de experiencia del piloto (clic en el nombre) ────────────────
+  interface ResumenPiloto {
+    nombre: string; cargando: boolean;
+    eventos: number; minutos: number; km: number; velMax: number;
+    xp: number; nivel: number;
+    porAuto: Array<{ nombre: string; km: number; minutos: number; activo: boolean }>;
+  }
+  const [resumenPiloto, setResumenPiloto] = useState<ResumenPiloto | null>(null);
+
+  const abrirResumenPiloto = useCallback(async (pilotoId: string, nombre: string) => {
+    setResumenPiloto({ nombre, cargando: true, eventos: 0, minutos: 0, km: 0, velMax: 0, xp: 0, nivel: 1, porAuto: [] });
+    try {
+      const [histQ, inscQ, vehQ, pilQ] = await Promise.all([
+        supabase.from("historial_pista").select("vehiculo_id, minutos, km, vel_max").eq("piloto_id", pilotoId),
+        supabase.from("inscripciones").select("id", { count: "exact", head: true }).eq("piloto_id", pilotoId).in("estado", ["en_pista", "finalizado"]),
+        supabase.from("vehiculos").select("id, marca, modelo").eq("piloto_id", pilotoId),
+        supabase.from("pilotos").select("vehiculo_activo_id").eq("id", pilotoId).maybeSingle(),
+      ]);
+      const rows     = histQ.data || [];
+      const vehs     = (vehQ.data || []) as Array<{ id: string; marca: string; modelo: string }>;
+      const activoId = (pilQ.data as any)?.vehiculo_activo_id ?? null;
+
+      let minutos = 0, km = 0, velMax = 0;
+      const mapa = new Map<string | null, { km: number; minutos: number }>();
+      for (const r of rows as any[]) {
+        minutos += r.minutos || 0;
+        km      += Number(r.km) || 0;
+        velMax   = Math.max(velMax, r.vel_max || 0);
+        const k = r.vehiculo_id ?? null;
+        const acc = mapa.get(k) || { km: 0, minutos: 0 };
+        acc.km += Number(r.km) || 0; acc.minutos += r.minutos || 0;
+        mapa.set(k, acc);
+      }
+      const eventos = inscQ.count || 0;
+      // Misma fórmula que ve el piloto en su app
+      const xp    = Math.round(eventos * 100 + minutos + km);
+      const nivel = Math.max(1, Math.floor(xp / 500));
+      const nombreVeh = (id: string | null) => {
+        if (id === null) return "Sin auto asignado";
+        const v = vehs.find(x => x.id === id);
+        return v ? `${v.marca} ${v.modelo}` : "Auto eliminado";
+      };
+      setResumenPiloto({
+        nombre, cargando: false, eventos, minutos,
+        km: Math.round(km * 10) / 10, velMax, xp, nivel,
+        porAuto: Array.from(mapa.entries()).map(([id, v]) => ({
+          nombre: nombreVeh(id), km: Math.round(v.km * 10) / 10, minutos: v.minutos, activo: id !== null && id === activoId,
+        })),
+      });
+    } catch {
+      setResumenPiloto(prev => prev ? { ...prev, cargando: false } : null);
+    }
+  }, []);
+
   // ── Bandera personal por piloto (menú en "Pilotos en sesión") ────────────
   const [menuBanderaPiloto, setMenuBanderaPiloto] = useState<string | null>(null); // sesion.id abierta
 
@@ -1502,7 +1556,7 @@ export default function AdminPage() {
                           return (
                             <div key={p.piloto_id} className={`px-4 py-3 flex items-center justify-between gap-3 transition-colors ${okEsteId ? "bg-green-50" : "bg-white"}`}>
                               <div className="min-w-0">
-                                <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                                <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                                 <p className="text-xs text-gray-400">{p.rut}</p>
                               </div>
                               {okEsteId ? (
@@ -1606,7 +1660,7 @@ export default function AdminPage() {
                       <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
                         <Avatar nombre={p.nombre} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                          <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                           <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
@@ -1645,7 +1699,7 @@ export default function AdminPage() {
                       <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
                         <Avatar nombre={p.nombre} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                          <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                           <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                         </div>
                         <button
@@ -1675,7 +1729,7 @@ export default function AdminPage() {
                       <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
                         <Avatar nombre={p.nombre} />
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                          <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                           <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                         </div>
                         <button
@@ -1708,7 +1762,7 @@ export default function AdminPage() {
                         <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
                           <Avatar nombre={p.nombre} />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">{p.nombre}</p>
+                            <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                             <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
@@ -1827,6 +1881,91 @@ export default function AdminPage() {
           </div>
         )}
       </main>
+
+      {/* ── MODAL: EXPERIENCIA DEL PILOTO ─────────────────────────── */}
+      {resumenPiloto && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center p-4"
+          style={{ zIndex: 200 }}
+          onClick={() => setResumenPiloto(null)}
+        >
+          <div
+            className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
+                {resumenPiloto.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-900 truncate">{resumenPiloto.nombre}</p>
+                <p className="text-xs text-gray-400">Experiencia del piloto</p>
+              </div>
+              <button onClick={() => setResumenPiloto(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Cerrar">✕</button>
+            </div>
+
+            {resumenPiloto.cargando ? (
+              <div className="py-12 flex justify-center">
+                <div className="w-8 h-8 border-4 border-gray-200 border-t-gray-900 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <div className="p-5 space-y-4">
+                {/* XP + nivel */}
+                <div className="border border-gray-200 rounded-2xl px-4 py-3.5">
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-sm font-semibold text-gray-900">⭐ Experiencia total</p>
+                    <p className="text-sm text-gray-500">
+                      <span className="font-bold text-gray-900 tabular-nums">{resumenPiloto.xp.toLocaleString("es-CL")}</span> XP · Nivel {resumenPiloto.nivel}
+                    </p>
+                  </div>
+                  <div className="mt-2 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full"
+                      style={{ width: `${Math.min(100, Math.round(((resumenPiloto.xp - resumenPiloto.nivel * 500 + 500) / 500) * 100))}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* Métricas */}
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    [String(resumenPiloto.eventos), "eventos"],
+                    [String(resumenPiloto.minutos), "min en pista"],
+                    [String(resumenPiloto.km), "km recorridos"],
+                    [String(resumenPiloto.velMax), "vel. máx (km/h)"],
+                  ].map(([v, l]) => (
+                    <div key={l} className="bg-gray-50 rounded-xl px-3 py-3 text-center">
+                      <p className="text-2xl font-black text-gray-900 tabular-nums leading-none">{v}</p>
+                      <p className="text-xs text-gray-400 mt-1">{l}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Historial por auto */}
+                {resumenPiloto.porAuto.length > 0 ? (
+                  <div className="border border-gray-200 rounded-2xl divide-y divide-gray-100">
+                    {resumenPiloto.porAuto.map((r, i) => (
+                      <div key={i} className="flex items-center gap-3 px-4 py-2.5">
+                        <span className="text-sm flex-shrink-0">🚗</span>
+                        <span className="flex-1 text-xs font-medium text-gray-700 truncate">
+                          {r.nombre}
+                          {r.activo && <span className="text-indigo-600 font-semibold"> · activo</span>}
+                        </span>
+                        <span className="text-xs text-gray-500 tabular-nums">{r.km} km</span>
+                        <span className="text-xs text-gray-500 tabular-nums w-14 text-right">{r.minutos} min</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400 text-center py-2">
+                    Sin tandas registradas aún — el historial se acumula al cerrar cada sesión de pista.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

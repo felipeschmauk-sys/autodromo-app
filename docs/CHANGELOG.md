@@ -3,6 +3,14 @@
 
 ---
 
+## [0.10.1] — 4 Julio 2026
+### Agregado
+- Panel admin, pestaña Pilotos: clic en el nombre de cualquier piloto abre
+  un resumen con su experiencia (XP y nivel, eventos, minutos, km, velocidad
+  máxima e historial por auto) — misma fórmula y datos que ve el piloto
+
+---
+
 ## [0.10.0] — 4 Julio 2026
 ### Cambiado
 - Perfil y Reglas disponibles apenas se abre la app (barra inferior en la
