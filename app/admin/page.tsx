@@ -1073,6 +1073,28 @@ export default function AdminPage() {
                             >
                               🟡
                             </button>
+                            <button
+                              onClick={() => setSectorBandera(s.id, "rayas")}
+                              disabled={s.bandera === "rayas"}
+                              title="Superficie deslizante (rayas amarillo/rojo)"
+                              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
+                                s.bandera === "rayas"
+                                  ? "border-red-600"
+                                  : "bg-white border-gray-200 hover:border-red-400"
+                              }`}
+                              style={s.bandera === "rayas"
+                                ? { background: "repeating-linear-gradient(45deg, #eab308 0 5px, #ef4444 5px 10px)" }
+                                : undefined}
+                            >
+                              <span
+                                className="inline-block rounded-sm"
+                                style={{
+                                  width: 14, height: 14, verticalAlign: "-3px",
+                                  background: "repeating-linear-gradient(45deg, #eab308 0 4px, #ef4444 4px 8px)",
+                                  border: s.bandera === "rayas" ? "1.5px solid #fff" : "none",
+                                }}
+                              />
+                            </button>
                           </div>
                         )}
                         {isGlobalOverride && (
