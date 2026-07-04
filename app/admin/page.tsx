@@ -383,6 +383,32 @@ export default function AdminPage() {
     });
   }, [cargarSesiones, contexto.fechaId]);
 
+  // ── Fechas que se corren HOY (se muestran en la portada) ─────────────────
+  const [fechasHoy, setFechasHoy] = useState<Array<{
+    id: string; nombre: string; tipo: string | null;
+    campeonatoId: string; campeonatoNombre: string;
+  }>>([]);
+
+  useEffect(() => {
+    if (!autenticado) return;
+    const cargar = async () => {
+      const hoy = new Date().toISOString().split("T")[0];
+      const { data } = await supabase
+        .from("fechas_evento")
+        .select("id, nombre, tipo, campeonato_id, campeonatos(nombre)")
+        .eq("fecha_evento", hoy)
+        .in("estado", ["borrador", "abierto"]);
+      setFechasHoy((data || []).map((f: any) => ({
+        id: f.id,
+        nombre: f.nombre,
+        tipo: f.tipo ?? null,
+        campeonatoId: f.campeonato_id,
+        campeonatoNombre: f.campeonatos?.nombre || "",
+      })));
+    };
+    cargar();
+  }, [autenticado, tab, contexto.fechaId]); // se refresca al volver a la portada
+
   // ── Navegación rápida: migas del header + "Operar esta fecha" ────────────
   const irAlInicioEventos = useCallback(() => {
     setContexto({ campeonatoId: null, campeonatoNombre: "", fechaId: null, fechaNombre: "", tipo: null });
@@ -886,13 +912,50 @@ export default function AdminPage() {
 
         {/* ── DIRECCIÓN ──────────────────────────────────────────────── */}
         {tab === "direccion" && !contexto.fechaId && (
-          <div className="rounded-2xl bg-gray-50 border border-gray-200 px-6 py-14 text-center">
-            <p className="text-4xl mb-4">🏁</p>
-            <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
-            <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
-              Selecciona un campeonato y una fecha en la parte superior para habilitar el control de pista.
-            </p>
-          </div>
+          fechasHoy.length > 0 ? (
+            /* Fechas que se corren hoy: un clic y a operar */
+            <div className="rounded-2xl bg-white border border-gray-200 overflow-hidden">
+              <div className="px-6 pt-8 pb-4 text-center">
+                <p className="text-4xl mb-3">🏁</p>
+                <p className="text-base font-bold text-gray-800">Fechas de hoy</p>
+                <p className="text-sm text-gray-400 mt-1">Selecciona una para entrar a operarla</p>
+              </div>
+              <div className="divide-y divide-gray-100 border-t border-gray-100">
+                {fechasHoy.map(f => (
+                  <button
+                    key={f.id}
+                    onClick={() => operarFecha(
+                      { id: f.campeonatoId, nombre: f.campeonatoNombre },
+                      { id: f.id, nombre: f.nombre, tipo: f.tipo },
+                    )}
+                    className="w-full px-6 py-4 flex items-center gap-3 hover:bg-gray-50 transition-colors text-left"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-gray-900 truncate">{f.nombre}</p>
+                      <p className="text-xs text-gray-400 truncate">{f.campeonatoNombre}</p>
+                    </div>
+                    {f.tipo && TIPO_LABEL[f.tipo] && (
+                      <span className={`text-xs font-bold px-2.5 py-1 rounded-full flex-shrink-0 ${TIPO_COLOR[f.tipo]}`}>
+                        {TIPO_LABEL[f.tipo]}
+                      </span>
+                    )}
+                    <span className="text-xs bg-gray-900 text-white font-bold px-3 py-1.5 rounded-lg flex-shrink-0">
+                      Operar →
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-2xl bg-gray-50 border border-gray-200 px-6 py-14 text-center">
+              <p className="text-4xl mb-4">🏁</p>
+              <p className="text-base font-bold text-gray-800">Sin fecha activa hoy</p>
+              <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
+                No hay fechas programadas para hoy. Selecciona un campeonato y una fecha
+                arriba, o crea una nueva en Eventos.
+              </p>
+            </div>
+          )
         )}
 
         {tab === "direccion" && !!contexto.fechaId && (
