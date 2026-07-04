@@ -296,11 +296,20 @@ export async function confirmarIngreso(qr_id: string, piloto_id: string) {
 }
 
 export async function getPilotosEnSesion() {
-  const { data } = await supabase
+  let { data, error } = await supabase
     .from('sesiones')
-    .select('*, pilotos(nombre, rut, saldo_minutos, bloqueado, prueba_aprobada, vehiculos!vehiculos_piloto_id_fkey(marca, modelo))')
+    .select('*, pilotos(nombre, rut, numero, saldo_minutos, bloqueado, prueba_aprobada, vehiculos!vehiculos_piloto_id_fkey(marca, modelo))')
     .eq('estado', 'activa')
     .order('inicio', { ascending: false })
+
+  // Compatibilidad: si la columna numero aún no está migrada, reintenta sin ella
+  if (error) {
+    ({ data } = await supabase
+      .from('sesiones')
+      .select('*, pilotos(nombre, rut, saldo_minutos, bloqueado, prueba_aprobada, vehiculos!vehiculos_piloto_id_fkey(marca, modelo))')
+      .eq('estado', 'activa')
+      .order('inicio', { ascending: false }))
+  }
 
   // Supabase devuelve el join bajo la clave "pilotos" (nombre de tabla).
   // Lo remapeamos a "piloto" para que coincida con la interfaz del admin.

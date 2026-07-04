@@ -35,6 +35,7 @@ interface Sector {
 interface Piloto {
   id: string;
   nombre: string;
+  numero?: string | null;   // número de competición (hasta 3 caracteres)
   rut: string;
   telefono: string;
   prueba_aprobada: boolean;
@@ -220,6 +221,7 @@ export default function AdminPage() {
     inscripcion_id: string;
     piloto_id: string;
     nombre: string;
+    numero: string | null;
     telefono: string;
     rut: string;
     bloqueado: boolean;
@@ -232,15 +234,26 @@ export default function AdminPage() {
   // silencioso = true: refresco en segundo plano (realtime/polling) sin spinner
   const cargarPilotosEvento = useCallback(async (fechaId: string, silencioso = false) => {
     if (!silencioso) setLoadingPilotosEvento(true);
-    const { data } = await supabase
+    const res = await supabase
       .from("inscripciones")
-      .select("id, estado, pago_estado, piloto_id, pilotos(nombre, telefono, rut, bloqueado)")
+      .select("id, estado, pago_estado, piloto_id, pilotos(nombre, numero, telefono, rut, bloqueado)")
       .eq("fecha_id", fechaId)
       .order("created_at");
+    let data: any[] | null = res.data as any;
+    // Compatibilidad: si la columna numero aún no está migrada, reintenta sin ella
+    if (res.error) {
+      const r2 = await supabase
+        .from("inscripciones")
+        .select("id, estado, pago_estado, piloto_id, pilotos(nombre, telefono, rut, bloqueado)")
+        .eq("fecha_id", fechaId)
+        .order("created_at");
+      data = r2.data as any;
+    }
     const mapped: PilotoEvento[] = (data || []).map((row: any) => ({
       inscripcion_id: row.id,
       piloto_id:      row.piloto_id,
       nombre:         row.pilotos?.nombre   || "—",
+      numero:         row.pilotos?.numero   ?? null,
       telefono:       row.pilotos?.telefono || "",
       rut:            row.pilotos?.rut      || "",
       bloqueado:      row.pilotos?.bloqueado ?? false,
@@ -367,25 +380,46 @@ export default function AdminPage() {
 
   // ── Resumen de experiencia del piloto (clic en el nombre) ────────────────
   interface ResumenPiloto {
-    nombre: string; cargando: boolean;
+    pilotoId: string; nombre: string; numero: string | null; cargando: boolean;
     eventos: number; minutos: number; km: number; velMax: number;
     xp: number; nivel: number;
     porAuto: Array<{ nombre: string; km: number; minutos: number; activo: boolean }>;
   }
   const [resumenPiloto, setResumenPiloto] = useState<ResumenPiloto | null>(null);
+  const [editNumero, setEditNumero]       = useState(false);
+  const [valorNumero, setValorNumero]     = useState("");
+
+  // Guardar número de competición (hasta 3 caracteres; vacío = volver a iniciales)
+  const guardarNumeroPiloto = async () => {
+    if (!resumenPiloto?.pilotoId) return;
+    const limpio = valorNumero.trim().slice(0, 3);
+    await supabase.from("pilotos").update({ numero: limpio || null }).eq("id", resumenPiloto.pilotoId);
+    setResumenPiloto(prev => prev ? { ...prev, numero: limpio || null } : prev);
+    setEditNumero(false);
+    if (contexto.fechaId) cargarPilotosEvento(contexto.fechaId, true);
+    cargarSesiones();
+  };
 
   const abrirResumenPiloto = useCallback(async (pilotoId: string, nombre: string) => {
-    setResumenPiloto({ nombre, cargando: true, eventos: 0, minutos: 0, km: 0, velMax: 0, xp: 0, nivel: 1, porAuto: [] });
+    setEditNumero(false);
+    setResumenPiloto({ pilotoId, nombre, numero: null, cargando: true, eventos: 0, minutos: 0, km: 0, velMax: 0, xp: 0, nivel: 1, porAuto: [] });
     try {
       const [histQ, inscQ, vehQ, pilQ] = await Promise.all([
         supabase.from("historial_pista").select("vehiculo_id, minutos, km, vel_max").eq("piloto_id", pilotoId),
         supabase.from("inscripciones").select("id", { count: "exact", head: true }).eq("piloto_id", pilotoId).in("estado", ["en_pista", "finalizado"]),
         supabase.from("vehiculos").select("id, marca, modelo").eq("piloto_id", pilotoId),
-        supabase.from("pilotos").select("vehiculo_activo_id").eq("id", pilotoId).maybeSingle(),
+        supabase.from("pilotos").select("vehiculo_activo_id, numero").eq("id", pilotoId).maybeSingle(),
       ]);
+      // Compatibilidad: si numero aún no está migrado, reintenta sin la columna
+      let pilData: any = pilQ.data;
+      if (pilQ.error) {
+        const r = await supabase.from("pilotos").select("vehiculo_activo_id").eq("id", pilotoId).maybeSingle();
+        pilData = r.data;
+      }
       const rows     = histQ.data || [];
       const vehs     = (vehQ.data || []) as Array<{ id: string; marca: string; modelo: string }>;
-      const activoId = (pilQ.data as any)?.vehiculo_activo_id ?? null;
+      const activoId = pilData?.vehiculo_activo_id ?? null;
+      const numero   = pilData?.numero ?? null;
 
       let minutos = 0, km = 0, velMax = 0;
       const mapa = new Map<string | null, { km: number; minutos: number }>();
@@ -408,7 +442,7 @@ export default function AdminPage() {
         return v ? `${v.marca} ${v.modelo}` : "Auto eliminado";
       };
       setResumenPiloto({
-        nombre, cargando: false, eventos, minutos,
+        pilotoId, nombre, numero, cargando: false, eventos, minutos,
         km: Math.round(km * 10) / 10, velMax, xp, nivel,
         porAuto: Array.from(mapa.entries()).map(([id, v]) => ({
           nombre: nombreVeh(id), km: Math.round(v.km * 10) / 10, minutos: v.minutos, activo: id !== null && id === activoId,
@@ -1292,8 +1326,8 @@ export default function AdminPage() {
                     return (
                       <div key={s.id} className="px-5 py-3.5">
                         <div className="flex items-center gap-4">
-                          <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
-                            {iniciales}
+                          <div className={`w-9 h-9 rounded-full ${color} text-white font-bold flex items-center justify-center flex-shrink-0 ${(s.piloto?.numero || iniciales).length > 2 ? "text-xs" : "text-sm"}`}>
+                            {s.piloto?.numero || iniciales}
                           </div>
                           {/* Nombre clicable → menú de bandera personal */}
                           <button
@@ -1619,13 +1653,14 @@ export default function AdminPage() {
 
           const totalPendientes = porAprobar.length + porPago.length + porHabilitar.length;
 
-          const Avatar = ({ nombre }: { nombre: string }) => {
-            const iniciales = nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+          const Avatar = ({ nombre, numero }: { nombre: string; numero?: string | null }) => {
+            // Número de competición si existe; iniciales como respaldo
+            const texto = numero || nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
             const colors = ["bg-indigo-500","bg-teal-500","bg-orange-500","bg-pink-500","bg-purple-500"];
             const color = colors[nombre.charCodeAt(0) % colors.length];
             return (
-              <div className={`w-9 h-9 rounded-full ${color} text-white text-sm font-bold flex items-center justify-center flex-shrink-0`}>
-                {iniciales}
+              <div className={`w-9 h-9 rounded-full ${color} text-white font-bold flex items-center justify-center flex-shrink-0 ${String(texto).length > 2 ? "text-xs" : "text-sm"}`}>
+                {texto}
               </div>
             );
           };
@@ -1665,7 +1700,7 @@ export default function AdminPage() {
                   <div className="divide-y divide-gray-50">
                     {porAprobar.map(p => (
                       <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
-                        <Avatar nombre={p.nombre} />
+                        <Avatar nombre={p.nombre} numero={p.numero} />
                         <div className="flex-1 min-w-0">
                           <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                           <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
@@ -1704,7 +1739,7 @@ export default function AdminPage() {
                   <div className="divide-y divide-gray-50">
                     {porPago.map(p => (
                       <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
-                        <Avatar nombre={p.nombre} />
+                        <Avatar nombre={p.nombre} numero={p.numero} />
                         <div className="flex-1 min-w-0">
                           <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                           <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
@@ -1734,7 +1769,7 @@ export default function AdminPage() {
                   <div className="divide-y divide-gray-50">
                     {porHabilitar.map(p => (
                       <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
-                        <Avatar nombre={p.nombre} />
+                        <Avatar nombre={p.nombre} numero={p.numero} />
                         <div className="flex-1 min-w-0">
                           <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                           <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
@@ -1767,7 +1802,7 @@ export default function AdminPage() {
                       const cargando = accionandoInscId === p.inscripcion_id;
                       return (
                         <div key={p.inscripcion_id} className="px-5 py-3.5 flex items-center gap-3">
-                          <Avatar nombre={p.nombre} />
+                          <Avatar nombre={p.nombre} numero={p.numero} />
                           <div className="flex-1 min-w-0">
                             <button onClick={() => abrirResumenPiloto(p.piloto_id, p.nombre)} title="Ver experiencia del piloto" className="text-sm font-semibold text-gray-900 truncate hover:text-indigo-600 hover:underline underline-offset-2 transition text-left block max-w-full">{p.nombre}</button>
                             <p className="text-xs text-gray-400">{p.rut}{p.telefono ? ` · ${p.telefono}` : ""}</p>
@@ -1901,12 +1936,37 @@ export default function AdminPage() {
             onClick={e => e.stopPropagation()}
           >
             <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold text-sm flex-shrink-0">
-                {resumenPiloto.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-              </div>
+              {/* Círculo editable: número de competición (hasta 3 caracteres) */}
+              {editNumero ? (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <input
+                    autoFocus
+                    value={valorNumero}
+                    maxLength={3}
+                    onChange={e => setValorNumero(e.target.value)}
+                    onKeyDown={e => e.key === "Enter" && guardarNumeroPiloto()}
+                    placeholder="N°"
+                    className="w-14 h-10 rounded-xl border-2 border-indigo-400 text-center font-bold text-sm text-gray-900 focus:outline-none"
+                  />
+                  <button onClick={guardarNumeroPiloto}
+                    className="text-xs bg-indigo-600 text-white font-bold px-2.5 py-2 rounded-lg hover:bg-indigo-700 transition">
+                    OK
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => { setValorNumero(resumenPiloto.numero || ""); setEditNumero(true); }}
+                  title="Editar número de competición (vacío = iniciales)"
+                  className={`w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold flex-shrink-0 hover:bg-indigo-700 hover:ring-2 hover:ring-indigo-300 transition ${
+                    (resumenPiloto.numero || "").length > 2 ? "text-xs" : "text-sm"
+                  }`}
+                >
+                  {resumenPiloto.numero || resumenPiloto.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
+                </button>
+              )}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-900 truncate">{resumenPiloto.nombre}</p>
-                <p className="text-xs text-gray-400">Experiencia del piloto</p>
+                <p className="text-xs text-gray-400">Experiencia del piloto · toca el círculo para editar su número</p>
               </div>
               <button onClick={() => setResumenPiloto(null)} className="text-gray-400 hover:text-gray-600 text-xl leading-none" aria-label="Cerrar">✕</button>
             </div>
