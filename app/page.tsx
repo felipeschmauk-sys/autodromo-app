@@ -284,15 +284,16 @@ function PizarraLandscape({
   const oscuro = bandera === "blanca"; // único fondo claro sin zonas oscuras
 
   // Circuito: blanco sobre negro/cuadros, rojo sobre rojo (con borde blanco),
-  // verde en el resto
+  // amarillo completo con Safety Car, verde en el resto
   const colorCircuito =
     bandera === "negra" || bandera === "cuadros" ? "#ffffff"
     : bandera === "roja" ? "#ef4444"
+    : bandera === "safety_car" ? "#facc15"
     : "#22c55e";
 
-  // Los tramos de sector mantienen su información visual sobre el circuito
-  // verde (misma condición de datos que hoy: sectores con bandera ≠ verde)
-  const mostrarSectores = !["roja", "negra", "cuadros"].includes(bandera);
+  // Los tramos de sector mantienen su información visual (incluso con
+  // circuito blanco en negra/cuadros); solo la roja domina todo
+  const mostrarSectores = bandera !== "roja";
   const COLOR_SECTOR: Record<string, string> = { amarilla: "#facc15", rayas: "#f97316", roja: "#ef4444" };
 
   // Proyección lat/lng → SVG (misma técnica del mapa de la vista vertical)

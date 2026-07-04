@@ -3,6 +3,19 @@
 
 ---
 
+## [0.8.1] — 3 Julio 2026
+### Cambiado
+- Safety Car: el circuito completo se pinta amarillo en el modo conducción
+- Negra y cuadros (circuito blanco): los sectores amarillos siguen visibles
+  como advertencia; solo la roja domina todo el trazado
+- El director mantiene el control por sector con Safety Car o cuadros
+  activos (antes el panel lo bloqueaba como "override global"; ahora solo
+  roja y amarilla global bloquean)
+- Mapas admin y piloto (vertical): mismos criterios — sectores con bandera
+  propia visibles bajo SC/cuadros
+
+---
+
 ## [0.8.0] — 3 Julio 2026
 ### Cambiado
 - Rediseño 100% visual del modo conducción (vista horizontal del piloto):

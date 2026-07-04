@@ -1021,7 +1021,10 @@ export default function AdminPage() {
                   {sectores.map((s, i) => {
                     const colors = ["bg-blue-400", "bg-amber-400", "bg-emerald-400", "bg-pink-400", "bg-violet-400", "bg-orange-400", "bg-cyan-400", "bg-lime-400"];
                     const dotColor = colors[i % colors.length];
-                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla" || bandera === "safety_car" || bandera === "cuadros";
+                    // Solo roja y amarilla global dominan los sectores.
+                    // Con Safety Car o cuadros el director MANTIENE el control
+                    // por sector (ej. dejar amarilla de advertencia activa).
+                    const isGlobalOverride = bandera === "roja" || bandera === "amarilla";
                     const efectiva = isGlobalOverride ? bandera : s.bandera;
                     return (
                       <div key={s.id} className="px-5 py-3 flex items-center gap-4">

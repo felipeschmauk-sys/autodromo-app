@@ -138,7 +138,12 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
 
     if (sectores.length > 0) {
       sectores.forEach((s, i) => {
-        const ef    = globalOvride ? bandera : s.bandera;
+        // Roja/amarilla global dominan todo. Con Safety Car o cuadros, los
+        // sectores con bandera propia (ej. amarilla) siguen visibles.
+        const dominaTodo = bandera === "roja" || bandera === "amarilla" || bandera === "amarilla_doble";
+        const ef = dominaTodo ? bandera
+                 : globalOvride && s.bandera === "verde" ? bandera
+                 : s.bandera;
         // Color para la etiqueta del sector (legible incluso con patrón)
         const color = ef === "rayas" ? "#ca8a04" : ef === "cuadros" ? "#111827" : (STROKE[ef] || STROKE.verde);
         const pts   = sectorSlice(trazado, s.punto_inicio, s.punto_fin)

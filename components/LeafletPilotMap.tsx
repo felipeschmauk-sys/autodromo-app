@@ -171,13 +171,17 @@ export default function LeafletPilotMap({
     const latlngs = trazado.map(c => [c.lat, c.lng] as [number, number]);
     const override = GLOBAL_FLAGS.has(bandera);
 
-    if (sectores.length > 0 && !override) {
+    // Roja/amarilla global dominan todo el trazado. Con Safety Car o
+    // cuadros, los sectores con bandera propia siguen visibles.
+    const dominaTodo = bandera === "roja" || bandera === "amarilla" || bandera === "amarilla_doble";
+    if (sectores.length > 0 && !dominaTodo) {
       sectores.forEach(s => {
         const pts = sectorSlice(trazado, s.punto_inicio, s.punto_fin)
           .map(c => [c.lat, c.lng] as [number, number]);
         if (pts.length < 2) return;
+        const ef = override && s.bandera === "verde" ? bandera : s.bandera;
         // Task #59: con patrón si es rayas/cuadros
-        pushFlagPolyline(map, trackRef.current, pts, s.bandera, 7, 20, 0.18);
+        pushFlagPolyline(map, trackRef.current, pts, ef, 7, 20, 0.18);
       });
     } else {
       // Task #59: trazado completo con patrón si corresponde
