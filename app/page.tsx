@@ -860,6 +860,11 @@ export default function Home() {
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
   // ── Perfil: edición de contacto, autos y estadísticas ──────────
+  const [authEmail, setAuthEmail]     = useState<string>("");
+  useEffect(() => {
+    // El correo del piloto vive en Supabase Auth, no en la tabla pilotos
+    supabase.auth.getUser().then(({ data }) => setAuthEmail(data.user?.email || ""));
+  }, [stage]);
   const [editCampo, setEditCampo]     = useState<null | "correo" | "telefono">(null);
   const [valorCampo, setValorCampo]   = useState("");
   const [msgPerfil, setMsgPerfil]     = useState<string | null>(null);
@@ -910,10 +915,10 @@ export default function Home() {
     const valor = valorCampo.trim();
     if (!valor) return;
     if (editCampo === "correo") {
+      // El correo vive en Supabase Auth (pilotos no tiene columna email)
       const { error } = await supabase.auth.updateUser({ email: valor });
       if (error) { setMsgPerfil(`No se pudo cambiar el correo: ${error.message}`); return; }
-      await supabase.from("pilotos").update({ email: valor }).eq("id", pilotoData.id);
-      setMsgPerfil("Te enviamos un correo de confirmación a la nueva dirección.");
+      setMsgPerfil("Te enviamos un correo de confirmación a la nueva dirección. El cambio se aplica al confirmarlo.");
     } else {
       await supabase.from("pilotos").update({ telefono: valor }).eq("id", pilotoData.id);
       setMsgPerfil("Teléfono actualizado.");
@@ -2213,7 +2218,7 @@ export default function Home() {
                 <div>
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Datos de contacto</p>
                   <div className="bg-white border border-gray-200 rounded-2xl divide-y divide-gray-100">
-                    {([["correo", "Correo · una cuenta por correo", pilotoData?.email], ["telefono", "Teléfono", pilotoData?.telefono]] as const).map(([campo, label, valor]) => (
+                    {([["correo", "Correo · una cuenta por correo", authEmail], ["telefono", "Teléfono", pilotoData?.telefono]] as const).map(([campo, label, valor]) => (
                       <div key={campo} className="flex items-center gap-3 px-4 py-3">
                         <div className="flex-1 min-w-0">
                           <p className="text-xs text-gray-400">{label}</p>

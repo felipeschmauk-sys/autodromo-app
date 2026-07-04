@@ -60,7 +60,7 @@ export async function getPiloto() {
 
   const { data } = await supabase
     .from('pilotos')
-    .select('*, vehiculos(*)')
+    .select('*, vehiculos!vehiculos_piloto_id_fkey(*)')
     .eq('id', user.id)
     .single()
 
@@ -298,7 +298,7 @@ export async function confirmarIngreso(qr_id: string, piloto_id: string) {
 export async function getPilotosEnSesion() {
   const { data } = await supabase
     .from('sesiones')
-    .select('*, pilotos(nombre, rut, saldo_minutos, bloqueado, prueba_aprobada, vehiculos(marca, modelo))')
+    .select('*, pilotos(nombre, rut, saldo_minutos, bloqueado, prueba_aprobada, vehiculos!vehiculos_piloto_id_fkey(marca, modelo))')
     .eq('estado', 'activa')
     .order('inicio', { ascending: false })
 
@@ -310,7 +310,7 @@ export async function getPilotosEnSesion() {
 export async function getTodosLosPilotos() {
   const { data } = await supabase
     .from('pilotos')
-    .select('*, vehiculos(*)')
+    .select('*, vehiculos!vehiculos_piloto_id_fkey(*)')
     .order('created_at', { ascending: false })
   return data || []
 }
