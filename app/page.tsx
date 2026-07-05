@@ -887,12 +887,12 @@ export default function Home() {
   };
 
   // Tras aprobar la prueba: si venía entrando a un evento, continuar directo
+  // (con recarga: limpia el historial de "deshacer texto" de iOS)
   const continuarTrasPrueba = () => {
     if (pendingEvento) {
       const pe = pendingEvento;
       setPendingEvento(null);
-      setSecView("main");
-      setEventoActivo({
+      entrarAlEventoConRecarga({
         inscripcionId:    pe.insc.id,
         fechaId:          pe.fecha.id,
         campeonatoNombre: pe.campNombre,
@@ -900,7 +900,6 @@ export default function Home() {
         tipo:             pe.fecha.tipo,
         estadoInsc:       pe.insc.estado,
       });
-      setStage("app");
     } else {
       setStage("eventos");
     }
@@ -1004,10 +1003,24 @@ export default function Home() {
       if (data) {
         setPilotoData(data);
         setEstadoPiloto(data.prueba_aprobada ? "habilitado" : "deshabilitado");
-        // Si no aprobó la prueba va directo a prueba; si sí aprobó va a seleccionar evento
+        cargarCampeonatos(); cargarMisInscripciones(data.id); cargarPruebasCampeonato(data.id);
+
+        // Si venimos de la recarga de "Entrar al evento", continuar directo
+        // a la pista (la recarga limpió el historial de deshacer de iOS)
+        try {
+          const pend = sessionStorage.getItem("eventoActivoPendiente");
+          if (pend) {
+            sessionStorage.removeItem("eventoActivoPendiente");
+            setEventoActivo(JSON.parse(pend));
+            setSecView("main");
+            setStage("app");
+            return;
+          }
+        } catch { /* sessionStorage bloqueado */ }
+
         // Directo a eventos: Perfil y Reglas disponibles sin evento;
         // la prueba se rinde al entrar a un campeonato por primera vez
-        setStage("eventos"); cargarCampeonatos(); cargarMisInscripciones(data.id); cargarPruebasCampeonato(data.id);
+        setStage("eventos");
       }
     });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1069,6 +1082,23 @@ export default function Home() {
     setInscribiendo(null);
   };
 
+  // Entrada al evento con RECARGA de página: limpia el historial de
+  // "deshacer texto" de iOS (lo escrito en login/registro). Sin ese
+  // historial, las vibraciones del auto no pueden abrir el diálogo
+  // "Deshacer texto escrito" en plena pista (que además soltaba el
+  // wake lock y dejaba que la pantalla se apagara).
+  const entrarAlEventoConRecarga = (evento: EventoActivo) => {
+    try {
+      sessionStorage.setItem("eventoActivoPendiente", JSON.stringify(evento));
+      window.location.reload();
+    } catch {
+      // sessionStorage bloqueado: entrar sin recarga
+      setSecView("main");
+      setEventoActivo(evento);
+      setStage("app");
+    }
+  };
+
   const entrarAlEvento = (insc: InscripcionItem, fecha: FechaItem, campNombre: string) => {
     // Prueba POR CAMPEONATO: si este campeonato aún no está aprobado,
     // rendir la prueba primero y luego continuar automáticamente al evento
@@ -1077,8 +1107,7 @@ export default function Home() {
       setStage("prueba");
       return;
     }
-    setSecView("main");
-    setEventoActivo({
+    entrarAlEventoConRecarga({
       inscripcionId:    insc.id,
       fechaId:          fecha.id,
       campeonatoNombre: campNombre,
@@ -1086,7 +1115,6 @@ export default function Home() {
       tipo:             fecha.tipo,
       estadoInsc:       insc.estado,
     });
-    setStage("app");
   };
 
   // ── Cargar trazado y estado de pista al entrar a la app ──

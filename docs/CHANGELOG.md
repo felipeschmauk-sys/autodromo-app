@@ -3,6 +3,17 @@
 
 ---
 
+## [0.10.4] — 5 Julio 2026
+### Corregido
+- Diálogo "Deshacer texto escrito" de iOS apareciendo en pista por las
+  vibraciones del auto (y soltando el wake lock → pantalla apagada):
+  "Entrar al evento" ahora recarga la página antes de abrir la vista de
+  pista, lo que vacía el historial de deshacer de iOS (lo escrito en
+  login/registro). Sin historial, agitar el teléfono no muestra nada.
+  El evento pendiente se restaura vía sessionStorage tras la recarga
+
+---
+
 ## [0.10.3] — 5 Julio 2026
 ### Revertido
 - Todos los intentos de fallback de pantalla encendida (nosleep.js,
