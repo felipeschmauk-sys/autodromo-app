@@ -261,15 +261,24 @@ export async function cerrarSesionAdmin(piloto_id: string) {
         .eq('id', piloto_id)
         .maybeSingle()
 
-      // sesion_id es UNIQUE: un doble cierre no duplica el historial
-      await supabase.from('historial_pista').insert({
+      // Reconciliar con lo acumulado en vivo: el cierre recalcula desde el
+      // registro GPS COMPLETO de la sesión y se queda con el mayor valor de
+      // cada métrica — nunca se pierden km recorridos antes de una recarga
+      const kmTotal = distanciaRecorridaKm(puntos)
+      const { data: prev } = await supabase
+        .from('historial_pista')
+        .select('minutos, km, vel_max')
+        .eq('sesion_id', ses.id)
+        .maybeSingle()
+
+      await supabase.from('historial_pista').upsert({
         piloto_id,
         sesion_id:   ses.id,
         vehiculo_id: (pil as any)?.vehiculo_activo_id ?? null,
-        minutos,
-        km:          distanciaRecorridaKm(puntos),
-        vel_max:     velMax,
-      })
+        minutos:     Math.max(minutos, prev?.minutos || 0),
+        km:          Math.round(Math.max(kmTotal, Number(prev?.km) || 0) * 100) / 100,
+        vel_max:     Math.max(velMax, prev?.vel_max || 0),
+      }, { onConflict: 'sesion_id' })
     }
   } catch { /* noop */ }
 
