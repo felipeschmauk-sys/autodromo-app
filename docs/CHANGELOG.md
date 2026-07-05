@@ -6,9 +6,12 @@
 ## [0.10.3] — 5 Julio 2026
 ### Corregido
 - Pantalla se apagaba en iPhones con iOS < 16.4 (sin soporte de la API
-  Wake Lock): fallback con nosleep.js — video invisible en loop, la misma
-  técnica que mantiene la pantalla encendida en YouTube. Se activa solo,
-  con reintento en el primer toque si iOS exige gesto del usuario
+  Wake Lock). Primer intento con nosleep.js falló: en iOS antiguos los
+  videos SILENCIADOS no evitan el apagado. Fallback definitivo: /wake.mp4
+  propio (30 s en loop, 14 KB) con pista de audio silenciosa y sin mute —
+  cuenta como "reproducción con audio", igual que YouTube. Parte con el
+  primer toque en pantalla (iOS exige gesto). Nota: al activarse puede
+  pausar la música que el piloto tenga sonando, igual que YouTube
 
 ---
 

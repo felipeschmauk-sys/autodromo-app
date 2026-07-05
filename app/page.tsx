@@ -1184,15 +1184,15 @@ export default function Home() {
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
   // 1) API nativa (iOS 16.4+, Android, desktop)
-  // 2) Fallback para iPhones con iOS < 16.4: video invisible en loop
-  //    (nosleep.js) — la misma razón por la que YouTube nunca apaga la
-  //    pantalla. Requiere un gesto del usuario para partir, así que se
-  //    engancha al primer toque en la pantalla.
+  // 2) Fallback para iOS antiguos: /wake.mp4 en loop — video CON pista de
+  //    audio silenciosa y SIN mute. En iOS viejo los videos silenciados no
+  //    evitan el apagado de pantalla; los que "reproducen audio" sí (es la
+  //    razón por la que YouTube nunca apaga la pantalla). Requiere un gesto
+  //    del usuario, así que se engancha al primer toque en la pantalla.
   useEffect(() => {
     if (stage !== "app") return;
     let wakeLock: any = null;
-    let noSleep: any = null;
-    let nativoOk = false;
+    let video: HTMLVideoElement | null = null;
     let gestureHandler: (() => void) | null = null;
 
     const requestNativo = async () => {
@@ -1203,34 +1203,44 @@ export default function Home() {
       } catch { return false; }
     };
 
+    const crearVideo = () => {
+      if (video) return video;
+      video = document.createElement("video");
+      video.src = "/wake.mp4";
+      video.loop = true;
+      video.playsInline = true;
+      video.setAttribute("playsinline", "");
+      video.setAttribute("aria-hidden", "true");
+      // 2px casi transparentes: iOS no reproduce videos con display:none
+      video.style.cssText = "position:fixed;bottom:0;right:0;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+      document.body.appendChild(video);
+      return video;
+    };
+
+    const quitarGesto = () => {
+      if (gestureHandler) {
+        document.removeEventListener("touchstart", gestureHandler);
+        document.removeEventListener("click", gestureHandler);
+        gestureHandler = null;
+      }
+    };
+
     const activarFallback = async () => {
       try {
-        if (!noSleep) {
-          const NoSleep = (await import("nosleep.js")).default;
-          noSleep = new NoSleep();
-        }
-        await noSleep.enable();
+        await crearVideo().play();
       } catch {
-        // iOS exige gesto del usuario para reproducir el video:
-        // reintentar en el próximo toque
+        // iOS exige gesto del usuario para partir un video con audio:
+        // reintentar en el próximo toque en pantalla
         if (!gestureHandler) {
-          gestureHandler = () => {
-            noSleep?.enable().catch(() => {});
-            if (gestureHandler) {
-              document.removeEventListener("touchstart", gestureHandler);
-              document.removeEventListener("click", gestureHandler);
-              gestureHandler = null;
-            }
-          };
-          document.addEventListener("touchstart", gestureHandler, { once: true });
-          document.addEventListener("click", gestureHandler, { once: true });
+          gestureHandler = () => { crearVideo().play().catch(() => {}); quitarGesto(); };
+          document.addEventListener("touchstart", gestureHandler, { passive: true });
+          document.addEventListener("click", gestureHandler);
         }
       }
     };
 
     const activar = async () => {
-      nativoOk = await requestNativo();
-      if (!nativoOk) await activarFallback();
+      if (!(await requestNativo())) await activarFallback();
     };
     activar();
 
@@ -1239,12 +1249,9 @@ export default function Home() {
 
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      if (gestureHandler) {
-        document.removeEventListener("touchstart", gestureHandler);
-        document.removeEventListener("click", gestureHandler);
-      }
+      quitarGesto();
       wakeLock?.release().catch(() => {});
-      try { noSleep?.disable(); } catch {}
+      if (video) { video.pause(); video.remove(); video = null; }
     };
   }, [stage]);
 
