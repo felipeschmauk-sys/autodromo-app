@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, sectorContienePunto, sectorSlice, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -1270,6 +1270,9 @@ export default function Home() {
   const recintoGpsRef  = useRef<Coordenada[]>([]);
   useEffect(() => { geocercaGpsRef.current = geocerca; }, [geocerca]);
   useEffect(() => { recintoGpsRef.current  = geocercaRecinto; }, [geocercaRecinto]);
+  // Auto activo del piloto: el historial en vivo asigna km/min a este vehículo
+  const vehiculoActivoRef = useRef<string | null>(null);
+  useEffect(() => { vehiculoActivoRef.current = (pilotoData as any)?.vehiculo_activo_id ?? null; }, [pilotoData]);
 
   // ── Envío GPS a Supabase (background) ────────────────────────
   // Manda posición a ubicaciones_piloto cada 3s cuando hay sesión activa.
@@ -1283,7 +1286,27 @@ export default function Home() {
     let intervalo: ReturnType<typeof setInterval> | null = null;
     let ultimaPos: GeolocationPosition | null = null;
 
+    // ── Odómetro en vivo: acumula km, minutos y velocidad máxima de la
+    //    sesión y los guarda en historial_pista cada ~30 s. No depende de
+    //    que el admin cierre la sesión.
+    const hist = { minBase: 0, lastLat: null as number | null, lastLng: null as number | null, km: 0, velMax: 0, ticks: 0 };
+
+    const upsertHistorial = () => {
+      if (!sesionId) return;
+      const minutos = hist.minBase + Math.round((hist.ticks * 3) / 60);
+      supabase.from("historial_pista").upsert({
+        piloto_id:   pilotoId,
+        sesion_id:   sesionId,
+        vehiculo_id: vehiculoActivoRef.current,
+        minutos,
+        km:          Math.round(hist.km * 100) / 100,
+        vel_max:     hist.velMax,
+      }, { onConflict: "sesion_id" }).then(() => { /* fire and forget */ });
+    };
+
     const detenerGPS = () => {
+      // Último volcado del odómetro antes de apagar
+      upsertHistorial();
       if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
       if (intervalo)         { clearInterval(intervalo); intervalo = null; }
       sesionId = null;
@@ -1293,6 +1316,21 @@ export default function Home() {
       if (sesionId === sid) return; // ya corriendo con esta sesión
       detenerGPS();
       sesionId = sid;
+      // Reset del odómetro + retomar lo ya acumulado de esta sesión
+      // (por si la app se recargó a mitad de tanda)
+      hist.minBase = 0; hist.lastLat = null; hist.lastLng = null;
+      hist.km = 0; hist.velMax = 0; hist.ticks = 0;
+      supabase.from("historial_pista")
+        .select("minutos, km, vel_max")
+        .eq("sesion_id", sid)
+        .maybeSingle()
+        .then(({ data: prev }) => {
+          if (prev && sesionId === sid) {
+            hist.minBase = prev.minutos || 0;
+            hist.km      = Number(prev.km) || 0;
+            hist.velMax  = prev.vel_max || 0;
+          }
+        });
       if (!navigator.geolocation) return;
 
       watchId = navigator.geolocation.watchPosition(
@@ -1318,6 +1356,17 @@ export default function Home() {
         // Task #58: posición para detectar el sector del piloto
         // (funciona también en landscape, donde SpeedCard no está montado)
         setPosPiloto({ lat, lng, dentro: gc.length >= 3 ? dentro : null });
+
+        // ── Odómetro en vivo ──
+        const velTick = ultimaPos.coords.speed != null ? Math.round(ultimaPos.coords.speed * 3.6) : 0;
+        hist.ticks++;
+        if (velTick > hist.velMax) hist.velMax = velTick;
+        if (hist.lastLat !== null && hist.lastLng !== null) {
+          // distanciaRecorridaKm ya filtra saltos de GPS > 300 m
+          hist.km += distanciaRecorridaKm([{ lat: hist.lastLat, lng: hist.lastLng }, { lat, lng }]);
+        }
+        hist.lastLat = lat; hist.lastLng = lng;
+        if (hist.ticks % 10 === 0) upsertHistorial(); // cada ~30 s
 
         await registrarUbicacion({
           piloto_id:        pilotoId,

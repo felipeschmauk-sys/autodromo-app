@@ -241,14 +241,19 @@ export async function cerrarSesionAdmin(piloto_id: string) {
     if (ses?.id) {
       const { data: ubic } = await supabase
         .from('ubicaciones_piloto')
-        .select('lat, lng, velocidad')
+        .select('lat, lng, velocidad, timestamp')
         .eq('sesion_id', ses.id)
         .order('timestamp', { ascending: true })
         .limit(5000)
 
       const puntos  = (ubic || []).map(u => ({ lat: u.lat, lng: u.lng }))
       const velMax  = (ubic || []).reduce((m, u) => Math.max(m, u.velocidad || 0), 0)
-      const minutos = Math.max(0, Math.round((Date.now() - new Date(ses.inicio).getTime()) / 60000))
+      // Minutos según el último GPS real, no el reloj: una sesión zombie
+      // cerrada días después no debe inflar las horas del piloto
+      const ultimoTs = ubic?.length ? new Date(ubic[ubic.length - 1].timestamp).getTime() : null
+      const minutos  = ultimoTs
+        ? Math.max(0, Math.round((ultimoTs - new Date(ses.inicio).getTime()) / 60000))
+        : 0
 
       const { data: pil } = await supabase
         .from('pilotos')

@@ -3,6 +3,19 @@
 
 ---
 
+## [0.11.0] — 5 Julio 2026
+### Corregido
+- Las estadísticas de experiencia no acumulaban nada: el historial solo se
+  cosechaba al presionar "Retirar", y las sesiones de prueba nunca se
+  cerraban. Ahora la app del piloto acumula EN VIVO (odómetro): km,
+  minutos y velocidad máxima se guardan en historial_pista cada ~30 s
+  durante la sesión, sin depender del cierre. Si la app se recarga a
+  mitad de tanda, retoma lo ya acumulado de esa sesión
+- La cosecha al cerrar sesión queda como respaldo y ya no infla los
+  minutos de sesiones zombie (usa el último GPS real, no el reloj)
+
+---
+
 ## [0.10.4] — 5 Julio 2026
 ### Corregido
 - Diálogo "Deshacer texto escrito" de iOS apareciendo en pista por las
