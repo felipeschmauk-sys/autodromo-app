@@ -1183,20 +1183,68 @@ export default function Home() {
   }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
+  // 1) API nativa (iOS 16.4+, Android, desktop)
+  // 2) Fallback para iPhones con iOS < 16.4: video invisible en loop
+  //    (nosleep.js) — la misma razón por la que YouTube nunca apaga la
+  //    pantalla. Requiere un gesto del usuario para partir, así que se
+  //    engancha al primer toque en la pantalla.
   useEffect(() => {
     if (stage !== "app") return;
     let wakeLock: any = null;
-    const request = async () => {
-      if (!("wakeLock" in navigator)) return;
-      try { wakeLock = await (navigator as any).wakeLock.request("screen"); }
-      catch { /* no disponible en este navegador */ }
+    let noSleep: any = null;
+    let nativoOk = false;
+    let gestureHandler: (() => void) | null = null;
+
+    const requestNativo = async () => {
+      if (!("wakeLock" in navigator)) return false;
+      try {
+        wakeLock = await (navigator as any).wakeLock.request("screen");
+        return true;
+      } catch { return false; }
     };
-    request();
-    const onVisible = () => { if (document.visibilityState === "visible") request(); };
+
+    const activarFallback = async () => {
+      try {
+        if (!noSleep) {
+          const NoSleep = (await import("nosleep.js")).default;
+          noSleep = new NoSleep();
+        }
+        await noSleep.enable();
+      } catch {
+        // iOS exige gesto del usuario para reproducir el video:
+        // reintentar en el próximo toque
+        if (!gestureHandler) {
+          gestureHandler = () => {
+            noSleep?.enable().catch(() => {});
+            if (gestureHandler) {
+              document.removeEventListener("touchstart", gestureHandler);
+              document.removeEventListener("click", gestureHandler);
+              gestureHandler = null;
+            }
+          };
+          document.addEventListener("touchstart", gestureHandler, { once: true });
+          document.addEventListener("click", gestureHandler, { once: true });
+        }
+      }
+    };
+
+    const activar = async () => {
+      nativoOk = await requestNativo();
+      if (!nativoOk) await activarFallback();
+    };
+    activar();
+
+    const onVisible = () => { if (document.visibilityState === "visible") activar(); };
     document.addEventListener("visibilitychange", onVisible);
+
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
+      if (gestureHandler) {
+        document.removeEventListener("touchstart", gestureHandler);
+        document.removeEventListener("click", gestureHandler);
+      }
       wakeLock?.release().catch(() => {});
+      try { noSleep?.disable(); } catch {}
     };
   }, [stage]);
 

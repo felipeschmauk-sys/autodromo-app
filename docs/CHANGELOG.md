@@ -3,6 +3,15 @@
 
 ---
 
+## [0.10.3] — 5 Julio 2026
+### Corregido
+- Pantalla se apagaba en iPhones con iOS < 16.4 (sin soporte de la API
+  Wake Lock): fallback con nosleep.js — video invisible en loop, la misma
+  técnica que mantiene la pantalla encendida en YouTube. Se activa solo,
+  con reintento en el primer toque si iOS exige gesto del usuario
+
+---
+
 ## [0.10.2] — 4 Julio 2026
 ### Agregado
 - Número de competición del piloto (hasta 3 caracteres, `pilotos.numero`,
