@@ -1182,112 +1182,21 @@ export default function Home() {
     };
   }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Estado del mecanismo de pantalla encendida (visible como diagnóstico)
-  const [wakeStatus, setWakeStatus] = useState<"nativo" | "video" | "esperando-toque" | "sin-candado">("sin-candado");
-  const [wakeSecs, setWakeSecs]     = useState(0); // segundos que lleva el video corriendo
-
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
-  // 1) API nativa (iOS 16.4+, Android, desktop)
-  // 2) Fallback para iOS antiguos: /wake.mp4 en loop — video CON pista de
-  //    audio silenciosa y SIN mute. En iOS viejo los videos silenciados no
-  //    evitan el apagado de pantalla; los que "reproducen audio" sí (es la
-  //    razón por la que YouTube nunca apaga la pantalla). Requiere un gesto
-  //    del usuario, así que se engancha al primer toque en la pantalla.
   useEffect(() => {
     if (stage !== "app") return;
     let wakeLock: any = null;
-    let video: HTMLVideoElement | null = null;
-    let gestureHandler: (() => void) | null = null;
-    let vivo = true;
-
-    const requestNativo = async () => {
-      if (!("wakeLock" in navigator)) return false;
-      try {
-        wakeLock = await (navigator as any).wakeLock.request("screen");
-        setWakeStatus("nativo");
-        // Si el sistema suelta el candado (batería baja, cambio de app),
-        // volver a pedirlo
-        wakeLock.addEventListener?.("release", () => {
-          if (vivo && document.visibilityState === "visible") activar();
-        });
-        return true;
-      } catch { return false; }
+    const request = async () => {
+      if (!("wakeLock" in navigator)) return;
+      try { wakeLock = await (navigator as any).wakeLock.request("screen"); }
+      catch { /* no disponible en este navegador */ }
     };
-
-    const crearVideo = () => {
-      if (video) return video;
-      video = document.createElement("video");
-      video.src = "/wake.mp4";
-      video.loop = true;
-      video.playsInline = true;
-      video.setAttribute("playsinline", "");
-      video.setAttribute("aria-hidden", "true");
-      // Visible de verdad: iOS ignora como "reproducción significativa"
-      // los videos casi invisibles. 20px opacos sobre la barra inferior.
-      video.style.cssText = "position:fixed;bottom:76px;right:10px;width:20px;height:20px;opacity:1;pointer-events:none;border-radius:4px;z-index:50;";
-      let inicioPlay = 0;
-      video.addEventListener("playing", () => {
-        if (!vivo) return;
-        setWakeStatus("video");
-        if (!inicioPlay) inicioPlay = Date.now();
-      });
-      video.addEventListener("timeupdate", () => {
-        if (vivo && inicioPlay) setWakeSecs(Math.floor((Date.now() - inicioPlay) / 1000));
-      });
-      video.addEventListener("pause", () => {
-        // Si iOS lo pausa (interrupción de audio), reintentar
-        if (vivo && document.visibilityState === "visible") video?.play().catch(() => setWakeStatus("sin-candado"));
-      });
-      document.body.appendChild(video);
-      return video;
-    };
-
-    const quitarGesto = () => {
-      if (gestureHandler) {
-        document.removeEventListener("touchstart", gestureHandler);
-        document.removeEventListener("click", gestureHandler);
-        gestureHandler = null;
-      }
-    };
-
-    const activarFallback = async () => {
-      try {
-        await crearVideo().play();
-      } catch {
-        // iOS exige gesto del usuario para partir un video con audio:
-        // reintentar en el próximo toque en pantalla
-        setWakeStatus("esperando-toque");
-        if (!gestureHandler) {
-          gestureHandler = () => {
-            crearVideo().play().then(() => quitarGesto()).catch(() => setWakeStatus("sin-candado"));
-          };
-          document.addEventListener("touchstart", gestureHandler, { passive: true });
-          document.addEventListener("click", gestureHandler);
-        }
-      }
-    };
-
-    const activar = async () => {
-      const nativo = await requestNativo();
-      // En iOS el candado nativo a veces se otorga pero el sistema NO lo
-      // respeta (modo de bajo consumo, bugs de WebKit): cinturón y
-      // tirantes — en iPhone/iPad se activa SIEMPRE además el video con
-      // audio, que es lo único que iOS respeta en todos los casos (YouTube)
-      const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-      if (!nativo || esIOS) await activarFallback();
-    };
-    activar();
-
-    const onVisible = () => { if (document.visibilityState === "visible") activar(); };
+    request();
+    const onVisible = () => { if (document.visibilityState === "visible") request(); };
     document.addEventListener("visibilitychange", onVisible);
-
     return () => {
-      vivo = false;
       document.removeEventListener("visibilitychange", onVisible);
-      quitarGesto();
       wakeLock?.release().catch(() => {});
-      if (video) { video.pause(); video.remove(); video = null; }
-      setWakeStatus("sin-candado");
     };
   }, [stage]);
 
@@ -2610,16 +2519,6 @@ export default function Home() {
                     if (code === 1) { localStorage.removeItem("gps_permiso_ok"); setGpsPermiso("denied"); }
                   }}
                 />
-
-                {/* Diagnóstico: método activo para mantener la pantalla encendida */}
-                <p className="text-center text-xs text-gray-400">
-                  Pantalla siempre encendida:{" "}
-                  {wakeStatus === "nativo" ? "🔒 activa (sistema)"
-                   : wakeStatus === "video" ? `🎬 activa (video · ${wakeSecs}s)`
-                   : wakeStatus === "esperando-toque" ? "⏳ toca la pantalla para activar"
-                   : "⚠️ inactiva"}
-                  {" · "}wake5
-                </p>
 
               </div>
             )}

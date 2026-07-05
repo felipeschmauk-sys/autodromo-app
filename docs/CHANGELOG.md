@@ -4,14 +4,14 @@
 ---
 
 ## [0.10.3] — 5 Julio 2026
-### Corregido
-- Pantalla se apagaba en iPhones con iOS < 16.4 (sin soporte de la API
-  Wake Lock). Primer intento con nosleep.js falló: en iOS antiguos los
-  videos SILENCIADOS no evitan el apagado. Fallback definitivo: /wake.mp4
-  propio (30 s en loop, 14 KB) con pista de audio silenciosa y sin mute —
-  cuenta como "reproducción con audio", igual que YouTube. Parte con el
-  primer toque en pantalla (iOS exige gesto). Nota: al activarse puede
-  pausar la música que el piloto tenga sonando, igual que YouTube
+### Revertido
+- Todos los intentos de fallback de pantalla encendida (nosleep.js,
+  wake.mp4 con audio, indicador de diagnóstico, video en iOS): la app
+  vuelve a usar solo la API Wake Lock nativa, como antes. Hallazgo
+  documentado: el apagado a los ~30 s en el teléfono de prueba lo causa
+  el Modo de bajo consumo de iOS, que fuerza el bloqueo a 30 segundos
+  por sobre la API Wake Lock y cualquier video web — no hay técnica web
+  que lo evite; solo desactivar ese modo en el teléfono
 
 ---
 
