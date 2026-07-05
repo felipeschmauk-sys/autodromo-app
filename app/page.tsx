@@ -2608,6 +2608,7 @@ export default function Home() {
                    : wakeStatus === "video" ? "🎬 activa (modo video)"
                    : wakeStatus === "esperando-toque" ? "⏳ toca la pantalla para activar"
                    : "⚠️ inactiva"}
+                  {" · "}wake4
                 </p>
 
               </div>
