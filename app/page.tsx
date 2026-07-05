@@ -1184,6 +1184,7 @@ export default function Home() {
 
   // Estado del mecanismo de pantalla encendida (visible como diagnóstico)
   const [wakeStatus, setWakeStatus] = useState<"nativo" | "video" | "esperando-toque" | "sin-candado">("sin-candado");
+  const [wakeSecs, setWakeSecs]     = useState(0); // segundos que lleva el video corriendo
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
   // 1) API nativa (iOS 16.4+, Android, desktop)
@@ -1221,9 +1222,18 @@ export default function Home() {
       video.playsInline = true;
       video.setAttribute("playsinline", "");
       video.setAttribute("aria-hidden", "true");
-      // Pequeño pero real: iOS ignora videos con display:none u opacidad ~0
-      video.style.cssText = "position:fixed;bottom:2px;right:2px;width:8px;height:8px;opacity:0.4;pointer-events:none;border-radius:2px;";
-      video.addEventListener("playing", () => { if (vivo) setWakeStatus("video"); });
+      // Visible de verdad: iOS ignora como "reproducción significativa"
+      // los videos casi invisibles. 20px opacos sobre la barra inferior.
+      video.style.cssText = "position:fixed;bottom:76px;right:10px;width:20px;height:20px;opacity:1;pointer-events:none;border-radius:4px;z-index:50;";
+      let inicioPlay = 0;
+      video.addEventListener("playing", () => {
+        if (!vivo) return;
+        setWakeStatus("video");
+        if (!inicioPlay) inicioPlay = Date.now();
+      });
+      video.addEventListener("timeupdate", () => {
+        if (vivo && inicioPlay) setWakeSecs(Math.floor((Date.now() - inicioPlay) / 1000));
+      });
       video.addEventListener("pause", () => {
         // Si iOS lo pausa (interrupción de audio), reintentar
         if (vivo && document.visibilityState === "visible") video?.play().catch(() => setWakeStatus("sin-candado"));
@@ -2605,10 +2615,10 @@ export default function Home() {
                 <p className="text-center text-xs text-gray-400">
                   Pantalla siempre encendida:{" "}
                   {wakeStatus === "nativo" ? "🔒 activa (sistema)"
-                   : wakeStatus === "video" ? "🎬 activa (modo video)"
+                   : wakeStatus === "video" ? `🎬 activa (video · ${wakeSecs}s)`
                    : wakeStatus === "esperando-toque" ? "⏳ toca la pantalla para activar"
                    : "⚠️ inactiva"}
-                  {" · "}wake4
+                  {" · "}wake5
                 </p>
 
               </div>
