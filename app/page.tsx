@@ -1182,6 +1182,9 @@ export default function Home() {
     };
   }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Estado del mecanismo de pantalla encendida (visible como diagnóstico)
+  const [wakeStatus, setWakeStatus] = useState<"nativo" | "video" | "esperando-toque" | "sin-candado">("sin-candado");
+
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
   // 1) API nativa (iOS 16.4+, Android, desktop)
   // 2) Fallback para iOS antiguos: /wake.mp4 en loop — video CON pista de
@@ -1194,11 +1197,18 @@ export default function Home() {
     let wakeLock: any = null;
     let video: HTMLVideoElement | null = null;
     let gestureHandler: (() => void) | null = null;
+    let vivo = true;
 
     const requestNativo = async () => {
       if (!("wakeLock" in navigator)) return false;
       try {
         wakeLock = await (navigator as any).wakeLock.request("screen");
+        setWakeStatus("nativo");
+        // Si el sistema suelta el candado (batería baja, cambio de app),
+        // volver a pedirlo
+        wakeLock.addEventListener?.("release", () => {
+          if (vivo && document.visibilityState === "visible") activar();
+        });
         return true;
       } catch { return false; }
     };
@@ -1211,8 +1221,13 @@ export default function Home() {
       video.playsInline = true;
       video.setAttribute("playsinline", "");
       video.setAttribute("aria-hidden", "true");
-      // 2px casi transparentes: iOS no reproduce videos con display:none
-      video.style.cssText = "position:fixed;bottom:0;right:0;width:2px;height:2px;opacity:0.01;pointer-events:none;";
+      // Pequeño pero real: iOS ignora videos con display:none u opacidad ~0
+      video.style.cssText = "position:fixed;bottom:2px;right:2px;width:8px;height:8px;opacity:0.4;pointer-events:none;border-radius:2px;";
+      video.addEventListener("playing", () => { if (vivo) setWakeStatus("video"); });
+      video.addEventListener("pause", () => {
+        // Si iOS lo pausa (interrupción de audio), reintentar
+        if (vivo && document.visibilityState === "visible") video?.play().catch(() => setWakeStatus("sin-candado"));
+      });
       document.body.appendChild(video);
       return video;
     };
@@ -1231,8 +1246,11 @@ export default function Home() {
       } catch {
         // iOS exige gesto del usuario para partir un video con audio:
         // reintentar en el próximo toque en pantalla
+        setWakeStatus("esperando-toque");
         if (!gestureHandler) {
-          gestureHandler = () => { crearVideo().play().catch(() => {}); quitarGesto(); };
+          gestureHandler = () => {
+            crearVideo().play().then(() => quitarGesto()).catch(() => setWakeStatus("sin-candado"));
+          };
           document.addEventListener("touchstart", gestureHandler, { passive: true });
           document.addEventListener("click", gestureHandler);
         }
@@ -1248,10 +1266,12 @@ export default function Home() {
     document.addEventListener("visibilitychange", onVisible);
 
     return () => {
+      vivo = false;
       document.removeEventListener("visibilitychange", onVisible);
       quitarGesto();
       wakeLock?.release().catch(() => {});
       if (video) { video.pause(); video.remove(); video = null; }
+      setWakeStatus("sin-candado");
     };
   }, [stage]);
 
@@ -2574,6 +2594,15 @@ export default function Home() {
                     if (code === 1) { localStorage.removeItem("gps_permiso_ok"); setGpsPermiso("denied"); }
                   }}
                 />
+
+                {/* Diagnóstico: método activo para mantener la pantalla encendida */}
+                <p className="text-center text-xs text-gray-400">
+                  Pantalla siempre encendida:{" "}
+                  {wakeStatus === "nativo" ? "🔒 activa (sistema)"
+                   : wakeStatus === "video" ? "🎬 activa (modo video)"
+                   : wakeStatus === "esperando-toque" ? "⏳ toca la pantalla para activar"
+                   : "⚠️ inactiva"}
+                </p>
 
               </div>
             )}
