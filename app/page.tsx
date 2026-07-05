@@ -1258,7 +1258,13 @@ export default function Home() {
     };
 
     const activar = async () => {
-      if (!(await requestNativo())) await activarFallback();
+      const nativo = await requestNativo();
+      // En iOS el candado nativo a veces se otorga pero el sistema NO lo
+      // respeta (modo de bajo consumo, bugs de WebKit): cinturón y
+      // tirantes — en iPhone/iPad se activa SIEMPRE además el video con
+      // audio, que es lo único que iOS respeta en todos los casos (YouTube)
+      const esIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+      if (!nativo || esIOS) await activarFallback();
     };
     activar();
 
