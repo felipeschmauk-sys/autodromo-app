@@ -166,7 +166,7 @@ export default function AdminPage() {
     if (gps.dentro_geocerca === true)
       return { label: "En pista", cls: "bg-green-100 text-green-700" };
     if (gps.dentro_recinto === true)
-      return { label: "En recinto", cls: "bg-indigo-100 text-indigo-700" };
+      return { label: "Boxes", cls: "bg-indigo-100 text-indigo-700" };
     if (gps.dentro_recinto === false)
       return { label: "Fuera del recinto", cls: "bg-red-100 text-red-600" };
     if (gps.dentro_geocerca === false)
@@ -317,6 +317,22 @@ export default function AdminPage() {
     const tabsDisp = TABS_POR_TIPO[fecha.tipo] || TABS_POR_TIPO.sin_contexto;
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento, resolverCircuitoDeFecha]);
+
+  // ── Refs para el log de entradas/salidas de pista ────────────────────────
+  // Los callbacks de Realtime se crean una sola vez; estos refs les dan
+  // acceso al estado vigente sin re-suscribir.
+  const gpsStateRef = useRef(pilotoGpsState);
+  useEffect(() => { gpsStateRef.current = pilotoGpsState; }, [pilotoGpsState]);
+  const fechaIdRef = useRef<string | null>(null);
+  useEffect(() => { fechaIdRef.current = contexto.fechaId; }, [contexto.fechaId]);
+  const nombresSesionRef = useRef<Map<string, string>>(new Map());
+  useEffect(() => {
+    const m = new Map<string, string>();
+    sesiones.forEach(s => m.set(s.piloto_id, s.piloto?.nombre || s.piloto_id.slice(0, 8)));
+    nombresSesionRef.current = m;
+  }, [sesiones]);
+  // Pilotos cuya pérdida de señal ya quedó registrada (evita duplicados)
+  const offlineAvisadoRef = useRef<Set<string>>(new Set());
 
   // ── Tandas de la fecha (entrenamiento / clasificación / carrera) ─────────
   interface Tanda { id: string; tipo: string; nombre: string; inicio: string; fin: string | null; }
@@ -723,6 +739,25 @@ export default function AdminPage() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "ubicaciones_piloto" },
           (payload) => {
             const u = payload.new as any;
+
+            // ── Log de entradas/salidas de pista ──
+            const anterior = gpsStateRef.current.get(u.piloto_id);
+            const nombre   = nombresSesionRef.current.get(u.piloto_id);
+            const fid      = fechaIdRef.current;
+            if (nombre && fid) {
+              const estabaOffline = !anterior || (Date.now() - anterior.ts) > 20_000;
+              const veniaEnPista  = anterior?.dentro_geocerca === true;
+              if (u.dentro_geocerca === true && estabaOffline && veniaEnPista) {
+                registrarLog({ fecha_id: fid, piloto_id: u.piloto_id, tipo: "pista", descripcion: `📶 ${nombre} recuperó señal en pista` });
+              } else if (u.dentro_geocerca === true && !veniaEnPista) {
+                registrarLog({ fecha_id: fid, piloto_id: u.piloto_id, tipo: "pista", descripcion: `🟢 ${nombre} entró a pista` });
+              } else if (veniaEnPista && u.dentro_geocerca === false) {
+                const destino = u.dentro_recinto === true ? "entró a boxes" : "salió del recinto";
+                registrarLog({ fecha_id: fid, piloto_id: u.piloto_id, tipo: "pista", descripcion: `⬅️ ${nombre} salió de pista — ${destino}` });
+              }
+            }
+            offlineAvisadoRef.current.delete(u.piloto_id);
+
             setPilotoGpsState(prev => {
               const next = new Map(prev);
               next.set(u.piloto_id, {
@@ -736,7 +771,22 @@ export default function AdminPage() {
       .subscribe((status) => { setRealtimeConectado(status === "SUBSCRIBED"); });
 
     // Ticker para re-calcular estado offline en el panel derecho cada 5 s
-    const tickId = setInterval(() => setGpsTick(t => t + 1), 5_000);
+    // + registrar UNA VEZ la pérdida de señal de pilotos que estaban en pista
+    const tickId = setInterval(() => {
+      setGpsTick(t => t + 1);
+      const ahora = Date.now();
+      const fid = fechaIdRef.current;
+      if (!fid) return;
+      for (const [pid, st] of gpsStateRef.current) {
+        if (st.dentro_geocerca === true && ahora - st.ts > 20_000 && !offlineAvisadoRef.current.has(pid)) {
+          offlineAvisadoRef.current.add(pid);
+          const nombre = nombresSesionRef.current.get(pid);
+          if (nombre) {
+            registrarLog({ fecha_id: fid, piloto_id: pid, tipo: "pista", descripcion: `📵 ${nombre} perdió señal — última posición: en pista` });
+          }
+        }
+      }
+    }, 5_000);
 
     // Canal separado para la bandera global — si comparte canal con sectores,
     // los eventos pueden cruzarse y la bandera "parpadea" con cambios de sector.

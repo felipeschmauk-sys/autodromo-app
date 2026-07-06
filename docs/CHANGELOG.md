@@ -3,6 +3,20 @@
 
 ---
 
+## [0.12.1] — 6 Julio 2026
+### Agregado
+- Log de entradas y salidas de pista: "entró a pista", "salió de pista —
+  entró a boxes", "salió de pista — salió del recinto", "perdió señal —
+  última posición: en pista" (una sola vez por corte) y "recuperó señal
+  en pista". Detectado por el panel desde las transiciones de geocerca
+  del GPS; quedan etiquetados con la tanda en curso
+
+### Cambiado
+- "En recinto" → "Boxes" en la app del piloto (semáforo GPS y header),
+  panel admin (estado del piloto) y mapa de Dirección (marcador gris)
+
+---
+
 ## [0.12.0] — 5 Julio 2026
 ### Agregado
 - Tandas por fecha (tabla `tandas`, migración: `docs/task-tandas-migration.sql`):

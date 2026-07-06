@@ -540,7 +540,7 @@ function SpeedCard({
                   }`} />
                   {verificando ? "Verificando..."
                    : enPista   ? "En pista"
-                   : enRecinto ? "En recinto"
+                   : enRecinto ? "Boxes"
                    : "Fuera del recinto"}
                 </div>
               );
@@ -1805,7 +1805,7 @@ export default function Home() {
     gpsEnPista === true
       ? { label: "En pista",     bg: "bg-green-600",  text: "text-white",    dot: "🟢" }
       : gpsEnRecinto === true
-      ? { label: "En recinto",   bg: "bg-orange-500", text: "text-white",    dot: "🟠" }
+      ? { label: "Boxes",        bg: "bg-orange-500", text: "text-white",    dot: "🟠" }
       : (gpsEnPista === false || gpsEnRecinto === false)
       ? { label: "Fuera",        bg: "bg-red-600",    text: "text-white",    dot: "🔴" }
       : { label: "GPS…",         bg: "bg-gray-700",   text: "text-gray-300", dot: "⚪" };
