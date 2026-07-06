@@ -369,13 +369,13 @@ export default function AdminPage() {
   const [durTanda, setDurTanda]         = useState("15");
   const [vueltasTanda, setVueltasTanda] = useState("15");
 
-  const iniciarTanda = useCallback(async () => {
-    const tipo = configTanda;
+  // Núcleo compartido: lo usan el Log de acciones y la pestaña Crono
+  const iniciarTanda = useCallback(async (tipo: string, durMin: number | null, vueltasProg: number | null) => {
     if (!contexto.fechaId || tandaActiva || !tipo) return;
     const n = tandasFecha.filter(t => t.tipo === tipo).length + 1;
     const nombre = `${TIPO_TANDA_LABEL[tipo] || tipo} ${n}`;
-    const dur = Math.max(0, parseInt(durTanda) || 0) || null;
-    const vp  = tipo === "carrera" ? (Math.max(0, parseInt(vueltasTanda) || 0) || null) : null;
+    const dur = durMin;
+    const vp  = tipo === "carrera" ? vueltasProg : null;
 
     // Meta congelada al iniciar: se copia desde el circuito del evento
     let metaIdx: number | null = null;
@@ -409,7 +409,7 @@ export default function AdminPage() {
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `▶️ Tanda iniciada: ${nombre}${detalle}` });
     cargarTandas(contexto.fechaId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [configTanda, durTanda, vueltasTanda, contexto.fechaId, tandaActiva, tandasFecha, cargarTandas, circuitoIdActivo]);
+  }, [contexto.fechaId, tandaActiva, tandasFecha, cargarTandas, circuitoIdActivo]);
 
   const finalizarTanda = useCallback(async () => {
     if (!contexto.fechaId || !tandaActiva) return;
@@ -1195,6 +1195,9 @@ export default function AdminPage() {
             fechaId={contexto.fechaId}
             tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
             onSeleccionarTanda={(id) => setTandaSel(id)}
+            tandaActivaId={tandaActiva?.id ?? null}
+            onIniciarTanda={iniciarTanda}
+            onFinalizarTanda={finalizarTanda}
           />
         )}
         {tab === "crono" && !contexto.fechaId && (
@@ -1628,7 +1631,11 @@ export default function AdminPage() {
                       </label>
                     )}
                     <button
-                      onClick={iniciarTanda}
+                      onClick={() => iniciarTanda(
+                        configTanda!,
+                        Math.max(0, parseInt(durTanda) || 0) || null,
+                        Math.max(0, parseInt(vueltasTanda) || 0) || null,
+                      )}
                       className="text-xs font-bold bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors"
                     >
                       Iniciar

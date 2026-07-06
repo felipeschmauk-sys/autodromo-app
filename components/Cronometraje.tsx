@@ -21,7 +21,15 @@ interface Props {
   // de la tanda seleccionada; Crono la sigue y reporta los cambios
   tandaSeleccionada?: string | null;
   onSeleccionarTanda?: (id: string) => void;
+  // Control de tandas compartido con el Log (iniciar/finalizar desde Crono)
+  tandaActivaId?: string | null;
+  onIniciarTanda?: (tipo: string, duracionMin: number | null, vueltas: number | null) => void;
+  onFinalizarTanda?: () => void;
 }
+
+const TIPO_LABEL: Record<string, string> = {
+  entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
+};
 
 interface Tanda {
   id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
@@ -51,7 +59,11 @@ function fmtReloj(totalS: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda }: Props) {
+export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda, tandaActivaId, onIniciarTanda, onFinalizarTanda }: Props) {
+  // Configuración local para iniciar una tanda desde Crono
+  const [cfgTipo, setCfgTipo]       = useState<string | null>(null);
+  const [cfgDur, setCfgDur]         = useState("15");
+  const [cfgVueltas, setCfgVueltas] = useState("15");
   const [tandas, setTandas]         = useState<Tanda[]>([]);
   const [tandaSelId, setTandaSelId] = useState<string | null>(null);
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
@@ -93,7 +105,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     cargar();
     const poll = setInterval(cargar, 10_000);
     return () => { vivo = false; clearInterval(poll); };
-  }, [fechaId]);
+  // tandaActivaId como dep: al iniciar/finalizar desde Crono o el Log,
+  // la lista se refresca al instante sin esperar el polling
+  }, [fechaId, tandaActivaId]);
 
   // ── Nombres y números de los pilotos del evento ──
   useEffect(() => {
@@ -326,22 +340,92 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     );
   }
 
+  // ── Control de tanda (compartido con el Log de acciones) ──
+  const nombreTandaActiva = tandas.find(t => t.id === tandaActivaId)?.nombre || "tanda";
+  const controlTanda = onIniciarTanda ? (
+    <div className="flex items-center gap-2 flex-wrap">
+      {tandaActivaId ? (
+        <button
+          onClick={onFinalizarTanda}
+          className="text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
+          style={{ background: "#dc2626", color: "#fff" }}
+        >
+          ⏹ Finalizar {nombreTandaActiva}
+        </button>
+      ) : cfgTipo ? (
+        <>
+          <span className="text-xs font-bold" style={{ color: "#e4e4e7" }}>▶ {TIPO_LABEL[cfgTipo]}</span>
+          <label className="text-xs flex items-center gap-1" style={{ color: "#71717a" }}>
+            Duración
+            <input
+              type="number" min={1} value={cfgDur} onChange={e => setCfgDur(e.target.value)}
+              className="w-14 rounded-lg px-1.5 py-1 text-xs text-center focus:outline-none"
+              style={{ background: "#1c1f27", color: "#e4e4e7", border: "1px solid #3f3f46" }}
+            />
+            min
+          </label>
+          {cfgTipo === "carrera" && (
+            <label className="text-xs flex items-center gap-1" style={{ color: "#71717a" }}>
+              Vueltas
+              <input
+                type="number" min={1} value={cfgVueltas} onChange={e => setCfgVueltas(e.target.value)}
+                className="w-14 rounded-lg px-1.5 py-1 text-xs text-center focus:outline-none"
+                style={{ background: "#1c1f27", color: "#e4e4e7", border: "1px solid #3f3f46" }}
+              />
+            </label>
+          )}
+          <button
+            onClick={() => {
+              onIniciarTanda(cfgTipo, Math.max(0, parseInt(cfgDur) || 0) || null, Math.max(0, parseInt(cfgVueltas) || 0) || null);
+              setCfgTipo(null);
+            }}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
+            style={{ background: "#16a34a", color: "#fff" }}
+          >
+            Iniciar
+          </button>
+          <button onClick={() => setCfgTipo(null)} className="text-xs px-1" style={{ color: "#71717a" }} aria-label="Cancelar">✕</button>
+        </>
+      ) : (
+        <>
+          <span className="text-xs" style={{ color: "#71717a" }}>Iniciar tanda:</span>
+          {(["entrenamiento", "clasificacion", "carrera"] as const).map(t => (
+            <button
+              key={t}
+              onClick={() => setCfgTipo(t)}
+              className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors hover:text-white"
+              style={{ background: "transparent", color: "#a1a1aa", border: "1px solid #3f3f46" }}
+            >
+              ▶ {TIPO_LABEL[t]}
+            </button>
+          ))}
+        </>
+      )}
+    </div>
+  ) : null;
+
   if (!tandaSel) {
     return (
-      <div className="bg-gray-50 border border-gray-200 rounded-2xl px-6 py-14 text-center">
-        <p className="text-4xl mb-4">⏱</p>
-        <p className="text-base font-bold text-gray-800">Sin tandas todavía</p>
-        <p className="text-sm text-gray-400 mt-2 max-w-sm mx-auto">
-          Inicia una tanda desde el Log de acciones en Dirección
-          (Entrenamiento, Clasificación o Carrera) y el cronometraje
-          partirá solo.
+      <div className="rounded-2xl px-6 py-12 text-center" style={{ background: "#0f1117" }}>
+        <p className="text-4xl mb-3">⏱</p>
+        <p className="text-base font-bold" style={{ color: "#e4e4e7" }}>Sin tandas todavía</p>
+        <p className="text-sm mt-2 max-w-sm mx-auto" style={{ color: "#71717a" }}>
+          Inicia la primera tanda y el cronometraje parte solo.
         </p>
+        <div className="mt-5 flex justify-center">{controlTanda}</div>
       </div>
     );
   }
 
   return (
     <div className="rounded-2xl overflow-hidden" style={{ background: "#0f1117" }}>
+
+      {/* ── Control de tanda (se refleja también en el Log) ── */}
+      {controlTanda && (
+        <div className="px-4 sm:px-5 py-2.5" style={{ borderBottom: "1px solid #23262f", background: "#13161d" }}>
+          {controlTanda}
+        </div>
+      )}
 
       {/* ── Cabecera: tanda + estado + contador ── */}
       <div className="px-4 sm:px-5 py-3.5 flex items-center gap-3 flex-wrap" style={{ borderBottom: "1px solid #23262f" }}>
