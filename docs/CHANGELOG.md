@@ -3,6 +3,17 @@
 
 ---
 
+## [0.11.2] — 5 Julio 2026
+### Corregido
+- Bug de zona horaria: "hoy" se calculaba en UTC, así que desde las 20:00
+  de Chile (medianoche UTC) la fecha del día quedaba "vencida" — la
+  auto-finalización la re-finalizaba al instante (imposible reabrir
+  inscripciones), desaparecía del selector del header y de la portada
+  "Fechas de hoy", y la vigencia diaria de la prueba fallaba. Ahora los
+  5 cálculos de "hoy" usan la fecha local del dispositivo
+
+---
+
 ## [0.11.1] — 5 Julio 2026
 ### Revertido
 - Se revirtió la recarga de página al "Entrar al evento" (0.10.4): tras

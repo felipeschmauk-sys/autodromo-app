@@ -131,7 +131,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
       .eq("campeonato_id", campId)
       .order("fecha_evento");
 
-    const hoy = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+    const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0]; // "YYYY-MM-DD"
 
     // Auto-finalizar fechas cuyo día ya pasó y aún no están marcadas como finalizadas
     const vencidas = (data || []).filter(

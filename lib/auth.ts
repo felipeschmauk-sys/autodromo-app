@@ -75,7 +75,7 @@ export async function agregarVehiculo(piloto_id: string, marca: string, modelo: 
 }
 
 export async function aprobarPrueba(piloto_id: string) {
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
   const { error } = await supabase
     .from('pilotos')
     .update({ prueba_aprobada: true, prueba_fecha: hoy })
@@ -84,7 +84,7 @@ export async function aprobarPrueba(piloto_id: string) {
 }
 
 export async function pruebaVigenteHoy(piloto_id: string) {
-  const hoy = new Date().toISOString().split('T')[0]
+  const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
   const { data } = await supabase
     .from('pilotos')
     .select('prueba_aprobada, prueba_fecha')

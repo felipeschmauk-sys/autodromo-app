@@ -275,7 +275,7 @@ export default function AdminPage() {
   }, []);
 
   const cargarFechasDeContexto = useCallback(async (campeonatoId: string) => {
-    const hoy = new Date().toISOString().split("T")[0]; // "YYYY-MM-DD"
+    const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0]; // "YYYY-MM-DD"
     const { data } = await supabase
       .from("fechas_evento")
       .select("id, nombre, tipo, estado, fecha_evento")
@@ -480,7 +480,7 @@ export default function AdminPage() {
   useEffect(() => {
     if (!autenticado) return;
     const cargar = async () => {
-      const hoy = new Date().toISOString().split("T")[0];
+      const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0];
       const { data } = await supabase
         .from("fechas_evento")
         .select("id, nombre, tipo, campeonato_id, campeonatos(nombre)")
