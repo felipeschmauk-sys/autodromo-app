@@ -3,6 +3,16 @@
 
 ---
 
+## [0.11.1] — 5 Julio 2026
+### Revertido
+- Se revirtió la recarga de página al "Entrar al evento" (0.10.4): tras
+  ese cambio la pantalla volvió a atenuarse en pista. La entrada al
+  evento es directa de nuevo, como antes. Consecuencia conocida: el
+  diálogo "Deshacer texto escrito" de iOS puede reaparecer con las
+  vibraciones — pendiente buscar otra solución
+
+---
+
 ## [0.11.0] — 5 Julio 2026
 ### Corregido
 - Las estadísticas de experiencia no acumulaban nada: el historial solo se
@@ -13,17 +23,6 @@
   mitad de tanda, retoma lo ya acumulado de esa sesión
 - La cosecha al cerrar sesión queda como respaldo y ya no infla los
   minutos de sesiones zombie (usa el último GPS real, no el reloj)
-
----
-
-## [0.10.4] — 5 Julio 2026
-### Corregido
-- Diálogo "Deshacer texto escrito" de iOS apareciendo en pista por las
-  vibraciones del auto (y soltando el wake lock → pantalla apagada):
-  "Entrar al evento" ahora recarga la página antes de abrir la vista de
-  pista, lo que vacía el historial de deshacer de iOS (lo escrito en
-  login/registro). Sin historial, agitar el teléfono no muestra nada.
-  El evento pendiente se restaura vía sessionStorage tras la recarga
 
 ---
 
