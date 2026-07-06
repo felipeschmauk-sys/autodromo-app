@@ -747,12 +747,16 @@ export default function AdminPage() {
 
   // ── Sesiones visibles según el evento activo ─────────────────────────────
   // Con una fecha seleccionada, las listas muestran solo pilotos inscritos en
-  // ella (una fecha nueva parte limpia). Los contadores de CAPACIDAD siguen
-  // siendo globales: reflejan cuántos autos hay físicamente en la pista, igual
-  // que la validación real del QR en auth.ts.
+  // ella (una fecha nueva parte limpia).
   const sesionesVisibles = contexto.fechaId
     ? sesiones.filter(s => pilotosEvento.some(p => p.piloto_id === s.piloto_id))
     : sesiones;
+
+  // Capacidad de pista = autos EFECTIVAMENTE en pista según GPS.
+  // Boxes y sin señal no ocupan cupo en el display (la validación del QR
+  // en auth.ts sigue contando sesiones activas, que es el límite formal).
+  void gpsTick;
+  const autosEnPista = sesionesVisibles.filter(s => estadoGpsPiloto(s.piloto_id).label === "En pista").length;
 
   // ── Inscripciones en vivo del evento activo ──────────────────────────────
   // Cuando un piloto se inscribe desde su app, la solicitud aparece sola en la
@@ -1358,7 +1362,7 @@ export default function AdminPage() {
                        : "🟢 PISTA HABILITADA"}
                     </p>
                     <p className="text-sm text-gray-500">
-                      {sesionesVisibles.length} de {maxPilotos} cupos activos
+                      {autosEnPista} de {maxPilotos} autos en pista
                       {cargandoBandera && <span className="ml-2 text-xs text-gray-400">Enviando...</span>}
                     </p>
                   </div>
@@ -1529,16 +1533,16 @@ export default function AdminPage() {
             <div className="bg-white rounded-2xl border border-gray-200 px-5 py-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Capacidad de pista</span>
-                <span className="text-sm font-bold text-gray-900">{sesionesVisibles.length} / {maxPilotos}</span>
+                <span className="text-sm font-bold text-gray-900">{autosEnPista} / {maxPilotos}</span>
               </div>
               <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                 <div
                   className={`h-full rounded-full transition-all duration-500 ${
-                    sesionesVisibles.length / maxPilotos >= 0.9 ? "bg-red-500"
-                    : sesionesVisibles.length / maxPilotos >= 0.7 ? "bg-amber-400"
+                    autosEnPista / maxPilotos >= 0.9 ? "bg-red-500"
+                    : autosEnPista / maxPilotos >= 0.7 ? "bg-amber-400"
                     : "bg-green-500"
                   }`}
-                  style={{ width: `${Math.min(100, (sesionesVisibles.length / maxPilotos) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (autosEnPista / maxPilotos) * 100)}%` }}
                 />
               </div>
             </div>
