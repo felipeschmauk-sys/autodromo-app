@@ -3,6 +3,23 @@
 
 ---
 
+## [0.13.0] — 6 Julio 2026
+### Agregado (Cronometraje — Etapa 1 de 3)
+- Tabla `vueltas` + config de cronometraje (migración:
+  `docs/task-cronometraje-migration.sql`): duración por tanda, vueltas
+  programadas (carrera), meta congelada por tanda, meta y vuelta mínima
+  configurables por circuito
+- Iniciar tanda ahora pide duración en minutos (y vueltas si es carrera)
+- Detector de cruces de meta EN el teléfono del piloto (GPS a ~1 Hz):
+  progreso circular sobre el trazado con histéresis (armar al 40-70%,
+  cruce 88%→12%), instante interpolado entre lecturas, vuelta mínima
+  válida, solo dentro de la geocerca de pista. Primera pasada = vuelta
+  de salida sin tiempo. Cumplido el tiempo de tanda, el cruce siguiente
+  cierra la participación del piloto (esa última vuelta SÍ vale)
+- Pendiente Etapa 2: pestaña Cronometraje con tabla de posiciones en vivo
+
+---
+
 ## [0.12.2] — 6 Julio 2026
 ### Cambiado
 - El recinto desaparece como estado visible: para admin y piloto solo

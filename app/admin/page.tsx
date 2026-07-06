@@ -360,21 +360,50 @@ export default function AdminPage() {
     }
   }, []);
 
-  const iniciarTanda = useCallback(async (tipo: string) => {
-    if (!contexto.fechaId || tandaActiva) return;
+  // Configuración previa de la tanda: duración (todas) + vueltas (carrera)
+  const [configTanda, setConfigTanda]   = useState<string | null>(null); // tipo en configuración
+  const [durTanda, setDurTanda]         = useState("15");
+  const [vueltasTanda, setVueltasTanda] = useState("15");
+
+  const iniciarTanda = useCallback(async () => {
+    const tipo = configTanda;
+    if (!contexto.fechaId || tandaActiva || !tipo) return;
     const n = tandasFecha.filter(t => t.tipo === tipo).length + 1;
     const nombre = `${TIPO_TANDA_LABEL[tipo] || tipo} ${n}`;
-    const { data, error } = await supabase
+    const dur = Math.max(0, parseInt(durTanda) || 0) || null;
+    const vp  = tipo === "carrera" ? (Math.max(0, parseInt(vueltasTanda) || 0) || null) : null;
+
+    // Meta congelada al iniciar: se copia desde el circuito del evento
+    let metaIdx: number | null = null;
+    try {
+      if (circuitoIdActivo) {
+        const { data: c } = await supabase
+          .from("circuitos").select("meta_idx").eq("id", circuitoIdActivo).maybeSingle();
+        metaIdx = (c as any)?.meta_idx ?? 0;
+      }
+    } catch { /* columna sin migrar */ }
+
+    let res = await supabase
       .from("tandas")
-      .insert({ fecha_id: contexto.fechaId, tipo, nombre })
+      .insert({ fecha_id: contexto.fechaId, tipo, nombre, duracion_min: dur, vueltas_programadas: vp, meta_idx: metaIdx })
       .select()
       .single();
-    if (error || !data) return;
-    setTandaActivaLog(data.id);
-    await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `▶️ Tanda iniciada: ${nombre}` });
+    if (res.error) {
+      // Columnas de cronometraje sin migrar: crear la tanda básica igual
+      res = await supabase
+        .from("tandas")
+        .insert({ fecha_id: contexto.fechaId, tipo, nombre })
+        .select()
+        .single();
+    }
+    if (res.error || !res.data) return;
+    setConfigTanda(null);
+    setTandaActivaLog(res.data.id);
+    const detalle = `${dur ? ` · ${dur} min` : ""}${vp ? ` · ${vp} vueltas` : ""}`;
+    await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `▶️ Tanda iniciada: ${nombre}${detalle}` });
     cargarTandas(contexto.fechaId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [contexto.fechaId, tandaActiva, tandasFecha, cargarTandas]);
+  }, [configTanda, durTanda, vueltasTanda, contexto.fechaId, tandaActiva, tandasFecha, cargarTandas, circuitoIdActivo]);
 
   const finalizarTanda = useCallback(async () => {
     if (!contexto.fechaId || !tandaActiva) return;
@@ -1550,13 +1579,51 @@ export default function AdminPage() {
                       ⏹ Finalizar tanda
                     </button>
                   </>
+                ) : configTanda ? (
+                  <>
+                    <span className="text-xs font-bold text-gray-700 flex-shrink-0">
+                      ▶ {TIPO_TANDA_LABEL[configTanda]}
+                    </span>
+                    <label className="text-xs text-gray-400 flex items-center gap-1">
+                      Duración
+                      <input
+                        type="number" min={1} value={durTanda}
+                        onChange={e => setDurTanda(e.target.value)}
+                        className="w-14 border border-gray-300 rounded-lg px-1.5 py-1 text-xs text-gray-900 text-center focus:outline-none"
+                      />
+                      min
+                    </label>
+                    {configTanda === "carrera" && (
+                      <label className="text-xs text-gray-400 flex items-center gap-1">
+                        Vueltas
+                        <input
+                          type="number" min={1} value={vueltasTanda}
+                          onChange={e => setVueltasTanda(e.target.value)}
+                          className="w-14 border border-gray-300 rounded-lg px-1.5 py-1 text-xs text-gray-900 text-center focus:outline-none"
+                        />
+                      </label>
+                    )}
+                    <button
+                      onClick={iniciarTanda}
+                      className="text-xs font-bold bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors"
+                    >
+                      Iniciar
+                    </button>
+                    <button
+                      onClick={() => setConfigTanda(null)}
+                      className="text-xs text-gray-400 hover:text-gray-600 px-1"
+                      aria-label="Cancelar"
+                    >
+                      ✕
+                    </button>
+                  </>
                 ) : (
                   <>
                     <span className="text-xs text-gray-400 flex-shrink-0">Iniciar tanda:</span>
                     {(["entrenamiento", "clasificacion", "carrera"] as const).map(tipo => (
                       <button
                         key={tipo}
-                        onClick={() => iniciarTanda(tipo)}
+                        onClick={() => setConfigTanda(tipo)}
                         className="text-xs font-semibold border border-gray-200 text-gray-600 px-2.5 py-1 rounded-lg hover:border-gray-400 hover:text-gray-900 transition-colors"
                       >
                         ▶ {TIPO_TANDA_LABEL[tipo]}

@@ -1103,6 +1103,16 @@ export default function Home() {
             .eq("id", eventoActivo.fechaId)
             .maybeSingle();
           if ((f as any)?.circuito_id) {
+            // Vuelta mínima válida del circuito (consulta aparte: tolerante
+            // a que la migración de cronometraje no esté corrida)
+            supabase
+              .from("circuitos")
+              .select("vuelta_min_s")
+              .eq("id", (f as any).circuito_id)
+              .maybeSingle()
+              .then(({ data: vm, error }) => {
+                if (!error && (vm as any)?.vuelta_min_s) vueltaMinSRef.current = (vm as any).vuelta_min_s;
+              });
             const { data: c } = await supabase
               .from("circuitos")
               .select("trazado_coords, geocerca_pista, geocerca_recinto")
@@ -1244,6 +1254,85 @@ export default function Home() {
   const vehiculoActivoRef = useRef<string | null>(null);
   useEffect(() => { vehiculoActivoRef.current = (pilotoData as any)?.vehiculo_activo_id ?? null; }, [pilotoData]);
 
+  // ── Cronometraje referencial: detector de cruces de meta ──────
+  // La vuelta se detecta EN el teléfono con el GPS a ~1 Hz (watchPosition),
+  // independiente de la frecuencia de envío al mapa. El instante del cruce
+  // se interpola entre las dos lecturas que rodean la meta.
+  const trazadoRef = useRef<Coordenada[]>([]);
+  useEffect(() => { trazadoRef.current = trazado; }, [trazado]);
+  const vueltaMinSRef  = useRef(40); // vuelta mínima válida (por circuito)
+  const tandaPilotoRef = useRef<{
+    id: string; tipo: string; inicioMs: number;
+    deadlineMs: number | null; metaIdx: number;
+  } | null>(null);
+  const cronoRef = useRef({
+    progAnt: null as number | null, // progreso 0..1 de la lectura anterior
+    tAnt: 0,                        // timestamp de la lectura anterior
+    armado: false,                  // histéresis: pasó por mitad de circuito
+    ultimoCruceMs: 0,
+    numero: 0,
+    cerrado: false,                 // cruzó la meta después del límite de tiempo
+  });
+
+  // Vigilar la tanda activa del evento (poll cada 10 s; tolerante a
+  // migración pendiente de la tabla tandas)
+  useEffect(() => {
+    if (stage !== "app" || !eventoActivo?.fechaId || !pilotoData?.id) {
+      tandaPilotoRef.current = null;
+      return;
+    }
+    const fid = eventoActivo.fechaId;
+    const pid = pilotoData.id;
+
+    const aplicar = (t: any | null) => {
+      if (!t) { tandaPilotoRef.current = null; return; }
+      if (tandaPilotoRef.current?.id !== t.id) {
+        // Tanda nueva: reiniciar el detector y retomar la cuenta si la app
+        // se recargó a mitad de tanda
+        cronoRef.current = { progAnt: null, tAnt: 0, armado: false, ultimoCruceMs: 0, numero: 0, cerrado: false };
+        supabase
+          .from("vueltas")
+          .select("numero, cruce_at")
+          .eq("tanda_id", t.id)
+          .eq("piloto_id", pid)
+          .order("numero", { ascending: false })
+          .limit(1)
+          .then(({ data }) => {
+            const u = data?.[0] as any;
+            if (u && tandaPilotoRef.current?.id === t.id) {
+              cronoRef.current.numero        = u.numero;
+              cronoRef.current.ultimoCruceMs = new Date(u.cruce_at).getTime();
+            }
+          });
+      }
+      const inicioMs = new Date(t.inicio).getTime();
+      tandaPilotoRef.current = {
+        id: t.id,
+        tipo: t.tipo,
+        inicioMs,
+        deadlineMs: t.duracion_min ? inicioMs + t.duracion_min * 60000 : null,
+        metaIdx: t.meta_idx ?? 0,
+      };
+    };
+
+    const cargar = async () => {
+      try {
+        const { data, error } = await supabase
+          .from("tandas")
+          .select("*")
+          .eq("fecha_id", fid)
+          .is("fin", null)
+          .order("inicio", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (!error) aplicar(data ?? null);
+      } catch { /* tandas sin migrar */ }
+    };
+    cargar();
+    const poll = setInterval(cargar, 10_000);
+    return () => { clearInterval(poll); tandaPilotoRef.current = null; };
+  }, [stage, eventoActivo?.fechaId, pilotoData?.id]);
+
   // ── Envío GPS a Supabase (background) ────────────────────────
   // Manda posición a ubicaciones_piloto cada 3s cuando hay sesión activa.
   // Se activa automáticamente al crear la sesión (suscripción Realtime).
@@ -1303,8 +1392,63 @@ export default function Home() {
         });
       if (!navigator.geolocation) return;
 
+      // Detector de cruce de meta (corre a ~1 Hz con cada lectura del GPS)
+      const detectarCruceMeta = (pos: GeolocationPosition) => {
+        const tanda = tandaPilotoRef.current;
+        const tr    = trazadoRef.current;
+        const c     = cronoRef.current;
+        if (!tanda || c.cerrado || tr.length < 8 || !sesionId) return;
+
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        // Solo cuentan cruces dentro de la geocerca de pista
+        const gc = geocercaGpsRef.current;
+        if (gc.length >= 3 && !puntoEnGeocerca({ lat, lng }, gc)) { c.progAnt = null; return; }
+
+        // Progreso 0..1 de la vuelta, con la meta como origen
+        let idx = 0, min = Infinity;
+        for (let i = 0; i < tr.length; i++) {
+          const d = (lat - tr[i].lat) ** 2 + (lng - tr[i].lng) ** 2;
+          if (d < min) { min = d; idx = i; }
+        }
+        const prog  = ((idx - tanda.metaIdx + tr.length) % tr.length) / tr.length;
+        const ahora = pos.timestamp || Date.now();
+
+        // Histéresis: el detector se arma al pasar por la mitad del circuito
+        if (prog > 0.4 && prog < 0.7) c.armado = true;
+
+        const pAnt  = c.progAnt;
+        const cruzo = c.armado && pAnt !== null && pAnt > 0.88 && prog < 0.12;
+        if (cruzo && pAnt !== null) {
+          // Interpolar el instante exacto del cruce entre ambas lecturas
+          const tramoAntes   = 1 - pAnt;
+          const frac         = (tramoAntes / (tramoAntes + prog)) || 0.5;
+          const cruceMs      = c.tAnt + (ahora - c.tAnt) * frac;
+          const vueltaMinMs  = vueltaMinSRef.current * 1000;
+
+          if (!c.ultimoCruceMs || cruceMs - c.ultimoCruceMs >= vueltaMinMs) {
+            const tiempo = c.ultimoCruceMs ? Math.round(cruceMs - c.ultimoCruceMs) : null;
+            c.numero += 1;
+            c.armado = false;
+            c.ultimoCruceMs = cruceMs;
+            supabase.from("vueltas").insert({
+              tanda_id:  tanda.id,
+              piloto_id: pilotoId,
+              numero:    c.numero,
+              cruce_at:  new Date(cruceMs).toISOString(),
+              tiempo_ms: tiempo,
+            }).then(() => { /* fire and forget; tabla sin migrar = no-op */ });
+
+            // Tiempo de tanda cumplido: este cruce cierra la participación
+            // del piloto (la vuelta iniciada antes del límite SÍ vale)
+            if (tanda.deadlineMs && cruceMs > tanda.deadlineMs) c.cerrado = true;
+          }
+        }
+        c.progAnt = prog;
+        c.tAnt    = ahora;
+      };
+
       watchId = navigator.geolocation.watchPosition(
-        pos => { ultimaPos = pos; },
+        pos => { ultimaPos = pos; detectarCruceMeta(pos); },
         null,
         { enableHighAccuracy: true, maximumAge: 1000 }
       );
