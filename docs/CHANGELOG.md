@@ -3,6 +3,19 @@
 
 ---
 
+## [0.13.1] — 6 Julio 2026
+### Agregado (Cronometraje — Etapa 2 de 3)
+- Pestaña "Crono" en el panel (Racing, Track Day y Entrenamiento): tabla de
+  posiciones en vivo estilo torre de cronometraje. Entrenamiento/Clasificación
+  ordena por mejor tiempo; Carrera por vueltas completadas + progreso GPS en
+  la vuelta, con "Vuelta L/N" del líder y diferencias con el líder (tiempo o
+  vueltas). Cabecera con estado de tanda, reloj (restante o transcurrido),
+  mejor vuelta absoluta y última vuelta. Selector para revisar tandas
+  anteriores de la fecha. Estados por piloto: En pista / Boxes / Sin señal /
+  Sin vuelta / Finalizado (cruzó tras el límite de tiempo)
+
+---
+
 ## [0.13.0] — 6 Julio 2026
 ### Agregado (Cronometraje — Etapa 1 de 3)
 - Tabla `vueltas` + config de cronometraje (migración:

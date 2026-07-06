@@ -18,6 +18,7 @@ const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ),
 });
 const DireccionCarrera = dynamic(() => import('@/components/DireccionCarrera'), { ssr: false });
+const Cronometraje     = dynamic(() => import('@/components/Cronometraje'),     { ssr: false });
 const SectoresEditor     = dynamic(() => import('@/components/SectoresEditor'),     { ssr: false });
 const CircuitoManager    = dynamic(() => import('@/components/CircuitoManager'),    { ssr: false });
 const AdminEventos     = dynamic(() => import('@/components/AdminEventos'),     { ssr: false });
@@ -68,7 +69,7 @@ interface ValidacionResult {
   qr_id?: string;
   advertencia?: string;
 }
-type PanelTab = "direccion" | "qr" | "pilotos" | "config" | "revision" | "eventos";
+type PanelTab = "direccion" | "crono" | "qr" | "pilotos" | "config" | "revision" | "eventos";
 type TipoEvento = "racing" | "track_day" | "entrenamiento";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
 
@@ -98,6 +99,7 @@ const TIPO_COLOR: Record<TipoEvento, string> = {
 const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: string }>> = {
   racing: [
     { id: "direccion", label: "Dirección",    emoji: "🏎"  },
+    { id: "crono",     label: "Crono",        emoji: "⏱"   },
     { id: "qr",        label: "Acceso QR",    emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",      emoji: "👤"  },
     { id: "revision",  label: "Rev. Técnica", emoji: "🔧"  },
@@ -105,12 +107,14 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
   ],
   track_day: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
+    { id: "crono",     label: "Crono",      emoji: "⏱"   },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
     { id: "config",    label: "Config",     emoji: "⚙️"  },
   ],
   entrenamiento: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
+    { id: "crono",     label: "Crono",      emoji: "⏱"   },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
     { id: "config",    label: "Config",     emoji: "⚙️"  },
@@ -1181,6 +1185,20 @@ export default function AdminPage() {
               </p>
             </div>
           )
+        )}
+
+        {/* ── CRONOMETRAJE ────────────────────────────────────────────── */}
+        {tab === "crono" && !!contexto.fechaId && (
+          <Cronometraje fechaId={contexto.fechaId} />
+        )}
+        {tab === "crono" && !contexto.fechaId && (
+          <div className="rounded-2xl bg-gray-50 border border-gray-200 px-6 py-14 text-center">
+            <p className="text-4xl mb-4">⏱</p>
+            <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
+            <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
+              Selecciona un campeonato y una fecha para ver el cronometraje.
+            </p>
+          </div>
         )}
 
         {tab === "direccion" && !!contexto.fechaId && (
