@@ -3,6 +3,16 @@
 
 ---
 
+## [0.13.3] — 6 Julio 2026
+### Agregado
+- Cierre automático de tandas: el panel vigila la tanda activa y, al
+  cumplirse el tiempo (o las vueltas del líder en carrera), lanza la
+  bandera a cuadros y finaliza la tanda solo. Finalizar a mano también
+  lanza cuadros. El detector del piloto tiene ventana de gracia de 5 min
+  tras el fin: la vuelta en curso se cierra, cuenta, y luego se detiene
+
+---
+
 ## [0.13.2] — 6 Julio 2026
 ### Cambiado
 - El Log de acciones ya no tiene controles de tanda: solo el desplegable
