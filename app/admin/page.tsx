@@ -337,7 +337,10 @@ export default function AdminPage() {
   const offlineAvisadoRef = useRef<Set<string>>(new Set());
 
   // ── Tandas de la fecha (entrenamiento / clasificación / carrera) ─────────
-  interface Tanda { id: string; tipo: string; nombre: string; inicio: string; fin: string | null; }
+  interface Tanda {
+    id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
+    duracion_min?: number | null; vueltas_programadas?: number | null;
+  }
   const TIPO_TANDA_LABEL: Record<string, string> = {
     entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
   };
@@ -407,12 +410,50 @@ export default function AdminPage() {
 
   const finalizarTanda = useCallback(async () => {
     if (!contexto.fechaId || !tandaActiva) return;
+    // Bandera a cuadros automática al finalizar la tanda (misma escritura
+    // que aplicarBandera; inline por orden de declaración de callbacks)
+    setBandera("cuadros");
+    await supabase.from("estado_pista").update({ bandera: "cuadros" }).eq("activo", true);
+    await registrarLog({ fecha_id: contexto.fechaId, tipo: "bandera_global", descripcion: "Bandera global: Cuadros (fin de tanda)" });
     // Registrar el cierre ANTES de soltar la tanda para que quede dentro de ella
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `⏹ Tanda finalizada: ${tandaActiva.nombre}` });
     await supabase.from("tandas").update({ fin: new Date().toISOString() }).eq("id", tandaActiva.id);
     setTandaActivaLog(null);
     cargarTandas(contexto.fechaId);
   }, [contexto.fechaId, tandaActiva, cargarTandas]);
+
+  // ── Cierre AUTOMÁTICO de la tanda: por tiempo, o por vueltas en carrera ──
+  // (lo que ocurra primero). Lanza la bandera a cuadros y finaliza la tanda;
+  // los pilotos completan su vuelta en curso gracias a la ventana de gracia
+  // del detector en el teléfono.
+  const finalizandoRef = useRef(false);
+  useEffect(() => {
+    if (!autenticado || !tandaActiva || tandaActiva.fin) return;
+    const t = tandaActiva;
+    const id = setInterval(async () => {
+      if (finalizandoRef.current) return;
+      let terminar = false;
+      const inicioMs = new Date(t.inicio).getTime();
+      if (t.duracion_min && Date.now() >= inicioMs + t.duracion_min * 60000) terminar = true;
+      if (!terminar && t.tipo === "carrera" && t.vueltas_programadas) {
+        try {
+          const { data } = await supabase
+            .from("vueltas")
+            .select("numero")
+            .eq("tanda_id", t.id)
+            .order("numero", { ascending: false })
+            .limit(1);
+          const maxCruces = (data?.[0] as any)?.numero || 0;
+          if (maxCruces - 1 >= t.vueltas_programadas) terminar = true;
+        } catch { /* vueltas sin migrar */ }
+      }
+      if (terminar) {
+        finalizandoRef.current = true;
+        try { await finalizarTanda(); } finally { finalizandoRef.current = false; }
+      }
+    }, 5_000);
+    return () => clearInterval(id);
+  }, [autenticado, tandaActiva, finalizarTanda]);
 
   // ── Log de acciones de pista ──────────────────────────────────────────────
   interface LogRow { id: string; tipo: string; descripcion: string; creado_at: string; }

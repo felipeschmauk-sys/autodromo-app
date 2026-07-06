@@ -1265,6 +1265,7 @@ export default function Home() {
     id: string; tipo: string; inicioMs: number;
     deadlineMs: number | null; metaIdx: number;
     vueltasProg: number | null;
+    finMs: number | null; // tanda finalizada: gracia para cerrar la vuelta en curso
   } | null>(null);
   const cronoRef = useRef({
     progAnt: null as number | null, // progreso 0..1 de la lectura anterior
@@ -1288,6 +1289,10 @@ export default function Home() {
 
     const aplicar = (t: any | null) => {
       if (!t) { tandaPilotoRef.current = null; return; }
+      // Tanda finalizada: ventana de gracia de 5 min para que el piloto
+      // cierre la vuelta que ya venía corriendo (ese cruce SÍ vale)
+      const finMs = t.fin ? new Date(t.fin).getTime() : null;
+      if (finMs && Date.now() > finMs + 5 * 60000) { tandaPilotoRef.current = null; return; }
       if (tandaPilotoRef.current?.id !== t.id) {
         // Tanda nueva: reiniciar el detector y retomar la cuenta si la app
         // se recargó a mitad de tanda
@@ -1315,6 +1320,7 @@ export default function Home() {
         deadlineMs: t.duracion_min ? inicioMs + t.duracion_min * 60000 : null,
         metaIdx: t.meta_idx ?? 0,
         vueltasProg: t.vueltas_programadas ?? null,
+        finMs,
       };
       // Carrera a N vueltas: vigilar si el líder ya completó las programadas
       // (basta ver el máximo número de cruce de la tanda)
@@ -1334,11 +1340,12 @@ export default function Home() {
 
     const cargar = async () => {
       try {
+        // Sin filtrar por fin: la última tanda aunque esté finalizada,
+        // para respetar la ventana de gracia de la vuelta en curso
         const { data, error } = await supabase
           .from("tandas")
           .select("*")
           .eq("fecha_id", fid)
-          .is("fin", null)
           .order("inicio", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -1465,6 +1472,9 @@ export default function Home() {
             if (tanda.tipo === "carrera" && tanda.vueltasProg && completadas >= tanda.vueltasProg) c.cerrado = true;
             // 3) …o el líder ya las completó (bandera de cuadros)
             if (tanda.tipo === "carrera" && c.liderTermino) c.cerrado = true;
+            // 4) tanda ya finalizada (auto o manual): este cruce fue la
+            //    vuelta de gracia — cerrar
+            if (tanda.finMs && cruceMs > tanda.finMs) c.cerrado = true;
           }
         }
         c.progAnt = prog;
