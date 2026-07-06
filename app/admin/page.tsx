@@ -434,8 +434,11 @@ export default function AdminPage() {
       .insert({ fecha_id: contexto.fechaId, tipo, nombre, duracion_min: dur, vueltas_programadas: vp, meta_idx: metaIdx })
       .select()
       .single();
+    let sinMigracion = false;
     if (res.error) {
-      // Columnas de cronometraje sin migrar: crear la tanda básica igual
+      // Columnas de cronometraje sin migrar: crear la tanda básica igual,
+      // pero AVISANDO fuerte — sin duración guardada no hay auto-cierre
+      sinMigracion = true;
       res = await supabase
         .from("tandas")
         .insert({ fecha_id: contexto.fechaId, tipo, nombre })
@@ -446,8 +449,18 @@ export default function AdminPage() {
     setTandaActivaLog(res.data.id);
     // El log y Crono siguen automáticamente la tanda recién iniciada
     setTandaSel(res.data.id);
+
+    // Regla: tanda iniciada = bandera VERDE automática
+    setBandera("verde");
+    await supabase.from("estado_pista").update({ bandera: "verde" }).eq("activo", true);
+    await registrarLog({ fecha_id: contexto.fechaId, tipo: "bandera_global", descripcion: "Bandera global: Verde (inicio de tanda)" });
+
     const detalle = `${dur ? ` · ${dur} min` : ""}${vp ? ` · ${vp} vueltas` : ""}`;
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `▶️ Tanda iniciada: ${nombre}${detalle}` });
+    if (sinMigracion) {
+      await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: "⚠️ Tanda creada SIN duración: falta correr la migración de cronometraje (no habrá auto-cierre ni conteo de vueltas)" });
+      alert("⚠️ Falta correr la migración de cronometraje en Supabase (docs/task-cronometraje-migration.sql).\n\nLa tanda se creó SIN duración: no se cerrará sola y no contará vueltas.");
+    }
     cargarTandas(contexto.fechaId);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [contexto.fechaId, tandaActiva, tandasFecha, cargarTandas, circuitoIdActivo]);
