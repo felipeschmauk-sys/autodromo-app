@@ -9,15 +9,29 @@ import { supabase } from './supabase'
 export interface LogAccion {
   fecha_id?: string | null
   piloto_id?: string | null
-  tipo: string        // 'bandera_global' | 'bandera_sector' | 'auto_yellow' | 'bandera_piloto' | 'ingreso' | 'retiro'
+  tanda_id?: string | null
+  tipo: string        // 'bandera_global' | 'bandera_sector' | 'auto_yellow' | 'bandera_piloto' | 'ingreso' | 'retiro' | 'tanda'
   descripcion: string
 }
+
+// Tanda en curso: el panel la setea al iniciar/finalizar una tanda y
+// TODO lo que se registre mientras tanto queda etiquetado con ella
+// (incluidas las amarillas automáticas que nacen en DireccionCarrera).
+let tandaActivaId: string | null = null
+export function setTandaActivaLog(id: string | null) { tandaActivaId = id }
 
 export async function registrarLog(entrada: LogAccion) {
   // Fire-and-forget: si la tabla aún no está migrada, la operación
   // de pista NO debe fallar por no poder registrar el log
   try {
-    await supabase.from('log_acciones').insert(entrada)
+    const fila: LogAccion = { ...entrada }
+    if (fila.tanda_id === undefined && tandaActivaId) fila.tanda_id = tandaActivaId
+    const { error } = await supabase.from('log_acciones').insert(fila)
+    if (error && fila.tanda_id) {
+      // Columna tanda_id aún sin migrar: reintentar sin ella
+      delete fila.tanda_id
+      await supabase.from('log_acciones').insert(fila)
+    }
   } catch {
     /* noop */
   }

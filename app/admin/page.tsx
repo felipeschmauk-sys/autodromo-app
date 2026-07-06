@@ -9,7 +9,7 @@ import {
   cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { registrarLog, NOMBRE_BANDERA } from "@/lib/log";
+import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ssr: false,
@@ -318,25 +318,81 @@ export default function AdminPage() {
     setTab(prev => (tabsDisp.some(t => t.id === prev) ? prev : tabsDisp[0].id) as PanelTab);
   }, [fechasOpt, cargarPilotosEvento, resolverCircuitoDeFecha]);
 
+  // ── Tandas de la fecha (entrenamiento / clasificación / carrera) ─────────
+  interface Tanda { id: string; tipo: string; nombre: string; inicio: string; fin: string | null; }
+  const TIPO_TANDA_LABEL: Record<string, string> = {
+    entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
+  };
+  const [tandasFecha, setTandasFecha]   = useState<Tanda[]>([]);
+  const [tandaActiva, setTandaActivaUi] = useState<Tanda | null>(null);
+  const [tandaSel, setTandaSel]         = useState<string>("todas"); // "todas" | tanda.id
+
+  const cargarTandas = useCallback(async (fechaId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("tandas")
+        .select("*")
+        .eq("fecha_id", fechaId)
+        .order("inicio");
+      if (error) throw error;
+      const lista = (data || []) as Tanda[];
+      setTandasFecha(lista);
+      const activa = lista.find(t => !t.fin) || null;
+      setTandaActivaUi(activa);
+      setTandaActivaLog(activa?.id ?? null);
+    } catch {
+      // tabla sin migrar: sin tandas, el log funciona igual
+      setTandasFecha([]); setTandaActivaUi(null); setTandaActivaLog(null);
+    }
+  }, []);
+
+  const iniciarTanda = useCallback(async (tipo: string) => {
+    if (!contexto.fechaId || tandaActiva) return;
+    const n = tandasFecha.filter(t => t.tipo === tipo).length + 1;
+    const nombre = `${TIPO_TANDA_LABEL[tipo] || tipo} ${n}`;
+    const { data, error } = await supabase
+      .from("tandas")
+      .insert({ fecha_id: contexto.fechaId, tipo, nombre })
+      .select()
+      .single();
+    if (error || !data) return;
+    setTandaActivaLog(data.id);
+    await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `▶️ Tanda iniciada: ${nombre}` });
+    cargarTandas(contexto.fechaId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contexto.fechaId, tandaActiva, tandasFecha, cargarTandas]);
+
+  const finalizarTanda = useCallback(async () => {
+    if (!contexto.fechaId || !tandaActiva) return;
+    // Registrar el cierre ANTES de soltar la tanda para que quede dentro de ella
+    await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `⏹ Tanda finalizada: ${tandaActiva.nombre}` });
+    await supabase.from("tandas").update({ fin: new Date().toISOString() }).eq("id", tandaActiva.id);
+    setTandaActivaLog(null);
+    cargarTandas(contexto.fechaId);
+  }, [contexto.fechaId, tandaActiva, cargarTandas]);
+
   // ── Log de acciones de pista ──────────────────────────────────────────────
   interface LogRow { id: string; tipo: string; descripcion: string; creado_at: string; }
   const [logAcciones, setLogAcciones] = useState<LogRow[]>([]);
 
   const cargarLog = useCallback(async (fechaId: string) => {
-    const { data, error } = await supabase
+    let q = supabase
       .from("log_acciones")
       .select("id, tipo, descripcion, creado_at")
       .eq("fecha_id", fechaId)
       .order("creado_at", { ascending: false })
       .limit(80);
+    if (tandaSel !== "todas") q = q.eq("tanda_id", tandaSel);
+    const { data, error } = await q;
     if (!error && data) setLogAcciones(data as LogRow[]);
-  }, []);
+  }, [tandaSel]);
 
   // Log en vivo: Realtime filtrado por el evento + polling de respaldo
   useEffect(() => {
-    if (!autenticado || !contexto.fechaId) { setLogAcciones([]); return; }
+    if (!autenticado || !contexto.fechaId) { setLogAcciones([]); setTandaActivaLog(null); return; }
     const fid = contexto.fechaId;
     cargarLog(fid);
+    cargarTandas(fid);
     const ch = supabase
       .channel("admin-log-live")
       .on("postgres_changes",
@@ -344,17 +400,19 @@ export default function AdminPage() {
         () => { cargarLog(fid); })
       .subscribe();
     const poll = setInterval(() => cargarLog(fid), 15_000);
-    return () => { supabase.removeChannel(ch); clearInterval(poll); };
-  }, [autenticado, contexto.fechaId, cargarLog]);
+    return () => { supabase.removeChannel(ch); clearInterval(poll); setTandaActivaLog(null); };
+  }, [autenticado, contexto.fechaId, cargarLog, cargarTandas]);
 
-  // Descarga el log completo de la tanda como CSV (abre en Excel)
+  // Descarga el log como CSV (abre en Excel): toda la fecha o solo la tanda seleccionada
   const descargarLog = useCallback(async () => {
     if (!contexto.fechaId) return;
-    const { data } = await supabase
+    let q = supabase
       .from("log_acciones")
       .select("tipo, descripcion, creado_at")
       .eq("fecha_id", contexto.fechaId)
       .order("creado_at", { ascending: true });
+    if (tandaSel !== "todas") q = q.eq("tanda_id", tandaSel);
+    const { data } = await q;
     const rows = data || [];
     if (!rows.length) return;
     const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
@@ -373,10 +431,13 @@ export default function AdminPage() {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `log-${(contexto.fechaNombre || "evento").replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.csv`;
+    const sufijo = tandaSel !== "todas"
+      ? `-${(tandasFecha.find(t => t.id === tandaSel)?.nombre || "tanda").replace(/\s+/g, "-")}`
+      : "";
+    a.download = `log-${(contexto.fechaNombre || "evento").replace(/\s+/g, "-")}${sufijo}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [contexto.fechaId, contexto.fechaNombre]);
+  }, [contexto.fechaId, contexto.fechaNombre, tandaSel, tandasFecha]);
 
   // ── Resumen de experiencia del piloto (clic en el nombre) ────────────────
   interface ResumenPiloto {
@@ -1397,16 +1458,65 @@ export default function AdminPage() {
               )}
             </div>
             <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
-              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Log de acciones</span>
-                <button
-                  onClick={descargarLog}
-                  disabled={logAcciones.length === 0}
-                  title="Descargar el registro completo de la tanda (CSV, se abre en Excel)"
-                  className="text-xs border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 rounded-lg transition-colors font-medium"
-                >
-                  ⬇ Descargar CSV
-                </button>
+              <div className="px-5 py-3.5 border-b border-gray-100 flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider flex-shrink-0">Log de acciones</span>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  {tandasFecha.length > 0 && (
+                    <select
+                      value={tandaSel}
+                      onChange={e => setTandaSel(e.target.value)}
+                      title="Ver toda la fecha o solo una tanda"
+                      className="text-xs border border-gray-200 text-gray-600 rounded-lg px-1.5 py-1 focus:outline-none max-w-[130px] truncate"
+                    >
+                      <option value="todas">Toda la fecha</option>
+                      {tandasFecha.map(t => (
+                        <option key={t.id} value={t.id}>{t.nombre}{!t.fin ? " · en curso" : ""}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    onClick={descargarLog}
+                    disabled={logAcciones.length === 0}
+                    title="Descargar CSV de lo seleccionado (se abre en Excel)"
+                    className="text-xs border border-gray-200 text-gray-500 hover:text-gray-700 hover:border-gray-300 disabled:opacity-40 disabled:cursor-not-allowed px-2.5 py-1 rounded-lg transition-colors font-medium flex-shrink-0"
+                  >
+                    ⬇ CSV
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Control de tandas ── */}
+              <div className="px-5 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
+                {tandaActiva ? (
+                  <>
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
+                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                      {tandaActiva.nombre} en curso
+                    </span>
+                    <span className="text-xs text-gray-400">
+                      desde {new Date(tandaActiva.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
+                    </span>
+                    <button
+                      onClick={finalizarTanda}
+                      className="ml-auto text-xs font-bold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors"
+                    >
+                      ⏹ Finalizar tanda
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <span className="text-xs text-gray-400 flex-shrink-0">Iniciar tanda:</span>
+                    {(["entrenamiento", "clasificacion", "carrera"] as const).map(tipo => (
+                      <button
+                        key={tipo}
+                        onClick={() => iniciarTanda(tipo)}
+                        className="text-xs font-semibold border border-gray-200 text-gray-600 px-2.5 py-1 rounded-lg hover:border-gray-400 hover:text-gray-900 transition-colors"
+                      >
+                        ▶ {TIPO_TANDA_LABEL[tipo]}
+                      </button>
+                    ))}
+                  </>
+                )}
               </div>
               <div className="divide-y divide-gray-50 max-h-[340px] overflow-y-auto">
                 {logAcciones.map(l => (

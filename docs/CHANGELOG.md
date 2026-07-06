@@ -3,6 +3,18 @@
 
 ---
 
+## [0.12.0] — 5 Julio 2026
+### Agregado
+- Tandas por fecha (tabla `tandas`, migración: `docs/task-tandas-migration.sql`):
+  desde el log de acciones el director inicia una tanda (Entrenamiento /
+  Clasificación / Carrera, autonumeradas) y la finaliza al terminar. Todo lo
+  que se registra mientras está en curso queda etiquetado con esa tanda
+  (incluidas las amarillas automáticas). Selector en el log para ver toda la
+  fecha o solo una tanda, y la descarga CSV respeta la selección con el
+  nombre de la tanda en el archivo
+
+---
+
 ## [0.11.2] — 5 Julio 2026
 ### Corregido
 - Bug de zona horaria: "hoy" se calculaba en UTC, así que desde las 20:00
