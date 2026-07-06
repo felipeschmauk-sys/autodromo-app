@@ -3,6 +3,20 @@
 
 ---
 
+## [0.13.2] — 6 Julio 2026
+### Cambiado
+- El Log de acciones ya no tiene controles de tanda: solo el desplegable
+  junto al título y el CSV. Iniciar/finalizar tandas vive en Crono
+  (mismo motor compartido; el log sigue reflejando y etiquetando todo)
+- Carrera termina por TIEMPO o por VUELTAS, lo que ocurra primero: el
+  detector del piloto cierra su participación en el siguiente cruce si
+  se cumplió el tiempo, si él completó las vueltas programadas, o si el
+  líder ya las completó (bandera de cuadros). Crono muestra "Carrera
+  completada — finaliza la tanda" y "Tiempo cumplido — últimas vueltas
+  en curso" según corresponda
+
+---
+
 ## [0.13.1] — 6 Julio 2026
 ### Agregado (Cronometraje — Etapa 2 de 3)
 - Pestaña "Crono" en el panel (Racing, Track Day y Entrenamiento): tabla de

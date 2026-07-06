@@ -434,6 +434,14 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         </span>
         {tandaSel.fin ? (
           <span className="text-xs font-semibold" style={{ color: "#a1a1aa" }}>🏁 Finalizada</span>
+        ) : esCarrera && ((tandaSel.vueltas_programadas && liderVueltas >= tandaSel.vueltas_programadas) || restanteS === 0) ? (
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "#78350f", color: "#fcd34d" }}>
+            🏁 Carrera completada — finaliza la tanda
+          </span>
+        ) : !esCarrera && restanteS === 0 ? (
+          <span className="text-xs font-bold px-2.5 py-1 rounded-full" style={{ background: "#78350f", color: "#fcd34d" }}>
+            ⏱ Tiempo cumplido — últimas vueltas en curso
+          </span>
         ) : (
           <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "#4ade80" }}>
             <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ background: "#4ade80" }} />

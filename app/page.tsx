@@ -1264,6 +1264,7 @@ export default function Home() {
   const tandaPilotoRef = useRef<{
     id: string; tipo: string; inicioMs: number;
     deadlineMs: number | null; metaIdx: number;
+    vueltasProg: number | null;
   } | null>(null);
   const cronoRef = useRef({
     progAnt: null as number | null, // progreso 0..1 de la lectura anterior
@@ -1271,7 +1272,8 @@ export default function Home() {
     armado: false,                  // histéresis: pasó por mitad de circuito
     ultimoCruceMs: 0,
     numero: 0,
-    cerrado: false,                 // cruzó la meta después del límite de tiempo
+    cerrado: false,                 // cruzó la meta tras el fin de la carrera/tanda
+    liderTermino: false,            // alguien ya completó las vueltas programadas
   });
 
   // Vigilar la tanda activa del evento (poll cada 10 s; tolerante a
@@ -1289,7 +1291,7 @@ export default function Home() {
       if (tandaPilotoRef.current?.id !== t.id) {
         // Tanda nueva: reiniciar el detector y retomar la cuenta si la app
         // se recargó a mitad de tanda
-        cronoRef.current = { progAnt: null, tAnt: 0, armado: false, ultimoCruceMs: 0, numero: 0, cerrado: false };
+        cronoRef.current = { progAnt: null, tAnt: 0, armado: false, ultimoCruceMs: 0, numero: 0, cerrado: false, liderTermino: false };
         supabase
           .from("vueltas")
           .select("numero, cruce_at")
@@ -1312,7 +1314,22 @@ export default function Home() {
         inicioMs,
         deadlineMs: t.duracion_min ? inicioMs + t.duracion_min * 60000 : null,
         metaIdx: t.meta_idx ?? 0,
+        vueltasProg: t.vueltas_programadas ?? null,
       };
+      // Carrera a N vueltas: vigilar si el líder ya completó las programadas
+      // (basta ver el máximo número de cruce de la tanda)
+      if (t.tipo === "carrera" && t.vueltas_programadas && !cronoRef.current.liderTermino) {
+        supabase
+          .from("vueltas")
+          .select("numero")
+          .eq("tanda_id", t.id)
+          .order("numero", { ascending: false })
+          .limit(1)
+          .then(({ data }) => {
+            const maxCruces = (data?.[0] as any)?.numero || 0;
+            if (maxCruces - 1 >= t.vueltas_programadas) cronoRef.current.liderTermino = true;
+          });
+      }
     };
 
     const cargar = async () => {
@@ -1438,9 +1455,16 @@ export default function Home() {
               tiempo_ms: tiempo,
             }).then(() => { /* fire and forget; tabla sin migrar = no-op */ });
 
-            // Tiempo de tanda cumplido: este cruce cierra la participación
-            // del piloto (la vuelta iniciada antes del límite SÍ vale)
+            // La carrera/tanda termina por TIEMPO o por VUELTAS, lo que
+            // ocurra primero. Este cruce cierra la participación del piloto
+            // (la vuelta iniciada antes del final SÍ vale):
+            // 1) tiempo de tanda cumplido
             if (tanda.deadlineMs && cruceMs > tanda.deadlineMs) c.cerrado = true;
+            // 2) carrera a N vueltas: el propio piloto las completó…
+            const completadas = c.numero - 1;
+            if (tanda.tipo === "carrera" && tanda.vueltasProg && completadas >= tanda.vueltasProg) c.cerrado = true;
+            // 3) …o el líder ya las completó (bandera de cuadros)
+            if (tanda.tipo === "carrera" && c.liderTermino) c.cerrado = true;
           }
         }
         c.progAnt = prog;

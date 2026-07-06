@@ -364,11 +364,6 @@ export default function AdminPage() {
     }
   }, []);
 
-  // Configuración previa de la tanda: duración (todas) + vueltas (carrera)
-  const [configTanda, setConfigTanda]   = useState<string | null>(null); // tipo en configuración
-  const [durTanda, setDurTanda]         = useState("15");
-  const [vueltasTanda, setVueltasTanda] = useState("15");
-
   // Núcleo compartido: lo usan el Log de acciones y la pestaña Crono
   const iniciarTanda = useCallback(async (tipo: string, durMin: number | null, vueltasProg: number | null) => {
     if (!contexto.fechaId || tandaActiva || !tipo) return;
@@ -401,7 +396,6 @@ export default function AdminPage() {
         .single();
     }
     if (res.error || !res.data) return;
-    setConfigTanda(null);
     setTandaActivaLog(res.data.id);
     // El log y Crono siguen automáticamente la tanda recién iniciada
     setTandaSel(res.data.id);
@@ -1588,81 +1582,6 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {/* ── Control de tandas ── */}
-              <div className="px-5 py-2.5 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
-                {tandaActiva ? (
-                  <>
-                    <span className="flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-100 px-2.5 py-1 rounded-full">
-                      <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                      {tandaActiva.nombre} en curso
-                    </span>
-                    <span className="text-xs text-gray-400">
-                      desde {new Date(tandaActiva.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                    <button
-                      onClick={finalizarTanda}
-                      className="ml-auto text-xs font-bold bg-red-600 text-white px-3 py-1.5 rounded-lg hover:bg-red-700 transition-colors"
-                    >
-                      ⏹ Finalizar tanda
-                    </button>
-                  </>
-                ) : configTanda ? (
-                  <>
-                    <span className="text-xs font-bold text-gray-700 flex-shrink-0">
-                      ▶ {TIPO_TANDA_LABEL[configTanda]}
-                    </span>
-                    <label className="text-xs text-gray-400 flex items-center gap-1">
-                      Duración
-                      <input
-                        type="number" min={1} value={durTanda}
-                        onChange={e => setDurTanda(e.target.value)}
-                        className="w-14 border border-gray-300 rounded-lg px-1.5 py-1 text-xs text-gray-900 text-center focus:outline-none"
-                      />
-                      min
-                    </label>
-                    {configTanda === "carrera" && (
-                      <label className="text-xs text-gray-400 flex items-center gap-1">
-                        Vueltas
-                        <input
-                          type="number" min={1} value={vueltasTanda}
-                          onChange={e => setVueltasTanda(e.target.value)}
-                          className="w-14 border border-gray-300 rounded-lg px-1.5 py-1 text-xs text-gray-900 text-center focus:outline-none"
-                        />
-                      </label>
-                    )}
-                    <button
-                      onClick={() => iniciarTanda(
-                        configTanda!,
-                        Math.max(0, parseInt(durTanda) || 0) || null,
-                        Math.max(0, parseInt(vueltasTanda) || 0) || null,
-                      )}
-                      className="text-xs font-bold bg-gray-900 text-white px-3 py-1.5 rounded-lg hover:bg-gray-700 transition-colors"
-                    >
-                      Iniciar
-                    </button>
-                    <button
-                      onClick={() => setConfigTanda(null)}
-                      className="text-xs text-gray-400 hover:text-gray-600 px-1"
-                      aria-label="Cancelar"
-                    >
-                      ✕
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span className="text-xs text-gray-400 flex-shrink-0">Iniciar tanda:</span>
-                    {(["entrenamiento", "clasificacion", "carrera"] as const).map(tipo => (
-                      <button
-                        key={tipo}
-                        onClick={() => setConfigTanda(tipo)}
-                        className="text-xs font-semibold border border-gray-200 text-gray-600 px-2.5 py-1 rounded-lg hover:border-gray-400 hover:text-gray-900 transition-colors"
-                      >
-                        ▶ {TIPO_TANDA_LABEL[tipo]}
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
               <div className="divide-y divide-gray-50 max-h-[340px] overflow-y-auto">
                 {logAcciones.map(l => (
                   <div key={l.id} className="px-5 py-2.5 flex items-start gap-3">
