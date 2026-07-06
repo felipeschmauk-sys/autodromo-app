@@ -3,6 +3,24 @@
 
 ---
 
+## [0.13.4] — 6 Julio 2026
+### Agregado
+- Tanda "Libre": sin duración ni reglas de término, para giros libres todo
+  el día. Parte al tiro (sin configuración) y cuenta vueltas igual; solo
+  termina cuando el director la finaliza
+- Botón "⬇ Resultados" en Crono: descarga la tabla de posiciones de la
+  tanda visible como CSV (pos, número, piloto, vueltas, diferencia,
+  mejor, última, estado)
+- Dirección muestra la tanda en curso: tipo con su color, reloj (restante
+  o transcurrido) y "Vuelta L/N" en carrera, actualizado cada segundo
+
+### Nota
+- El auto-cierre reportado como fallido se debía a que la migración
+  task-cronometraje-migration.sql no estaba corrida (sin la columna
+  duracion_min la tanda se crea sin duración). Correrla lo habilita
+
+---
+
 ## [0.13.3] — 6 Julio 2026
 ### Agregado
 - Cierre automático de tandas: el panel vigila la tanda activa y, al

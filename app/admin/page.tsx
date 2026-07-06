@@ -124,6 +124,50 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
   ],
 };
 
+// ── Tarjeta de tanda en curso (Dirección): tipo + tiempo/vueltas ──────────
+function TandaStatusCard({
+  tanda, cruces,
+}: {
+  tanda: { nombre: string; tipo: string; inicio: string; duracion_min?: number | null; vueltas_programadas?: number | null };
+  cruces: number;
+}) {
+  const [, setT] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setT(x => x + 1), 1000);
+    return () => clearInterval(i);
+  }, []);
+  const COLOR: Record<string, string> = {
+    libre: "bg-gray-600", entrenamiento: "bg-emerald-600",
+    clasificacion: "bg-blue-600", carrera: "bg-red-600",
+  };
+  const inicioMs     = new Date(tanda.inicio).getTime();
+  const transcurrido = Math.max(0, Math.floor((Date.now() - inicioMs) / 1000));
+  const restante     = tanda.duracion_min ? Math.max(0, tanda.duracion_min * 60 - transcurrido) : null;
+  const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+  const esCarrera = tanda.tipo === "carrera";
+  return (
+    <div className="bg-gray-900 rounded-2xl px-4 py-3 flex items-center gap-3">
+      <span className={`text-[11px] font-bold tracking-wider text-white px-2.5 py-1 rounded-full flex-shrink-0 ${COLOR[tanda.tipo] || "bg-gray-600"}`}>
+        {tanda.nombre.toUpperCase()}
+      </span>
+      <span className="flex items-center gap-1.5 text-xs font-semibold text-green-400">
+        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+        En curso
+      </span>
+      <div className="ml-auto text-right leading-tight">
+        {esCarrera && tanda.vueltas_programadas ? (
+          <p className="text-white font-bold tabular-nums text-sm">
+            Vuelta {Math.max(0, cruces - 1)} <span className="text-gray-500">/ {tanda.vueltas_programadas}</span>
+          </p>
+        ) : null}
+        <p className="text-gray-300 text-sm font-semibold tabular-nums">
+          {restante != null ? <>Restan {fmt(restante)}</> : <>⏱ {fmt(transcurrido)}</>}
+        </p>
+      </div>
+    </div>
+  );
+}
+
 const MAX_PILOTOS_DEFAULT = 10;
 const MIN_SALDO_DEFAULT = 5;
 const AUTODROMO_OPTIONS = [
@@ -342,7 +386,7 @@ export default function AdminPage() {
     duracion_min?: number | null; vueltas_programadas?: number | null;
   }
   const TIPO_TANDA_LABEL: Record<string, string> = {
-    entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
+    libre: "Libre", entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
   };
   const [tandasFecha, setTandasFecha]   = useState<Tanda[]>([]);
   const [tandaActiva, setTandaActivaUi] = useState<Tanda | null>(null);
@@ -427,31 +471,36 @@ export default function AdminPage() {
   // los pilotos completan su vuelta en curso gracias a la ventana de gracia
   // del detector en el teléfono.
   const finalizandoRef = useRef(false);
+  const [crucesTanda, setCrucesTanda] = useState(0); // cruces del líder (display en Dirección)
   useEffect(() => {
-    if (!autenticado || !tandaActiva || tandaActiva.fin) return;
+    if (!autenticado || !tandaActiva || tandaActiva.fin) { setCrucesTanda(0); return; }
     const t = tandaActiva;
-    const id = setInterval(async () => {
+    const revisar = async () => {
       if (finalizandoRef.current) return;
       let terminar = false;
       const inicioMs = new Date(t.inicio).getTime();
-      if (t.duracion_min && Date.now() >= inicioMs + t.duracion_min * 60000) terminar = true;
-      if (!terminar && t.tipo === "carrera" && t.vueltas_programadas) {
-        try {
-          const { data } = await supabase
-            .from("vueltas")
-            .select("numero")
-            .eq("tanda_id", t.id)
-            .order("numero", { ascending: false })
-            .limit(1);
-          const maxCruces = (data?.[0] as any)?.numero || 0;
-          if (maxCruces - 1 >= t.vueltas_programadas) terminar = true;
-        } catch { /* vueltas sin migrar */ }
-      }
+      // "Libre" corre sin reglas de término; el resto por tiempo/vueltas
+      if (t.tipo !== "libre" && t.duracion_min && Date.now() >= inicioMs + t.duracion_min * 60000) terminar = true;
+      try {
+        const { data } = await supabase
+          .from("vueltas")
+          .select("numero")
+          .eq("tanda_id", t.id)
+          .order("numero", { ascending: false })
+          .limit(1);
+        const maxCruces = (data?.[0] as any)?.numero || 0;
+        setCrucesTanda(maxCruces);
+        if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && maxCruces - 1 >= t.vueltas_programadas) {
+          terminar = true;
+        }
+      } catch { /* vueltas sin migrar */ }
       if (terminar) {
         finalizandoRef.current = true;
         try { await finalizarTanda(); } finally { finalizandoRef.current = false; }
       }
-    }, 5_000);
+    };
+    revisar();
+    const id = setInterval(revisar, 5_000);
     return () => clearInterval(id);
   }, [autenticado, tandaActiva, finalizarTanda]);
 
@@ -1255,6 +1304,11 @@ export default function AdminPage() {
 
           {/* ════ COLUMNA DERECHA: CONTROLES ════ */}
           <div className="space-y-4 order-1 lg:order-2">
+
+            {/* ── Tanda en curso: tipo + tiempo/vueltas ── */}
+            {tandaActiva && !tandaActiva.fin && (
+              <TandaStatusCard tanda={tandaActiva} cruces={crucesTanda} />
+            )}
 
             {/* ── Estado de pista + control de banderas ── */}
             <div className={`rounded-2xl border-2 px-5 py-4 space-y-4 transition-colors duration-500 ${

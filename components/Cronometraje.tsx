@@ -28,7 +28,7 @@ interface Props {
 }
 
 const TIPO_LABEL: Record<string, string> = {
-  entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
+  libre: "Libre", entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
 };
 
 interface Tanda {
@@ -42,6 +42,7 @@ interface PilotoInfo { nombre: string; numero: string | null; }
 interface PosPiloto { lat: number; lng: number; ts: number; dentro: boolean | null; }
 
 const TIPO_CFG: Record<string, { label: string; bg: string }> = {
+  libre:         { label: "LIBRE",         bg: "#52525b" },
   entrenamiento: { label: "ENTRENAMIENTO", bg: "#047857" },
   clasificacion: { label: "CLASIFICACIÓN", bg: "#1d4ed8" },
   carrera:       { label: "CARRERA",       bg: "#dc2626" },
@@ -319,6 +320,27 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     return ult;
   }, [vueltas]);
 
+  // Descargar los resultados de la tanda visible como CSV (abre en Excel)
+  const descargarResultados = () => {
+    if (!tandaSel || filas.length === 0) return;
+    const esc = (s: unknown) => `"${String(s).replace(/"/g, '""')}"`;
+    const csv = "﻿" + [
+      `Resultados;${tandaSel.nombre};${new Date(tandaSel.inicio).toLocaleDateString("es-CL")} ${new Date(tandaSel.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })};${tandaSel.fin ? "Finalizada" : "En curso"}`,
+      "Pos;Número;Piloto;Vueltas;Diferencia;Mejor;Última;Estado",
+      ...filas.map(f =>
+        [f.pos, f.numero || "", f.nombre, f.completadas, f.gap, fmtMs(f.mejor), fmtMs(f.ultima), f.estado.label]
+          .map(esc).join(";")
+      ),
+    ].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `resultados-${tandaSel.nombre.replace(/\s+/g, "-")}-${new Date(tandaSel.inicio).toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   const cfg = tandaSel ? (TIPO_CFG[tandaSel.tipo] || TIPO_CFG.entrenamiento) : null;
   const esCarrera = tandaSel?.tipo === "carrera";
   const liderVueltas = filas[0]?.completadas ?? 0;
@@ -389,10 +411,14 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       ) : (
         <>
           <span className="text-xs" style={{ color: "#71717a" }}>Iniciar tanda:</span>
-          {(["entrenamiento", "clasificacion", "carrera"] as const).map(t => (
+          {(["libre", "entrenamiento", "clasificacion", "carrera"] as const).map(t => (
             <button
               key={t}
-              onClick={() => setCfgTipo(t)}
+              onClick={() => {
+                // Libre: sin duración ni reglas de término — parte al tiro
+                if (t === "libre") onIniciarTanda("libre", null, null);
+                else setCfgTipo(t);
+              }}
               className="text-xs font-semibold px-2.5 py-1 rounded-lg transition-colors hover:text-white"
               style={{ background: "transparent", color: "#a1a1aa", border: "1px solid #3f3f46" }}
             >
@@ -475,6 +501,15 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={descargarResultados}
+            disabled={filas.length === 0}
+            title="Descargar los resultados de esta tanda (CSV, se abre en Excel)"
+            className="text-xs font-medium px-2.5 py-1 rounded-lg transition-colors hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
+            style={{ background: "transparent", color: "#a1a1aa", border: "1px solid #3f3f46" }}
+          >
+            ⬇ Resultados
+          </button>
           <select
             value={tandaSelId ?? ""}
             onChange={e => { setTandaSelId(e.target.value); onSeleccionarTanda?.(e.target.value); }}
