@@ -403,6 +403,8 @@ export default function AdminPage() {
     if (res.error || !res.data) return;
     setConfigTanda(null);
     setTandaActivaLog(res.data.id);
+    // El log y Crono siguen automáticamente la tanda recién iniciada
+    setTandaSel(res.data.id);
     const detalle = `${dur ? ` · ${dur} min` : ""}${vp ? ` · ${vp} vueltas` : ""}`;
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `▶️ Tanda iniciada: ${nombre}${detalle}` });
     cargarTandas(contexto.fechaId);
@@ -1189,7 +1191,11 @@ export default function AdminPage() {
 
         {/* ── CRONOMETRAJE ────────────────────────────────────────────── */}
         {tab === "crono" && !!contexto.fechaId && (
-          <Cronometraje fechaId={contexto.fechaId} />
+          <Cronometraje
+            fechaId={contexto.fechaId}
+            tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
+            onSeleccionarTanda={(id) => setTandaSel(id)}
+          />
         )}
         {tab === "crono" && !contexto.fechaId && (
           <div className="rounded-2xl bg-gray-50 border border-gray-200 px-6 py-14 text-center">

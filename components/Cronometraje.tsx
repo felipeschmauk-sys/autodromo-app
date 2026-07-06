@@ -15,7 +15,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
-interface Props { fechaId: string; }
+interface Props {
+  fechaId: string;
+  // Selección sincronizada con el Log de acciones: el panel es el dueño
+  // de la tanda seleccionada; Crono la sigue y reporta los cambios
+  tandaSeleccionada?: string | null;
+  onSeleccionarTanda?: (id: string) => void;
+}
 
 interface Tanda {
   id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
@@ -45,7 +51,7 @@ function fmtReloj(totalS: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function Cronometraje({ fechaId }: Props) {
+export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda }: Props) {
   const [tandas, setTandas]         = useState<Tanda[]>([]);
   const [tandaSelId, setTandaSelId] = useState<string | null>(null);
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
@@ -58,6 +64,14 @@ export default function Cronometraje({ fechaId }: Props) {
   const tandaSel = tandas.find(t => t.id === tandaSelId) || null;
   const tandaSelRef = useRef<string | null>(null);
   useEffect(() => { tandaSelRef.current = tandaSelId; }, [tandaSelId]);
+
+  // Seguir la selección compartida con el Log (cuando apunta a una tanda válida)
+  useEffect(() => {
+    if (tandaSeleccionada && tandaSeleccionada !== tandaSelId && tandas.some(t => t.id === tandaSeleccionada)) {
+      setTandaSelId(tandaSeleccionada);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tandaSeleccionada, tandas]);
 
   // ── Tandas de la fecha (la activa o la última queda seleccionada) ──
   useEffect(() => {
@@ -72,6 +86,8 @@ export default function Cronometraje({ fechaId }: Props) {
       if (!tandaSelRef.current || !lista.some(t => t.id === tandaSelRef.current)) {
         const activa = lista.find(t => !t.fin) || lista[lista.length - 1] || null;
         setTandaSelId(activa?.id ?? null);
+        // Sincronizar el log con la tanda que Crono elige automáticamente
+        if (activa?.id) onSeleccionarTanda?.(activa.id);
       }
     };
     cargar();
@@ -369,7 +385,7 @@ export default function Cronometraje({ fechaId }: Props) {
         <div className="ml-auto flex items-center gap-2">
           <select
             value={tandaSelId ?? ""}
-            onChange={e => setTandaSelId(e.target.value)}
+            onChange={e => { setTandaSelId(e.target.value); onSeleccionarTanda?.(e.target.value); }}
             className="text-xs rounded-lg px-2 py-1 focus:outline-none"
             style={{ background: "#1c1f27", color: "#d4d4d8", border: "1px solid #3f3f46" }}
           >
