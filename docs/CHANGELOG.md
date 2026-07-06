@@ -3,6 +3,16 @@
 
 ---
 
+## [0.12.2] — 6 Julio 2026
+### Cambiado
+- El recinto desaparece como estado visible: para admin y piloto solo
+  existen "En pista" y "Boxes" (+ Sin señal/Sin GPS en el admin). El dato
+  dentro_recinto se sigue registrando internamente como constancia de que
+  el piloto asistió a la fecha, pero ninguna vista lo distingue. El log de
+  salida queda como "salió de pista — en boxes"
+
+---
+
 ## [0.12.1] — 6 Julio 2026
 ### Agregado
 - Log de entradas y salidas de pista: "entró a pista", "salió de pista —

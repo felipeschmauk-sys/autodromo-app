@@ -264,9 +264,8 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
       // Online + fuera de pista → punto gris en última posición.
       // La etiqueta distingue recinto (boxes/paddock) de fuera del autódromo.
       if (p.dentro_geocerca === false) {
-        const etiquetaZona = p.dentro_recinto === true ? "BOXES"
-                           : p.dentro_recinto === false ? "FUERA"
-                           : "BOXES";
+        // Fuera de pista = BOXES siempre; el detalle del recinto no se muestra
+        const etiquetaZona = "BOXES";
         const icon = L.divIcon({
           html: `
             <div style="display:flex;flex-direction:column;gap:2px;white-space:nowrap">

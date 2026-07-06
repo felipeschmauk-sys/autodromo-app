@@ -165,12 +165,10 @@ export default function AdminPage() {
       return { label: "Sin señal", cls: "bg-red-100 text-red-600" };
     if (gps.dentro_geocerca === true)
       return { label: "En pista", cls: "bg-green-100 text-green-700" };
-    if (gps.dentro_recinto === true)
-      return { label: "Boxes", cls: "bg-indigo-100 text-indigo-700" };
-    if (gps.dentro_recinto === false)
-      return { label: "Fuera del recinto", cls: "bg-red-100 text-red-600" };
+    // 2 zonas visibles: pista o boxes. El detalle del recinto se registra
+    // internamente (constancia de asistencia) pero no se muestra.
     if (gps.dentro_geocerca === false)
-      return { label: "Fuera de pista", cls: "bg-gray-100 text-gray-500" }; // sin dato de recinto (migración pendiente)
+      return { label: "Boxes", cls: "bg-indigo-100 text-indigo-700" };
     return { label: "Sin GPS", cls: "bg-gray-100 text-gray-500" };
   };
   // Circuito activo por evento — fuente de verdad para DireccionCarrera
@@ -752,8 +750,7 @@ export default function AdminPage() {
               } else if (u.dentro_geocerca === true && !veniaEnPista) {
                 registrarLog({ fecha_id: fid, piloto_id: u.piloto_id, tipo: "pista", descripcion: `🟢 ${nombre} entró a pista` });
               } else if (veniaEnPista && u.dentro_geocerca === false) {
-                const destino = u.dentro_recinto === true ? "entró a boxes" : "salió del recinto";
-                registrarLog({ fecha_id: fid, piloto_id: u.piloto_id, tipo: "pista", descripcion: `⬅️ ${nombre} salió de pista — ${destino}` });
+                registrarLog({ fecha_id: fid, piloto_id: u.piloto_id, tipo: "pista", descripcion: `⬅️ ${nombre} salió de pista — en boxes` });
               }
             }
             offlineAvisadoRef.current.delete(u.piloto_id);

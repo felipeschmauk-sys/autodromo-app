@@ -519,29 +519,27 @@ function SpeedCard({
               </span>
             </div>
             {(() => {
-              // 3 niveles: dentro pista > dentro recinto > fuera
+              // 2 zonas visibles: pista o boxes (el recinto se registra
+              // internamente pero no se muestra)
               const enPista   = dentro === true;
-              const enRecinto = !enPista && dentroRecinto === true;
-              const fuera     = dentro === false && (recintoRef.current.length < 3 || dentroRecinto === false);
               const verificando = dentro === null && dentroRecinto === null;
 
               return (
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
                   verificando ? "bg-gray-100 text-gray-500"
                   : enPista   ? "bg-green-100 text-green-700"
-                  : enRecinto ? "bg-indigo-100 text-indigo-700"
-                  : "bg-red-100 text-red-600"
+                  : "bg-indigo-100 text-indigo-700"
                 }`}>
                   <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${
                     verificando ? "bg-gray-400"
                     : enPista   ? "bg-green-500"
-                    : enRecinto ? "bg-indigo-500"
-                    : "bg-red-500"
+                    : "bg-indigo-500"
                   }`} />
+                  {/* Solo dos zonas visibles: pista o boxes. El dato del
+                      recinto se registra pero no se muestra. */}
                   {verificando ? "Verificando..."
                    : enPista   ? "En pista"
-                   : enRecinto ? "Boxes"
-                   : "Fuera del recinto"}
+                   : "Boxes"}
                 </div>
               );
             })()}
@@ -1800,14 +1798,13 @@ export default function Home() {
     habilitado:    { label: "Habilitado",     bg: "bg-green-600",  text: "text-white", dot: "🟢" },
   }[estadoPiloto];
 
-  // Semáforo GPS — indica posición relativa a geocercas (usa estados levantados desde SpeedCard)
+  // Semáforo GPS — 2 zonas visibles: pista o boxes
+  // (el recinto se registra internamente pero no se muestra)
   const semaforoGPS =
     gpsEnPista === true
       ? { label: "En pista",     bg: "bg-green-600",  text: "text-white",    dot: "🟢" }
-      : gpsEnRecinto === true
+      : (gpsEnPista === false || gpsEnRecinto !== null)
       ? { label: "Boxes",        bg: "bg-orange-500", text: "text-white",    dot: "🟠" }
-      : (gpsEnPista === false || gpsEnRecinto === false)
-      ? { label: "Fuera",        bg: "bg-red-600",    text: "text-white",    dot: "🔴" }
       : { label: "GPS…",         bg: "bg-gray-700",   text: "text-gray-300", dot: "⚪" };
 
   // ── Task #58: jerarquía de banderas ──────────────────────────
