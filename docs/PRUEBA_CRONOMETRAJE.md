@@ -1,174 +1,221 @@
-# Prueba de cronometraje en pista — protocolo
+# Prueba de cronometraje GPS — protocolo de pista
 
-**Objetivo de esta prueba: NO es que el cronometraje quede lindo. Es traer datos
-crudos que se puedan volver a analizar mil veces en el escritorio.**
+Objetivo de esta prueba: **saber si el cronometraje es una referencia confiable**,
+no si es preciso. No importa que el tiempo no coincida con el oficial. Importa
+que no se saltee vueltas, que cuente bien, y que dos pilotos distintos sean
+comparables entre sí.
 
-Si mañana algo sale raro y solo quedaron guardadas las vueltas calculadas, no hay
-forma de saber por qué, y hace falta otra fecha de pista para averiguarlo. Con la
-traza cruda, una tanda se puede reprocesar entera cambiando umbrales, sin volver
-al autódromo.
-
-Lo que se está validando, en orden de importancia:
-
-1. Que **no se saltee vueltas**
-2. Que el **conteo de vueltas** por piloto sea correcto
-3. Que el **orden de posiciones** sea correcto
-4. Que los relojes de los teléfonos estén **alineados entre sí** (sin esto no hay
-   gaps entre pilotos posibles)
-
-La precisión absoluta del tiempo de vuelta **no** se está validando: con GPS a
-1 Hz el error típico es de ±0,2 a 0,5 s por vuelta y eso ya se dio por aceptable.
-Lo que importa es que el error sea *consistente*.
+Todo lo que viene después —gap al de adelante, gap al de atrás, banderas azules—
+se construye encima de eso. Si el conteo no es firme, nada de lo demás sirve.
 
 ---
 
-## 1. Antes de ir (escritorio)
+## Antes de salir
 
-- [ ] **Correr `docs/task-traza-gps-migration.sql`** en el SQL Editor de Supabase.
-      Sin esto no se graba nada de diagnóstico y la prueba se pierde.
-- [ ] **Revisar la densidad de puntos del trazado**, sobre todo cerca de meta.
-      El detector calcula el progreso sobre *cantidad de puntos*, no sobre metros.
-      Si el trazado tiene muchos puntos juntos en la recta de meta y pocos en el
-      resto, la ventana de detección se achica en metros y **ahí es donde se
-      saltean vueltas**. Este es el chequeo más barato y el que más puede
-      arruinar la jornada.
-- [ ] Confirmar `circuitos.meta_idx` (dónde está la meta) y `circuitos.vuelta_min_s`
-      (vuelta mínima válida, por defecto 40 s). Si el circuito se gira en menos de
-      40 s, **subir ese valor no: bajarlo**, o se descartan vueltas buenas.
-- [ ] Confirmar que la geocerca de pista cubre el trazado con margen. Si el GPS
-      salta afuera cerca de meta, el detector se resetea y pierde el cruce.
+### 1. Migración corrida
+`docs/task-traza-gps-migration.sql` en Supabase. Verificar:
 
-## 2. En cada teléfono
+```sql
+select hora_servidor();          -- devuelve fecha/hora con microsegundos
+select count(*) from traza_gps;  -- devuelve 0
+```
 
-- [ ] **Modo de bajo consumo APAGADO.** iOS fuerza el bloqueo de pantalla a los
-      30 s por sobre cualquier técnica web. Es el hallazgo de la versión 0.10.3 y
-      no tiene vuelta.
-- [ ] Ajustes → Accesibilidad → Tocar → **Agitar para deshacer: APAGADO.**
-      La app ya mitiga el diálogo, pero el gesto solo se apaga del todo acá.
-- [ ] Brillo alto, permiso de ubicación concedido, app abierta en pantalla.
-- [ ] Anotar: **modelo de teléfono, versión de iOS, y dónde va montado** (soporte
-      en parabrisas / bolsillo / consola). La posición cambia mucho la señal.
+> Si algún teléfono ya tenía la app abierta cuando se corrió la migración,
+> **cerrarla y volver a abrirla**. La app decide al arrancar si el registro
+> está disponible.
 
-## 3. En pista
+### 2. Revisar el trazado (esto solo puede arruinar la prueba)
 
-- [ ] **Mínimo 2 autos al mismo tiempo.** Sin dos autos no se puede probar nada
-      de gaps ni de banderas azules.
-- [ ] **8 a 10 vueltas seguidas**, no dos. Los saltos aparecen con repetición.
-- [ ] A propósito, durante la tanda:
-  - una entrada y salida de boxes
-  - una vuelta claramente lenta
-  - un auto detenido en pista unos segundos
-  - si se puede, un auto quieto en boxes cerca de la recta de meta (para ver si
-    genera cruces fantasma)
-- [ ] **Referencia real para contrastar:** filmar la meta con un reloj visible en
-      cuadro, o que alguien anote a mano las vueltas de cada auto. Sin una
-      referencia externa, los datos no se pueden verificar, solo describir.
-- [ ] Anotar la hora de inicio y fin de cada tanda, y qué auto era cuál.
+El detector calcula el progreso de la vuelta contando **puntos del trazado**, no
+metros. Si los puntos están muy desparejos, la ventana donde detecta el cruce
+puede quedar demasiado corta en una zona y saltear vueltas.
+
+```sql
+WITH t AS (
+  SELECT coordenadas::jsonb AS c FROM trazado_pista WHERE activo = true LIMIT 1
+),
+p AS (
+  SELECT (ord - 1)::int AS idx,
+         (e->>'lat')::float8 AS lat,
+         (e->>'lng')::float8 AS lng
+  FROM t, jsonb_array_elements(t.c) WITH ORDINALITY AS x(e, ord)
+),
+d AS (
+  SELECT 111320 * sqrt(
+           power(lat - lag(lat) OVER (ORDER BY idx), 2) +
+           power((lng - lag(lng) OVER (ORDER BY idx)) * cos(radians(lat)), 2)
+         ) AS m
+  FROM p
+)
+SELECT count(*) + 1                        AS puntos,
+       round(sum(m)::numeric, 0)           AS largo_aprox_m,
+       round(min(m)::numeric, 1)           AS separacion_min_m,
+       round(avg(m)::numeric, 1)           AS separacion_media_m,
+       round(max(m)::numeric, 1)           AS separacion_max_m
+FROM d WHERE m IS NOT NULL;
+```
+
+**Cómo leerlo:** lo que importa es que `separacion_max_m` no sea muchas veces
+`separacion_min_m`. Si la máxima es menos de ~5 veces la mínima, el trazado
+sirve. Si es 20 veces, hay que redibujarlo más parejo antes de salir.
+
+`largo_aprox_m` también sirve de control: si no se parece al largo real del
+circuito, el trazado está mal cargado.
+
+### 3. En cada teléfono
+- **Modo de bajo consumo APAGADO** (iOS lo fuerza a bloquear la pantalla a los
+  30 s, por encima de cualquier cosa que haga la app)
+- **Agitar para deshacer APAGADO**: Ajustes → Accesibilidad → Tocar → Agitar
+  para deshacer
+- Permiso de ubicación en "Siempre" o "Al usar la app", con precisión exacta
+- Batería sobre 50 % o cargador conectado — el GPS a 1 Hz consume
+- Anotar: modelo, versión de iOS, y **dónde va montado** el teléfono
 
 ---
 
-## 4. Después: qué mirar en Supabase
+## En pista
 
-Reemplazar `'TANDA-ID'` por el id de la tanda en todas las consultas.
+Mínimo **dos autos al mismo tiempo**. Sin dos autos no se puede probar nada de
+gaps, que es la mitad del objetivo.
 
-### La consulta clave: ¿se saltearon vueltas?
+| Qué | Por qué |
+|---|---|
+| 8–10 vueltas seguidas | Con dos vueltas no se ve si el conteo se degrada |
+| Una entrada y salida de boxes | Es donde más probable es un cruce fantasma |
+| Un auto detenido en pista un rato | Simula bandera amarilla / abandono |
+| Una vuelta deliberadamente lenta | Prueba el filtro de vuelta mínima |
+| Los dos autos juntos y separados | Para tener gaps chicos y grandes |
 
-Cuenta los cruces **reales** viendo dónde el progreso "dio la vuelta" (cayó más
-de media vuelta de golpe). Es robusto aunque se hayan perdido lecturas. Se
-compara contra las vueltas que la app efectivamente registró.
+**Anotar a mano, en papel:** cuántas vueltas dio cada auto. Ese es el único
+control independiente que va a haber. Sin eso, si los números no cuadran, no se
+sabe cuál está mal.
+
+Si se puede, filmar la meta con un reloj visible en cuadro.
+
+---
+
+## Después: qué mirar
+
+Primero, buscar el ID de la tanda:
+
+```sql
+SELECT id, nombre, tipo, inicio, fin FROM tandas ORDER BY inicio DESC LIMIT 10;
+```
+
+Reemplazar `PEGAR-ID` en todas las consultas que siguen.
+
+### La consulta que más importa: ¿se saltearon vueltas?
+
+Cuenta los cruces **reales** que hay en la traza cruda (buscando el momento en
+que el progreso vuelve a cero) y los compara contra las vueltas que la app llegó
+a registrar. Este conteo es más robusto que el del propio detector, así que
+sirve de juez.
 
 ```sql
 WITH s AS (
   SELECT piloto_id, progreso,
-         LAG(progreso) OVER (PARTITION BY piloto_id ORDER BY t_dispositivo) AS ant
-  FROM traza_gps
-  WHERE tanda_id = 'TANDA-ID'
+         lag(progreso) OVER (PARTITION BY piloto_id ORDER BY t_dispositivo) AS ant
+  FROM traza_gps WHERE tanda_id = 'PEGAR-ID'
 ),
-reales AS (
-  SELECT piloto_id, count(*) AS cruces_reales
-  FROM s WHERE ant IS NOT NULL AND progreso < ant - 0.5
+cruces AS (
+  SELECT piloto_id, count(*) AS n FROM s
+  WHERE ant IS NOT NULL AND progreso < ant - 0.5
   GROUP BY piloto_id
 ),
-grabadas AS (
-  SELECT piloto_id, count(*) AS vueltas_grabadas
-  FROM vueltas WHERE tanda_id = 'TANDA-ID'
-  GROUP BY piloto_id
+reg AS (
+  SELECT piloto_id, count(*) AS n FROM vueltas
+  WHERE tanda_id = 'PEGAR-ID' GROUP BY piloto_id
 )
-SELECT p.nombre, r.cruces_reales, g.vueltas_grabadas,
-       r.cruces_reales - COALESCE(g.vueltas_grabadas, 0) AS salteadas
-FROM reales r
-LEFT JOIN grabadas g ON g.piloto_id = r.piloto_id
-LEFT JOIN pilotos  p ON p.id = r.piloto_id
+SELECT p.nombre,
+       coalesce(c.n, 0) AS cruces_reales,
+       coalesce(r.n, 0) AS registradas,
+       coalesce(c.n, 0) - coalesce(r.n, 0) AS salteadas
+FROM pilotos p
+LEFT JOIN cruces c ON c.piloto_id = p.id
+LEFT JOIN reg    r ON r.piloto_id = p.id
+WHERE c.piloto_id IS NOT NULL OR r.piloto_id IS NOT NULL
 ORDER BY salteadas DESC;
 ```
 
-**`salteadas` distinto de 0 es el problema a resolver antes de seguir con gaps.**
+**`salteadas` tiene que dar 0.** Cualquier otra cosa es el problema a resolver
+antes de seguir con gaps o banderas azules.
 
-### ¿Se cortó el GPS? (la causa nº 1 de vueltas salteadas)
+### ¿Se cortó el GPS?
 
-```sql
-SELECT piloto_id, t_dispositivo,
-       round(EXTRACT(EPOCH FROM (t_dispositivo - LAG(t_dispositivo)
-         OVER (PARTITION BY piloto_id ORDER BY t_dispositivo)))::numeric, 1) AS hueco_s
-FROM traza_gps
-WHERE tanda_id = 'TANDA-ID'
-ORDER BY hueco_s DESC NULLS LAST
-LIMIT 20;
-```
-
-Huecos de más de ~6 s son peligrosos. Si aparecen, casi siempre es pantalla
-bloqueada o app en segundo plano.
-
-### ¿A qué frecuencia llegó realmente el GPS?
-
-```sql
-SELECT piloto_id, count(*) AS lecturas,
-       round((count(*) / NULLIF(EXTRACT(EPOCH FROM
-         (max(t_dispositivo) - min(t_dispositivo))), 0))::numeric, 2) AS hz
-FROM traza_gps WHERE tanda_id = 'TANDA-ID' GROUP BY piloto_id;
-```
-
-Se espera ~1,0 Hz. Bastante menos que eso explica casi cualquier problema.
-
-### ¿Están alineados los relojes? (habilita o mata los gaps)
+La causa número uno de una vuelta salteada es que el GPS dejó de llegar en el
+momento del cruce.
 
 ```sql
 SELECT p.nombre,
-       min(t.offset_ms) AS min_ms, max(t.offset_ms) AS max_ms,
-       round(avg(t.offset_ms)) AS promedio_ms
-FROM traza_gps t LEFT JOIN pilotos p ON p.id = t.piloto_id
-WHERE t.tanda_id = 'TANDA-ID' GROUP BY p.nombre;
+       count(*)                                        AS lecturas,
+       round(max(hueco)::numeric, 1)                   AS peor_hueco_s,
+       round(avg(hueco)::numeric, 2)                   AS hueco_medio_s,
+       count(*) FILTER (WHERE hueco > 5)               AS cortes_mayores_5s
+FROM (
+  SELECT piloto_id,
+         extract(epoch FROM (t_dispositivo -
+           lag(t_dispositivo) OVER (PARTITION BY piloto_id ORDER BY t_dispositivo))) AS hueco
+  FROM traza_gps WHERE tanda_id = 'PEGAR-ID'
+) g JOIN pilotos p ON p.id = g.piloto_id
+WHERE hueco IS NOT NULL
+GROUP BY p.nombre ORDER BY peor_hueco_s DESC;
 ```
 
-Lo que importa es la **diferencia entre pilotos**. Si los promedios difieren en
-menos de ~200 ms, los gaps son viables tal cual. Si difieren en segundos, hay que
-corregir por `offset_ms` antes de comparar (el dato ya queda guardado para eso).
+**`hueco_medio_s` debería estar cerca de 1.0.** `cortes_mayores_5s` debería ser
+0. Si hay cortes largos, revisar si a ese teléfono se le bloqueó la pantalla.
 
-### Calidad de la señal
+### ¿Son comparables los relojes de los teléfonos?
+
+```sql
+SELECT p.nombre,
+       round(avg(t.offset_ms))  AS desfase_medio_ms,
+       min(t.offset_ms)         AS min_ms,
+       max(t.offset_ms)         AS max_ms
+FROM traza_gps t JOIN pilotos p ON p.id = t.piloto_id
+WHERE t.tanda_id = 'PEGAR-ID' AND t.offset_ms IS NOT NULL
+GROUP BY p.nombre ORDER BY desfase_medio_ms;
+```
+
+**Lo que importa no es el valor, sino la diferencia entre pilotos.** Si todos
+tienen desfases parecidos, los gaps van a salir bien. Si uno está 2000 ms
+apartado de los demás, todos sus gaps van a estar corridos 2 segundos hasta que
+se aplique la corrección.
+
+### Calidad del GPS y tiempos de vuelta
 
 ```sql
 SELECT p.nombre,
        round(avg(t.precision_m)::numeric, 1) AS precision_media_m,
-       max(t.precision_m) AS peor_m
-FROM traza_gps t LEFT JOIN pilotos p ON p.id = t.piloto_id
-WHERE t.tanda_id = 'TANDA-ID' GROUP BY p.nombre;
+       round(max(t.precision_m)::numeric, 1) AS peor_m
+FROM traza_gps t JOIN pilotos p ON p.id = t.piloto_id
+WHERE t.tanda_id = 'PEGAR-ID' GROUP BY p.nombre;
 ```
 
-### Las vueltas tal como quedaron
-
 ```sql
-SELECT p.nombre, v.numero, v.cruce_at, round(v.tiempo_ms / 1000.0, 2) AS seg
-FROM vueltas v LEFT JOIN pilotos p ON p.id = v.piloto_id
-WHERE v.tanda_id = 'TANDA-ID'
+SELECT p.nombre, v.numero AS vuelta, v.cruce_at,
+       round(v.tiempo_ms / 1000.0, 2) AS segundos
+FROM vueltas v JOIN pilotos p ON p.id = v.piloto_id
+WHERE v.tanda_id = 'PEGAR-ID'
 ORDER BY p.nombre, v.numero;
 ```
 
+La primera vuelta de cada piloto tiene `segundos` vacío: es la vuelta de salida,
+no tiene con qué compararse. Es lo esperado.
+
+**Cómo leer los tiempos:** no compararlos contra el crono oficial. Compararlos
+**entre sí**. Si un piloto dio 8 vueltas parejas y los tiempos salen consistentes
+entre ellos, la referencia sirve aunque esté corrida medio segundo. Una vuelta
+que salga muy fuera de la serie sin explicación en pista es la señal de alarma.
+
 ---
 
-## 5. Después de la prueba
+## Después de la prueba
 
-`traza_gps` crece rápido (≈1 fila por piloto por segundo). Cuando el análisis
-esté hecho, vaciar lo viejo:
+La traza queda guardada, así que **se puede reprocesar la tanda entera en el
+escritorio** probando otros umbrales del detector, sin volver al autódromo. Ese
+era el punto de grabarla.
+
+Cuando ya no se necesite (ocupa ~1 fila por piloto por segundo):
 
 ```sql
 DELETE FROM traza_gps WHERE created_at < now() - interval '7 days';
@@ -176,19 +223,19 @@ DELETE FROM traza_gps WHERE created_at < now() - interval '7 days';
 
 ---
 
-## Qué viene después (no construido todavía)
+## Lo que viene después, si la prueba sale bien
 
-Con la traza validada, el orden natural es:
+En este orden, porque cada uno depende del anterior:
 
-1. **Distancia acumulada sobre el trazado** (metros reales, no índices de punto).
-   Es el requisito para cualquier gap expresado en metros o segundos.
-2. **Gap al de adelante / al de atrás.** Método estándar: para cada piloto se
-   guarda el historial de (distancia en la vuelta, hora corregida). El gap contra
-   el de adelante es *cuánto hace que ese piloto pasó por donde yo estoy ahora*.
-   Límite honesto: las posiciones suben cada 3 s, así que el número en pantalla va
-   a estar 3-5 s atrasado. Sirve como referencia estratégica, no como alarma de
-   proximidad.
-3. **Banderas azules.** Es lo más fácil de los tres una vez que el gap es
-   confiable: doblar a un rezagado es un evento lento y tolera bien el retraso
-   del dato. Criterio: diferencia de vuelta ≥ 1, gap por debajo de un umbral, y
-   que se esté cerrando.
+1. **Distancia recorrida real en metros** en vez de progreso por índice de punto
+   — es lo que falta para poder expresar un gap en segundos
+2. **Gap al de adelante y al de atrás**: para cada piloto se guarda su historial
+   de (distancia en la vuelta, hora corregida). El gap contra otro es cuánto
+   tiempo pasó desde que el de adelante estuvo en el punto donde está el de
+   atrás ahora
+3. **Banderas azules**: con el gap andando es casi directo — diferencia de
+   vueltas ≥ 1, gap por debajo de un umbral, y achicándose
+
+Nota de expectativa sobre el punto 2: las posiciones suben cada 3 segundos, así
+que el gap en pantalla va a tener unos 3–5 segundos de atraso. Sirve como
+referencia ("venís a 1,8 s"), no como alarma de proximidad.
