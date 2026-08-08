@@ -281,16 +281,15 @@ created_at TIMESTAMPTZ
 Todas las tablas tienen políticas abiertas `FOR ALL USING (true)`. El control de acceso es por aplicación, no por RLS.
 
 ### Migraciones Ejecutadas Recientemente
+- ✅ `task-traza-gps-migration.sql` (7 Ago 2026): tabla `traza_gps` (cada lectura
+  del GPS, para reprocesar tandas en el escritorio), función `hora_servidor()`
+  (desfase de reloj por teléfono) y columna `vueltas.offset_ms`. Instrumentación
+  para validar el cronometraje — ver `docs/PRUEBA_CRONOMETRAJE.md`. Verificada:
+  `hora_servidor()` devuelve microsegundos y `traza_gps` responde
 - ✅ `task-gps-recinto-migration.sql` (2 Jul 2026): columna `ubicaciones_piloto.dentro_recinto`
 - ✅ `inscripciones` confirmada en la publicación `supabase_realtime` (2 Jul 2026)
 
 ### Migraciones SQL Pendientes de Ejecutar
-- ⏳ `task-traza-gps-migration.sql` (7 Ago 2026): tabla `traza_gps` (cada lectura
-  del GPS, para reprocesar tandas en el escritorio), función `hora_servidor()`
-  (desfase de reloj por teléfono) y columna `vueltas.offset_ms`. **Requisito para
-  la prueba de cronometraje** — ver `docs/PRUEBA_CRONOMETRAJE.md`. Sin correrla la
-  app funciona igual, pero no graba nada de diagnóstico.
-
 El archivo `task-56-migration.sql` debe correrse en Supabase si aún no se ha hecho:
 ```sql
 -- Agregar bandera personal por piloto
