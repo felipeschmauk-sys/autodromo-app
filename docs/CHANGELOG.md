@@ -3,6 +3,40 @@
 
 ---
 
+## [0.14.0] — 7 Agosto 2026
+### Agregado (Cronometraje — instrumentación para validar)
+- Traza GPS cruda (migración: `docs/task-traza-gps-migration.sql`): el teléfono
+  guarda CADA lectura del GPS (~1 Hz) con lo que el detector calculó en ese
+  instante — posición, precisión, velocidad, punto del trazado, progreso 0..1 y
+  si la histéresis estaba armada. Se acumula en memoria y se vuelca en lotes
+  cada 10 s; sin señal reintenta y conserva los últimos ~10 min. Solo graba en
+  tanda o dentro de la geocerca de pista. Objetivo: reprocesar una tanda entera
+  en el escritorio (otros umbrales, vueltas salteadas) sin volver al autódromo
+- Desfase de reloj teléfono ↔ servidor (`lib/reloj.ts`, función SQL
+  `hora_servidor()`): se mide al entrar y cada 5 min, al estilo NTP (5 muestras,
+  se conserva la de menor ida-y-vuelta). Queda guardado en `vueltas.offset_ms` y
+  en cada punto de la traza. **No se aplica en vivo**: `cruce_at` sigue siendo la
+  hora del teléfono, para que la app se comporte igual que antes. Sin esto, los
+  gaps entre dos pilotos arrastran el desfase entre sus relojes
+
+### Corregido
+- El Wake Lock no se recuperaba nunca tras una interrupción: iOS lo suelta cada
+  vez que la página pierde el foco (alerta del sistema, llamada, Centro de
+  Control), y solo se re-pedía en `visibilitychange`, que una alerta encima de
+  la página no dispara. La pantalla quedaba libre de atenuarse hasta bloquearse
+  — y con la pantalla bloqueada el detector de cruces deja de recibir GPS, así
+  que también salteaba vueltas. Ahora se escucha el evento `release` del propio
+  sentinel, se re-pide en `focus`/`pageshow`/`visibilitychange`, y un watchdog
+  verifica cada 15 s que siga vivo
+- Diálogo "Deshacer texto escrito" de iOS al agitar el teléfono (pendiente desde
+  0.11.1): no existe API web para apagar el gesto, pero sí para dejar vacía la
+  pila de deshacer de WebKit. Se vacía al entrar a la app y al cerrar cada
+  edición del perfil, con los campos ya desmontados. Sin pasos de tecleo
+  guardados, iOS no tiene qué ofrecer. Mitigación, no cura: el gesto se apaga
+  del todo solo en Ajustes → Accesibilidad → Tocar → Agitar para deshacer
+
+---
+
 ## [0.13.4] — 6 Julio 2026
 ### Agregado
 - Tanda "Libre": sin duración ni reglas de término, para giros libres todo

@@ -285,6 +285,12 @@ Todas las tablas tienen políticas abiertas `FOR ALL USING (true)`. El control d
 - ✅ `inscripciones` confirmada en la publicación `supabase_realtime` (2 Jul 2026)
 
 ### Migraciones SQL Pendientes de Ejecutar
+- ⏳ `task-traza-gps-migration.sql` (7 Ago 2026): tabla `traza_gps` (cada lectura
+  del GPS, para reprocesar tandas en el escritorio), función `hora_servidor()`
+  (desfase de reloj por teléfono) y columna `vueltas.offset_ms`. **Requisito para
+  la prueba de cronometraje** — ver `docs/PRUEBA_CRONOMETRAJE.md`. Sin correrla la
+  app funciona igual, pero no graba nada de diagnóstico.
+
 El archivo `task-56-migration.sql` debe correrse en Supabase si aún no se ha hecho:
 ```sql
 -- Agregar bandera personal por piloto

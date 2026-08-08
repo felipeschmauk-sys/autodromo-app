@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type FilaTrazaGps } from "@/lib/gps";
+import { medirOffsetReloj, getOffsetReloj } from "@/lib/reloj";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -744,6 +745,33 @@ interface MensajePiloto {
   created_at: string;
 }
 
+// ── "Deshacer texto escrito" (iOS) ────────────────────────────
+// Agitar el teléfono en pista abre la alerta de deshacer de iOS, que roba el
+// foco y hace que iOS suelte el Wake Lock (de ahí que la pantalla terminara
+// bloqueándose). No existe API web para apagar el gesto — solo el ajuste del
+// teléfono (Accesibilidad → Tocar → Agitar para deshacer) o un wrapper nativo.
+// Lo que sí se puede es dejar VACÍA la pila de deshacer de WebKit: sin pasos
+// de tecleo guardados (login, registro, edición de perfil) iOS no tiene qué
+// ofrecer y no muestra la alerta.
+function vaciarPilaDeshacer() {
+  if (typeof document === "undefined") return;
+  // Nunca vaciar con un campo en foco: el undo revertiría lo que se está tipeando.
+  const activo = document.activeElement as HTMLElement | null;
+  if (activo && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.isContentEditable)) return;
+  try {
+    const doc = document as Document & {
+      queryCommandEnabled?: (c: string) => boolean;
+      execCommand?: (c: string) => boolean;
+    };
+    if (!doc.execCommand) return;
+    // queryCommandEnabled("undo") es false cuando la pila quedó vacía → corta sola.
+    for (let i = 0; i < 100; i++) {
+      if (doc.queryCommandEnabled && !doc.queryCommandEnabled("undo")) break;
+      if (!doc.execCommand("undo")) break;
+    }
+  } catch { /* navegador sin execCommand heredado: nada que hacer */ }
+}
+
 // ── Componente principal ──────────────────────────────────────
 export default function Home() {
 
@@ -1191,22 +1219,61 @@ export default function Home() {
   }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
+  // iOS suelta el bloqueo SOLO cada vez que la página pierde el foco: una alerta
+  // del sistema (la de "Deshacer texto escrito" al agitar, una llamada, el Centro
+  // de Control) basta. Antes solo se re-pedía en "visibilitychange", que una
+  // alerta encima de la página no dispara: el bloqueo quedaba suelto para siempre
+  // y la pantalla se atenuaba hasta bloquearse. Ahora se escucha el evento
+  // "release" del propio sentinel y un watchdog revisa cada 15 s que siga vivo.
   useEffect(() => {
     if (stage !== "app") return;
-    let wakeLock: any = null;
-    const request = async () => {
-      if (!("wakeLock" in navigator)) return;
-      try { wakeLock = await (navigator as any).wakeLock.request("screen"); }
-      catch { /* no disponible en este navegador */ }
+    if (typeof navigator === "undefined" || !("wakeLock" in navigator)) return;
+
+    let sentinel: any = null;
+    let cancelado = false;
+    let pidiendo = false;
+
+    const pedir = async () => {
+      if (cancelado || pidiendo) return;
+      if (sentinel && !sentinel.released) return;          // ya hay uno vivo
+      if (document.visibilityState !== "visible") return;  // iOS lo rechaza oculto
+      pidiendo = true;
+      try {
+        const s = await (navigator as any).wakeLock.request("screen");
+        if (cancelado) { s.release().catch(() => {}); return; }
+        sentinel = s;
+        s.addEventListener?.("release", () => { if (!cancelado) pedir(); });
+      } catch { /* no disponible, o rechazado (p. ej. Modo de bajo consumo) */ }
+      finally { pidiendo = false; }
     };
-    request();
-    const onVisible = () => { if (document.visibilityState === "visible") request(); };
-    document.addEventListener("visibilitychange", onVisible);
+
+    pedir();
+    const reintentar = () => { if (document.visibilityState === "visible") pedir(); };
+    document.addEventListener("visibilitychange", reintentar);
+    window.addEventListener("focus", reintentar);
+    window.addEventListener("pageshow", reintentar);
+    const watchdog = setInterval(reintentar, 15000);
+
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      wakeLock?.release().catch(() => {});
+      cancelado = true;
+      clearInterval(watchdog);
+      document.removeEventListener("visibilitychange", reintentar);
+      window.removeEventListener("focus", reintentar);
+      window.removeEventListener("pageshow", reintentar);
+      sentinel?.release().catch(() => {});
     };
   }, [stage]);
+
+  // ── Pila de deshacer vacía mientras el piloto está en pista ──
+  // Se vacía al entrar a la app (los campos de login/registro ya están
+  // desmontados) y cada vez que se cierra una edición del perfil, para que
+  // agitar el teléfono en pista no encuentre nada que deshacer.
+  useEffect(() => {
+    if (stage !== "app") return;
+    if (editCampo || showFormAuto) return;
+    const t = setTimeout(vaciarPilaDeshacer, 400);
+    return () => clearTimeout(t);
+  }, [stage, editCampo, showFormAuto]);
 
   // ── Mensajes del director de carrera (Realtime) ──────────────
   useEffect(() => {
@@ -1369,6 +1436,26 @@ export default function Home() {
     let intervalo: ReturnType<typeof setInterval> | null = null;
     let ultimaPos: GeolocationPosition | null = null;
 
+    // ── Traza GPS cruda (diagnóstico de cronometraje) ──────────
+    const traza: FilaTrazaGps[] = [];
+    let trazaIntervalo: ReturnType<typeof setInterval> | null = null;
+    let trazaApagada = false; // migración sin correr → no insistir
+
+    const volcarTraza = async () => {
+      if (trazaApagada || traza.length === 0) return;
+      const lote = traza.splice(0, traza.length);
+      const { error } = await registrarTrazaGps(lote);
+      if (!error) return;
+      if (/relation|does not exist|schema cache|traza_gps/i.test(error)) {
+        trazaApagada = true; // tabla sin migrar: la app sigue igual, sin traza
+        return;
+      }
+      // Error de red: devolver el lote al buffer para el próximo intento,
+      // recortando lo más viejo si se acumuló demasiado sin señal
+      traza.unshift(...lote);
+      if (traza.length > 600) traza.splice(0, traza.length - 600);
+    };
+
     // ── Odómetro en vivo: acumula km, minutos y velocidad máxima de la
     //    sesión y los guarda en historial_pista cada ~30 s. No depende de
     //    que el admin cierre la sesión.
@@ -1388,10 +1475,12 @@ export default function Home() {
     };
 
     const detenerGPS = () => {
-      // Último volcado del odómetro antes de apagar
+      // Último volcado del odómetro y de la traza antes de apagar
       upsertHistorial();
-      if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+      volcarTraza();
+      if (watchId !== null)  { navigator.geolocation.clearWatch(watchId); watchId = null; }
       if (intervalo)         { clearInterval(intervalo); intervalo = null; }
+      if (trazaIntervalo)    { clearInterval(trazaIntervalo); trazaIntervalo = null; }
       sesionId = null;
     };
 
@@ -1416,25 +1505,36 @@ export default function Home() {
         });
       if (!navigator.geolocation) return;
 
+      // Posición sobre el trazado: punto más cercano y progreso 0..1 de la
+      // vuelta con la meta como origen. Se calcula UNA vez por lectura y la
+      // usan tanto el detector como la traza cruda, para que lo que se graba
+      // sea exactamente lo que el detector vio.
+      const posicionEnTrazado = (lat: number, lng: number) => {
+        const tr = trazadoRef.current;
+        if (tr.length < 8) return { idx: null as number | null, prog: null as number | null };
+        let idx = 0, min = Infinity;
+        for (let i = 0; i < tr.length; i++) {
+          const d = (lat - tr[i].lat) ** 2 + (lng - tr[i].lng) ** 2;
+          if (d < min) { min = d; idx = i; }
+        }
+        const metaIdx = tandaPilotoRef.current?.metaIdx ?? 0;
+        return { idx, prog: ((idx - metaIdx + tr.length) % tr.length) / tr.length };
+      };
+
       // Detector de cruce de meta (corre a ~1 Hz con cada lectura del GPS)
-      const detectarCruceMeta = (pos: GeolocationPosition) => {
+      const detectarCruceMeta = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null }) => {
         const tanda = tandaPilotoRef.current;
         const tr    = trazadoRef.current;
         const c     = cronoRef.current;
         if (!tanda || c.cerrado || tr.length < 8 || !sesionId) return;
+        if (p.prog === null) return;
 
         const lat = pos.coords.latitude, lng = pos.coords.longitude;
         // Solo cuentan cruces dentro de la geocerca de pista
         const gc = geocercaGpsRef.current;
         if (gc.length >= 3 && !puntoEnGeocerca({ lat, lng }, gc)) { c.progAnt = null; return; }
 
-        // Progreso 0..1 de la vuelta, con la meta como origen
-        let idx = 0, min = Infinity;
-        for (let i = 0; i < tr.length; i++) {
-          const d = (lat - tr[i].lat) ** 2 + (lng - tr[i].lng) ** 2;
-          if (d < min) { min = d; idx = i; }
-        }
-        const prog  = ((idx - tanda.metaIdx + tr.length) % tr.length) / tr.length;
+        const prog  = p.prog;
         const ahora = pos.timestamp || Date.now();
 
         // Histéresis: el detector se arma al pasar por la mitad del circuito
@@ -1454,13 +1554,29 @@ export default function Home() {
             c.numero += 1;
             c.armado = false;
             c.ultimoCruceMs = cruceMs;
+            // offset_ms se GUARDA pero no se aplica: cruce_at sigue siendo la
+            // hora del teléfono, igual que siempre. Con el desfase al lado, los
+            // gaps entre pilotos se pueden corregir después en el análisis sin
+            // cambiar lo que la app muestra en vivo.
             supabase.from("vueltas").insert({
               tanda_id:  tanda.id,
               piloto_id: pilotoId,
               numero:    c.numero,
               cruce_at:  new Date(cruceMs).toISOString(),
               tiempo_ms: tiempo,
-            }).then(() => { /* fire and forget; tabla sin migrar = no-op */ });
+              offset_ms: getOffsetReloj(),
+            }).then(({ error }) => {
+              // Columna sin migrar: reintentar sin ella para no perder la vuelta
+              if (error && /offset_ms/i.test(error.message)) {
+                supabase.from("vueltas").insert({
+                  tanda_id:  tanda.id,
+                  piloto_id: pilotoId,
+                  numero:    c.numero,
+                  cruce_at:  new Date(cruceMs).toISOString(),
+                  tiempo_ms: tiempo,
+                }).then(() => { /* fire and forget */ });
+              }
+            });
 
             // La carrera/tanda termina por TIEMPO o por VUELTAS, lo que
             // ocurra primero. Este cruce cierra la participación del piloto
@@ -1481,11 +1597,53 @@ export default function Home() {
         c.tAnt    = ahora;
       };
 
+      // ── Traza cruda: una fila por lectura del GPS ──────────────
+      // Se acumula en memoria y se vuelca en lotes. Solo se graba lo que sirve
+      // para analizar (en tanda, o dentro de la pista): una jornada entera en
+      // boxes llenaría la tabla sin aportar nada.
+      const bufferTraza = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null }) => {
+        const sid = sesionId;
+        if (trazaApagada || !sid) return;
+        const tanda = tandaPilotoRef.current;
+        const gc    = geocercaGpsRef.current;
+        const lat   = pos.coords.latitude, lng = pos.coords.longitude;
+        const dentro = gc.length >= 3 ? puntoEnGeocerca({ lat, lng }, gc) : null;
+        if (!tanda && dentro !== true) return;
+
+        // Tope de memoria (~10 min sin red): se descarta lo más viejo, que es
+        // lo que menos sirve para entender qué está pasando ahora.
+        if (traza.length >= 600) traza.shift();
+
+        traza.push({
+          piloto_id:       pilotoId,
+          sesion_id:       sid,
+          tanda_id:        tanda?.id ?? null,
+          t_dispositivo:   new Date(pos.timestamp || Date.now()).toISOString(),
+          offset_ms:       getOffsetReloj(),
+          lat,
+          lng,
+          precision_m:     pos.coords.accuracy ?? null,
+          velocidad_ms:    pos.coords.speed ?? null,
+          rumbo:           pos.coords.heading ?? null,
+          idx_trazado:     p.idx,
+          progreso:        p.prog,
+          armado:          cronoRef.current.armado,
+          dentro_geocerca: dentro,
+        });
+      };
+
       watchId = navigator.geolocation.watchPosition(
-        pos => { ultimaPos = pos; detectarCruceMeta(pos); },
+        pos => {
+          ultimaPos = pos;
+          const p = posicionEnTrazado(pos.coords.latitude, pos.coords.longitude);
+          detectarCruceMeta(pos, p);
+          bufferTraza(pos, p);
+        },
         null,
         { enableHighAccuracy: true, maximumAge: 1000 }
       );
+
+      trazaIntervalo = setInterval(volcarTraza, 10_000);
 
       intervalo = setInterval(async () => {
         if (!ultimaPos || !sesionId) return;
@@ -1550,6 +1708,13 @@ export default function Home() {
       }
     };
 
+    // ── Desfase de reloj contra el servidor ───────────────────
+    // Se mide al entrar y cada 5 min. Queda guardado junto a cada vuelta y a
+    // cada punto de la traza para poder alinear después los tiempos de pilotos
+    // distintos. No cambia nada de lo que la app muestra en vivo.
+    medirOffsetReloj();
+    const relojInterval = setInterval(() => { medirOffsetReloj(); }, 300_000);
+
     // 1. Verificar sesión activa al montar (inmediato)
     checkSession();
 
@@ -1589,6 +1754,7 @@ export default function Home() {
 
     return () => {
       clearInterval(pollInterval);
+      clearInterval(relojInterval);
       detenerGPS();
       supabase.removeChannel(ch);
     };

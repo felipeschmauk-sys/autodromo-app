@@ -215,6 +215,42 @@ export async function registrarUbicacion(ubicacion: UbicacionPiloto) {
   return { error: error?.message }
 }
 
+// ── TRAZA GPS CRUDA (diagnóstico de cronometraje) ─────────────
+// Una fila por lectura del GPS (~1 Hz), con lo que el detector de cruces
+// calculó en ese mismo instante. Permite reprocesar una tanda entera en el
+// escritorio —probando otros umbrales, buscando vueltas salteadas— sin volver
+// a pista. Se manda en lotes: una request por segundo por piloto sería
+// desperdiciar la conexión justo cuando más se necesita.
+
+export interface FilaTrazaGps {
+  piloto_id: string
+  sesion_id: string
+  tanda_id: string | null
+  t_dispositivo: string
+  offset_ms: number | null
+  lat: number
+  lng: number
+  precision_m: number | null
+  velocidad_ms: number | null
+  rumbo: number | null
+  idx_trazado: number | null
+  progreso: number | null
+  armado: boolean | null
+  dentro_geocerca: boolean | null
+}
+
+export async function registrarTrazaGps(filas: FilaTrazaGps[]) {
+  if (filas.length === 0) return { error: undefined }
+  try {
+    const { error } = await supabase.from('traza_gps').insert(filas)
+    return { error: error?.message }
+  } catch {
+    // Sin señal en pista: se avisa como error de red para que el lote
+    // vuelva al buffer y se reintente, en vez de perderse
+    return { error: 'red' }
+  }
+}
+
 export async function getUltimasUbicaciones() {
   // Obtiene la última ubicación de cada piloto con sesión activa
   const { data } = await supabase
