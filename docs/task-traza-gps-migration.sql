@@ -61,5 +61,10 @@ DO $$ BEGIN
   END IF;
 END $$;
 
+-- ── 4) Refrescar el caché de esquema de la API ────────────────
+-- Sin esto, la app puede seguir viendo "no existe la tabla/función" durante un
+-- rato aunque acá ya estén creadas, y deja de intentar hasta que se recargue.
+NOTIFY pgrst, 'reload schema';
+
 -- ── Limpieza (correr SOLO cuando las trazas ya no se necesiten) ──
 -- DELETE FROM traza_gps WHERE created_at < now() - interval '7 days';

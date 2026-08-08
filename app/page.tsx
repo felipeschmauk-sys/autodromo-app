@@ -772,6 +772,18 @@ function vaciarPilaDeshacer() {
   } catch { /* navegador sin execCommand heredado: nada que hacer */ }
 }
 
+// ── Hora de una lectura del GPS, saneada ──────────────────────
+// pos.timestamp no es confiable en todos los aparatos: algunos reportan el
+// tiempo desde que arrancó el teléfono en vez de la hora real. Con un valor así
+// la vuelta se guardaría fechada en 1970, y un valor fuera de rango hace que
+// toISOString() TIRE UNA EXCEPCIÓN — lo que cortaría el detector de cruces en
+// pleno giro. Fuera de una ventana sensata, se usa la hora del sistema.
+function msValido(ts: number | undefined): number {
+  return typeof ts === "number" && Number.isFinite(ts) && ts > 1e12 && ts < 4e12
+    ? ts
+    : Date.now();
+}
+
 // ── Componente principal ──────────────────────────────────────
 export default function Home() {
 
@@ -1535,7 +1547,7 @@ export default function Home() {
         if (gc.length >= 3 && !puntoEnGeocerca({ lat, lng }, gc)) { c.progAnt = null; return; }
 
         const prog  = p.prog;
-        const ahora = pos.timestamp || Date.now();
+        const ahora = msValido(pos.timestamp);
 
         // Histéresis: el detector se arma al pasar por la mitad del circuito
         if (prog > 0.4 && prog < 0.7) c.armado = true;
@@ -1618,7 +1630,7 @@ export default function Home() {
           piloto_id:       pilotoId,
           sesion_id:       sid,
           tanda_id:        tanda?.id ?? null,
-          t_dispositivo:   new Date(pos.timestamp || Date.now()).toISOString(),
+          t_dispositivo:   new Date(msValido(pos.timestamp)).toISOString(),
           offset_ms:       getOffsetReloj(),
           lat,
           lng,
