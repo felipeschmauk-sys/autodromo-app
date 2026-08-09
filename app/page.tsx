@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
-import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type FilaTrazaGps } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
 import { medirOffsetReloj, getOffsetReloj } from "@/lib/reloj";
 import { supabase } from "@/lib/supabase";
 
@@ -416,8 +416,8 @@ function SpeedCard({
   onGPSChange,
   onGPSError,
 }: {
-  geocercaCoords: Coordenada[];
-  recintoCoords?: Coordenada[];
+  geocercaCoords: GeocercaCoords;
+  recintoCoords?: GeocercaCoords;
   activo?: boolean;              // solo inicia watchPosition cuando el permiso ya está concedido
   onGPSChange?: (dentro: boolean | null, dentroRecinto: boolean | null, pos?: Coordenada) => void;
   onGPSError?: (code: number) => void;
@@ -432,8 +432,8 @@ function SpeedCard({
   // ── Refs para geocerca: evitan que el watchPosition se cancele
   //    y reinicie cada vez que llegan los datos de Supabase, lo que
   //    en iOS puede interrumpir el diálogo de permiso en nuevos dispositivos.
-  const geocercaRef  = useRef<Coordenada[]>(geocercaCoords);
-  const recintoRef   = useRef<Coordenada[]>(recintoCoords);
+  const geocercaRef  = useRef<GeocercaCoords>(geocercaCoords);
+  const recintoRef   = useRef<GeocercaCoords>(recintoCoords);
   const onGPSChangeRef = useRef(onGPSChange);
   const onGPSErrorRef  = useRef(onGPSError);
   useEffect(() => { geocercaRef.current  = geocercaCoords; }, [geocercaCoords]);
@@ -462,13 +462,13 @@ function SpeedCard({
           const pos2d = { lat, lng };
           const gc = geocercaRef.current;
           const rc = recintoRef.current;
-          const nuevoDentro = gc.length >= 3 ? puntoEnGeocerca(pos2d, gc) : null;
-          const nuevoDentroRecinto = rc.length >= 3 ? puntoEnGeocerca(pos2d, rc) : null;
-          if (gc.length >= 3) setDentro(nuevoDentro);
-          if (rc.length >= 3)  setDentroRecinto(nuevoDentroRecinto);
+          const nuevoDentro = geocercaDefinida(gc) ? puntoEnGeocerca(pos2d, gc) : null;
+          const nuevoDentroRecinto = geocercaDefinida(rc) ? puntoEnGeocerca(pos2d, rc) : null;
+          if (geocercaDefinida(gc)) setDentro(nuevoDentro);
+          if (geocercaDefinida(rc))  setDentroRecinto(nuevoDentroRecinto);
           onGPSChangeRef.current?.(
-            gc.length >= 3 ? nuevoDentro : null,
-            rc.length  >= 3 ? nuevoDentroRecinto : null,
+            geocercaDefinida(gc) ? nuevoDentro : null,
+            geocercaDefinida(rc) ? nuevoDentroRecinto : null,
             pos2d
           );
         },
@@ -816,8 +816,8 @@ export default function Home() {
   const [showFullTrack, setShowFullTrack] = useState(false);
   const [estadoPista, setEstadoPista] = useState<{ bandera: string; sector?: string; mensaje?: string }>({ bandera: "verde" });
   const [trazado, setTrazado]         = useState<Coordenada[]>([]);
-  const [geocerca, setGeocerca]       = useState<Coordenada[]>([]);    // pista
-  const [geocercaRecinto, setGeocercaRecinto] = useState<Coordenada[]>([]); // recinto
+  const [geocerca, setGeocerca]       = useState<GeocercaCoords>([]);    // pista
+  const [geocercaRecinto, setGeocercaRecinto] = useState<GeocercaCoords>([]); // recinto
   const [sectores, setSectores]       = useState<Sector[]>([]);
   const [isLandscape, setIsLandscape] = useState(false);
   const [viewportH, setViewportH]     = useState(600);
@@ -1174,8 +1174,8 @@ export default function Home() {
               .single();
             if (c && (c.trazado_coords?.length ?? 0) >= 2) {
               setTrazado(c.trazado_coords);
-              if ((c.geocerca_pista?.length ?? 0) >= 3)   setGeocerca(c.geocerca_pista);
-              if ((c.geocerca_recinto?.length ?? 0) >= 3) setGeocercaRecinto(c.geocerca_recinto);
+              if (geocercaDefinida(c.geocerca_pista))   setGeocerca(c.geocerca_pista);
+              if (geocercaDefinida(c.geocerca_recinto)) setGeocercaRecinto(c.geocerca_recinto);
               return;
             }
           }
@@ -1339,8 +1339,8 @@ export default function Home() {
   }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Refs para geocercas (acceso siempre actualizado dentro del intervalo) ──
-  const geocercaGpsRef = useRef<Coordenada[]>([]);
-  const recintoGpsRef  = useRef<Coordenada[]>([]);
+  const geocercaGpsRef = useRef<GeocercaCoords>([]);
+  const recintoGpsRef  = useRef<GeocercaCoords>([]);
   useEffect(() => { geocercaGpsRef.current = geocerca; }, [geocerca]);
   useEffect(() => { recintoGpsRef.current  = geocercaRecinto; }, [geocercaRecinto]);
   // Auto activo del piloto: el historial en vivo asigna km/min a este vehículo
@@ -1558,7 +1558,7 @@ export default function Home() {
         const lat = pos.coords.latitude, lng = pos.coords.longitude;
         // Solo cuentan cruces dentro de la geocerca de pista
         const gc = geocercaGpsRef.current;
-        if (gc.length >= 3 && !puntoEnGeocerca({ lat, lng }, gc)) { c.progAnt = null; return; }
+        if (geocercaDefinida(gc) && !puntoEnGeocerca({ lat, lng }, gc)) { c.progAnt = null; return; }
 
         const prog  = p.prog;
         const ahora = msValido(pos.timestamp);
@@ -1633,7 +1633,7 @@ export default function Home() {
         const tanda = tandaPilotoRef.current;
         const gc    = geocercaGpsRef.current;
         const lat   = pos.coords.latitude, lng = pos.coords.longitude;
-        const dentro = gc.length >= 3 ? puntoEnGeocerca({ lat, lng }, gc) : null;
+        const dentro = geocercaDefinida(gc) ? puntoEnGeocerca({ lat, lng }, gc) : null;
         if (!tanda && dentro !== true) return;
 
         // Tope de memoria (~10 min sin red): se descarta lo más viejo, que es
@@ -1677,17 +1677,17 @@ export default function Home() {
         const lng = ultimaPos.coords.longitude;
         const gc = geocercaGpsRef.current;
         const rc = recintoGpsRef.current;
-        const dentro = gc.length >= 3
+        const dentro = geocercaDefinida(gc)
           ? puntoEnGeocerca({ lat, lng }, gc)
           : true;
         // Estado del recinto: lo que ve el piloto es lo que ve el admin
-        const dentroRecinto = rc.length >= 3
+        const dentroRecinto = geocercaDefinida(rc)
           ? puntoEnGeocerca({ lat, lng }, rc)
           : null;
 
         // Task #58: posición para detectar el sector del piloto
         // (funciona también en landscape, donde SpeedCard no está montado)
-        setPosPiloto({ lat, lng, dentro: gc.length >= 3 ? dentro : null });
+        setPosPiloto({ lat, lng, dentro: geocercaDefinida(gc) ? dentro : null });
 
         // ── Odómetro en vivo ──
         const velTick = ultimaPos.coords.speed != null ? Math.round(ultimaPos.coords.speed * 3.6) : 0;

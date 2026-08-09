@@ -113,7 +113,7 @@ export async function guardarTrazado(
 
 export async function getGeocercaActiva(
   tipo: 'pista' | 'recinto' = 'pista'
-): Promise<Coordenada[] | null> {
+): Promise<GeocercaCoords | null> {
   const { data } = await supabase
     .from('geocerca')
     .select('coordenadas')
@@ -125,7 +125,7 @@ export async function getGeocercaActiva(
 }
 
 export async function guardarGeocerca(
-  coordenadas: Coordenada[],
+  coordenadas: GeocercaCoords,
   tipo: 'pista' | 'recinto' = 'pista',
   nombre?: string
 ) {
@@ -171,25 +171,55 @@ export async function guardarGeocerca(
   return { error: error?.message }
 }
 
-// Algoritmo ray-casting para verificar si un punto está dentro de un polígono
+// ── Geocercas de varios anillos: islas y agujeros ─────────────
+//
+// La geocerca de pista es un ANILLO: una banda alrededor del circuito. Un
+// anillo no se puede dibujar con un solo polígono sin hacerle un corte que
+// una el borde exterior con el interior. Ese corte estaba puesto en la meta, y
+// los autos que pasaban justo por ahí quedaban clasificados "fuera de pista" —
+// lo que hacía perder cruces de meta (carrera del 9 ago 2026: 3 vueltas).
+//
+// Con varios anillos no hace falta cortar nada.
+export type GeocercaCoords = Coordenada[] | Coordenada[][]
+
+/** Normaliza a lista de anillos. Acepta el formato antiguo de un solo polígono. */
+export function anillosGeocerca(g: GeocercaCoords | null | undefined): Coordenada[][] {
+  if (!g || g.length === 0) return []
+  return Array.isArray((g as Coordenada[][])[0])
+    ? (g as Coordenada[][]).filter((a) => Array.isArray(a))
+    : [g as Coordenada[]]
+}
+
+/** ¿Hay al menos un anillo utilizable? Reemplaza a los viejos `.length >= 3`. */
+export function geocercaDefinida(g: GeocercaCoords | null | undefined): boolean {
+  return anillosGeocerca(g).some((a) => a.length >= 3)
+}
+
+// Ray-casting con regla PAR-IMPAR aplicada a todos los anillos de una vez.
+// De ahí sale gratis lo que se necesita: dos anillos separados se comportan
+// como islas (unión) y un anillo dentro de otro como agujero, sin una sola
+// línea de lógica extra.
 export function puntoEnGeocerca(
   punto: Coordenada,
-  poligono: Coordenada[]
+  geocerca: GeocercaCoords
 ): boolean {
-  if (poligono.length < 3) return true // Sin geocerca definida, considerar dentro
+  const anillos = anillosGeocerca(geocerca).filter((a) => a.length >= 3)
+  if (anillos.length === 0) return true // Sin geocerca definida, considerar dentro
 
   let dentro = false
-  const n = poligono.length
 
-  for (let i = 0, j = n - 1; i < n; j = i++) {
-    const xi = poligono[i].lng, yi = poligono[i].lat
-    const xj = poligono[j].lng, yj = poligono[j].lat
+  for (const poligono of anillos) {
+    const n = poligono.length
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const xi = poligono[i].lng, yi = poligono[i].lat
+      const xj = poligono[j].lng, yj = poligono[j].lat
 
-    const intersecta =
-      yi > punto.lat !== yj > punto.lat &&
-      punto.lng < ((xj - xi) * (punto.lat - yi)) / (yj - yi) + xi
+      const intersecta =
+        yi > punto.lat !== yj > punto.lat &&
+        punto.lng < ((xj - xi) * (punto.lat - yi)) / (yj - yi) + xi
 
-    if (intersecta) dentro = !dentro
+      if (intersecta) dentro = !dentro
+    }
   }
 
   return dentro
@@ -297,7 +327,7 @@ export type EstadoGPS = {
 export function iniciarGPS(
   pilotoId: string,
   sesionId: string,
-  geocerca: Coordenada[],
+  geocerca: GeocercaCoords,
   onActualizar: (estado: EstadoGPS) => void,
   intervaloMs: number = 4000
 ): () => void {
@@ -328,7 +358,7 @@ export function iniciarGPS(
         lng: pos.coords.longitude,
       }
       const dentroGeocerca =
-        geocerca.length >= 3
+        geocercaDefinida(geocerca)
           ? puntoEnGeocerca(coordenada, geocerca)
           : null
 
@@ -375,7 +405,7 @@ export function iniciarGPS(
         : 0,
       precision_metros: Math.round(ultimaPosicion.coords.accuracy),
       dentro_geocerca:
-        geocerca.length >= 3
+        geocercaDefinida(geocerca)
           ? puntoEnGeocerca(coordenada, geocerca)
           : true,
     })

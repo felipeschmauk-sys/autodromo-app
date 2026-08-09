@@ -3,6 +3,33 @@
 
 ---
 
+## [0.16.0] — 9 Agosto 2026
+### Agregado
+- **Geocercas de varios anillos: islas y agujeros.** La geocerca de pista es un
+  ANILLO, y un anillo no se puede dibujar con un solo polígono sin hacerle un
+  corte que una el borde exterior con el interior. Ese corte estaba puesto en la
+  meta, y los autos que pasaban justo por ahí quedaban clasificados "fuera de
+  pista" — lo que hacía perder cruces. Ahora una geocerca puede tener varios
+  anillos y no hace falta cortar nada
+- Botón "＋ Cerrar anillo y empezar otro" en los dos editores de mapa (el de
+  Config y el de Circuitos). Un anillo dibujado DENTRO de otro queda como
+  agujero; uno separado, como isla
+- Sin migración: `coordenadas` acepta el formato antiguo (un polígono) y el
+  nuevo (lista de anillos). Al guardar un solo anillo se sigue escribiendo
+  plano, así que nada de lo existente cambia de forma
+
+### Detalle técnico
+- `puntoEnGeocerca` ya usaba ray-casting par-impar. Aplicando el mismo conteo a
+  todos los anillos de una vez, islas (unión) y agujeros salen sin una línea de
+  lógica extra — Leaflet dibuja con esa misma regla, así que el mapa coincide
+  con el cálculo
+- `geocercaDefinida()` reemplaza a los viejos `.length >= 3`, que con dos
+  anillos habrían dado 2 y dejado la geocerca por "no configurada"
+- Verificado contra los 3257 puntos GPS reales de la Carrera 1 del 9 ago:
+  **cero diferencias** de clasificación respecto de la implementación anterior
+
+---
+
 ## [0.15.0] — 8 Agosto 2026
 ### Agregado
 - **Inscripción libre por fecha — provisorio, marcha blanca** (migración:

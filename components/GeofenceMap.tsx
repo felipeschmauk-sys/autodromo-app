@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import {
   guardarGeocerca, getGeocercaActiva,
   guardarTrazado, getTrazadoActivo,
-  getUltimasUbicaciones, type Coordenada
+  getUltimasUbicaciones, anillosGeocerca, geocercaDefinida,
+  type Coordenada, type GeocercaCoords
 } from "@/lib/gps";
 import { supabase } from "@/lib/supabase";
 
@@ -66,11 +67,14 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
   const ubicacionActualRef = useRef<any>(null);
   const kmlInputRef = useRef<HTMLInputElement>(null);
 
-  const [pistaCoords, setPistaCoords] = useState<Coordenada[]>([]);
-  const [recintoCoords, setRecintoCoords] = useState<Coordenada[]>([]);
+  const [pistaCoords, setPistaCoords] = useState<GeocercaCoords>([]);
+  const [recintoCoords, setRecintoCoords] = useState<GeocercaCoords>([]);
   const [trazadoCoords, setTrazadoCoords] = useState<Coordenada[]>([]);
   const [modoEdicion, setModoEdicion] = useState<Modo>("ninguno");
   const [puntosActuales, setPuntosActuales] = useState<Coordenada[]>([]);
+  // Anillos ya cerrados en esta edición. Con más de uno, la geocerca deja de
+  // necesitar el corte que antes había que hacer cruzando la meta.
+  const [anillosListos, setAnillosListos] = useState<Coordenada[][]>([]);
   const [guardando, setGuardando] = useState(false);
   const [cargando, setCargando] = useState(true);
   const [ubicacionActiva, setUbicacionActiva] = useState(false);
@@ -91,17 +95,17 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
       // Cargar geocerca pista
       getGeocercaActiva('pista').then((coords) => {
-        if (coords?.length) {
-          setPistaCoords(coords);
-          dibujarPista(L, map, coords);
+        if (geocercaDefinida(coords)) {
+          setPistaCoords(coords!);
+          dibujarPista(L, map, coords!);
         }
       });
 
       // Cargar geocerca recinto
       getGeocercaActiva('recinto').then((coords) => {
-        if (coords?.length) {
-          setRecintoCoords(coords);
-          dibujarRecinto(L, map, coords);
+        if (geocercaDefinida(coords)) {
+          setRecintoCoords(coords!);
+          dibujarRecinto(L, map, coords!);
         }
       });
 
@@ -132,8 +136,8 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
       setPuntosActuales((prev) => {
         const nuevos = [...prev, nueva];
         if (L) {
-          if (modoEdicion === "pista")    dibujarPistaTemp(L, map, nuevos);
-          else if (modoEdicion === "recinto") dibujarRecintoTemp(L, map, nuevos);
+          if (modoEdicion === "pista")    dibujarPistaTemp(L, map, nuevos, anillosListos);
+          else if (modoEdicion === "recinto") dibujarRecintoTemp(L, map, nuevos, anillosListos);
           else dibujarTrazadoTemp(L, map, nuevos);
         }
         return nuevos;
@@ -142,7 +146,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
     map.on("click", handleClick);
     return () => { map.off("click", handleClick); };
-  }, [modoEdicion]);
+  }, [modoEdicion, anillosListos]);
 
   // Realtime pilotos
   useEffect(() => {
@@ -155,47 +159,66 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  function dibujarPista(L: any, map: any, coords: Coordenada[]) {
+  function dibujarPista(L: any, map: any, coords: GeocercaCoords) {
     if (pistaLayerRef.current) { pistaLayerRef.current.remove(); pistaLayerRef.current = null; }
-    if (coords.length < 3) return;
-    pistaLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
-      color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.12, weight: 2,
-    }).bindTooltip("Geocerca de pista (cobro)", { permanent: false }).addTo(map);
+    const anillos = anillosGeocerca(coords).filter((a) => a.length >= 3);
+    if (!anillos.length) return;
+    // Leaflet dibuja un array de anillos con la misma regla par-impar que usa
+    // puntoEnGeocerca: el segundo anillo dentro del primero se ve como agujero.
+    pistaLayerRef.current = L.polygon(
+      anillos.map((a) => a.map((c) => [c.lat, c.lng])),
+      { color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.12, weight: 2 }
+    ).bindTooltip(
+      anillos.length > 1 ? `Geocerca de pista · ${anillos.length} anillos` : "Geocerca de pista (cobro)",
+      { permanent: false }
+    ).addTo(map);
   }
 
-  function dibujarPistaTemp(L: any, map: any, coords: Coordenada[]) {
+  function dibujarPistaTemp(L: any, map: any, coords: Coordenada[], listos: Coordenada[][] = []) {
+    dibujarTemp(L, map, pistaLayerRef, coords, listos, "#22c55e", 0.12);
+  }
+
+  function dibujarRecinto(L: any, map: any, coords: GeocercaCoords) {
+    if (recintoLayerRef.current) { recintoLayerRef.current.remove(); recintoLayerRef.current = null; }
+    const anillos = anillosGeocerca(coords).filter((a) => a.length >= 3);
+    if (!anillos.length) return;
+    recintoLayerRef.current = L.polygon(
+      anillos.map((a) => a.map((c) => [c.lat, c.lng])),
+      { color: "#6366f1", fillColor: "#6366f1", fillOpacity: 0.07, weight: 2, dashArray: "6 4" }
+    ).bindTooltip(
+      anillos.length > 1 ? `Geocerca de recinto · ${anillos.length} anillos` : "Geocerca de recinto",
+      { permanent: false }
+    ).addTo(map);
+  }
+
+  function dibujarRecintoTemp(L: any, map: any, coords: Coordenada[], listos: Coordenada[][] = []) {
+    dibujarTemp(L, map, recintoLayerRef, coords, listos, "#6366f1", 0.07);
+  }
+
+  // Dibuja los anillos ya cerrados junto con el que se está trazando, para que
+  // al hacer una isla o un agujero se vea lo que ya quedó fijo.
+  function dibujarTemp(
+    L: any, map: any, layerRef: any,
+    actual: Coordenada[], listos: Coordenada[][],
+    color: string, fillOpacity: number,
+  ) {
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
-    if (pistaLayerRef.current) { pistaLayerRef.current.remove(); pistaLayerRef.current = null; }
-    if (coords.length < 2) return;
-    pistaLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
-      color: "#22c55e", fillColor: "#22c55e", fillOpacity: 0.12, weight: 2,
-    }).addTo(map);
-    coords.forEach((c, i) => {
-      const m = L.circleMarker([c.lat, c.lng], { radius: 4, color: "#22c55e", fillColor: "#000", fillOpacity: 1, weight: 2 })
-        .bindTooltip(`${i + 1}`).addTo(map);
-      vertexMarkersRef.current.push(m);
-    });
-  }
+    if (layerRef.current) { layerRef.current.remove(); layerRef.current = null; }
 
-  function dibujarRecinto(L: any, map: any, coords: Coordenada[]) {
-    if (recintoLayerRef.current) { recintoLayerRef.current.remove(); recintoLayerRef.current = null; }
-    if (coords.length < 3) return;
-    recintoLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
-      color: "#6366f1", fillColor: "#6366f1", fillOpacity: 0.07, weight: 2, dashArray: "6 4",
-    }).bindTooltip("Geocerca de recinto", { permanent: false }).addTo(map);
-  }
+    const anillos = [...listos.filter((a) => a.length >= 3)];
+    if (actual.length >= 3) anillos.push(actual);
+    if (anillos.length) {
+      layerRef.current = L.polygon(
+        anillos.map((a) => a.map((c) => [c.lat, c.lng])),
+        { color, fillColor: color, fillOpacity, weight: 2 }
+      ).addTo(map);
+    } else if (actual.length >= 2) {
+      layerRef.current = L.polyline(actual.map((c) => [c.lat, c.lng]), { color, weight: 2 }).addTo(map);
+    }
 
-  function dibujarRecintoTemp(L: any, map: any, coords: Coordenada[]) {
-    vertexMarkersRef.current.forEach((m) => m.remove());
-    vertexMarkersRef.current = [];
-    if (recintoLayerRef.current) { recintoLayerRef.current.remove(); recintoLayerRef.current = null; }
-    if (coords.length < 2) return;
-    recintoLayerRef.current = L.polygon(coords.map((c) => [c.lat, c.lng]), {
-      color: "#6366f1", fillColor: "#6366f1", fillOpacity: 0.07, weight: 2, dashArray: "6 4",
-    }).addTo(map);
-    coords.forEach((c, i) => {
-      const m = L.circleMarker([c.lat, c.lng], { radius: 4, color: "#6366f1", fillColor: "#000", fillOpacity: 1, weight: 2 })
+    actual.forEach((c, i) => {
+      const m = L.circleMarker([c.lat, c.lng], { radius: 4, color, fillColor: "#000", fillOpacity: 1, weight: 2 })
         .bindTooltip(`${i + 1}`).addTo(map);
       vertexMarkersRef.current.push(m);
     });
@@ -300,13 +323,30 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
 
   const iniciarEdicion = (modo: Modo) => {
     setPuntosActuales([]);
+    setAnillosListos([]);
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
     setModoEdicion(modo);
   };
 
+  // Cierra el anillo en curso y deja el lápiz listo para el siguiente. Es lo
+  // que permite hacer una isla aparte, o un agujero dibujando adentro del
+  // anillo anterior — sin tener que cortar la geocerca cruzando la meta.
+  const cerrarAnillo = () => {
+    if (puntosActuales.length < 3) return;
+    const listos = [...anillosListos, puntosActuales];
+    setAnillosListos(listos);
+    setPuntosActuales([]);
+    const L = (window as any).L, map = mapInstanceRef.current;
+    if (L && map) {
+      if (modoEdicion === "pista") dibujarPistaTemp(L, map, [], listos);
+      else if (modoEdicion === "recinto") dibujarRecintoTemp(L, map, [], listos);
+    }
+  };
+
   const cancelarEdicion = () => {
     setPuntosActuales([]);
+    setAnillosListos([]);
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
     setModoEdicion("ninguno");
@@ -314,28 +354,40 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     const L = (window as any).L;
     const map = mapInstanceRef.current;
     if (L && map) {
-      if (pistaCoords.length)   dibujarPista(L, map, pistaCoords);
-      if (recintoCoords.length) dibujarRecinto(L, map, recintoCoords);
+      if (geocercaDefinida(pistaCoords))   dibujarPista(L, map, pistaCoords);
+      if (geocercaDefinida(recintoCoords)) dibujarRecinto(L, map, recintoCoords);
       if (trazadoCoords.length) dibujarTrazado(L, map, trazadoCoords);
     }
   };
 
+  // Anillos definitivos = los cerrados + el que quedó a medio trazar
+  const anillosFinales = (): Coordenada[][] => {
+    const a = [...anillosListos.filter((r) => r.length >= 3)];
+    if (puntosActuales.length >= 3) a.push(puntosActuales);
+    return a;
+  };
+
   const handleGuardar = async () => {
-    if (puntosActuales.length < 3) {
+    const anillos = anillosFinales();
+    if (!anillos.length) {
       setMensaje({ tipo: "error", texto: "Se necesitan al menos 3 puntos." });
       return;
     }
     setGuardando(true);
     let error: string | undefined;
 
+    // Un solo anillo se guarda plano, igual que siempre: así las geocercas ya
+    // existentes y cualquier versión vieja de la app las siguen leyendo.
+    const aGuardar: GeocercaCoords = anillos.length === 1 ? anillos[0] : anillos;
+
     if (modoEdicion === "pista") {
-      const res = await guardarGeocerca(puntosActuales, 'pista');
+      const res = await guardarGeocerca(aGuardar, 'pista');
       error = res.error;
-      if (!error) setPistaCoords(puntosActuales);
+      if (!error) setPistaCoords(aGuardar);
     } else if (modoEdicion === "recinto") {
-      const res = await guardarGeocerca(puntosActuales, 'recinto');
+      const res = await guardarGeocerca(aGuardar, 'recinto');
       error = res.error;
-      if (!error) setRecintoCoords(puntosActuales);
+      if (!error) setRecintoCoords(aGuardar);
     } else {
       const res = await guardarTrazado(puntosActuales);
       error = res.error;
@@ -348,6 +400,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
     setMensaje({ tipo: "ok", texto: `${labels[modoEdicion]} guardado.` });
     setModoEdicion("ninguno");
     setPuntosActuales([]);
+    setAnillosListos([]);
     vertexMarkersRef.current.forEach((m) => m.remove());
     vertexMarkersRef.current = [];
     setTimeout(() => setMensaje(null), 3000);
@@ -420,8 +473,24 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
                  : modoEdicion === "recinto" ? "✏️ Dibujando geocerca recinto"
                  : "✏️ Dibujando trazado"} — clic en el mapa
               </span>
-              <span className="text-xs text-gray-500">{puntosActuales.length} puntos{puntosActuales.length >= 3 ? " ✓" : " (mín. 3)"}</span>
-              {puntosActuales.length >= 3 && (
+              <span className="text-xs text-gray-500">
+                {puntosActuales.length} puntos{puntosActuales.length >= 3 ? " ✓" : " (mín. 3)"}
+                {anillosListos.length > 0 && (
+                  <span className="text-gray-400"> · {anillosListos.length} anillo{anillosListos.length > 1 ? "s" : ""} cerrado{anillosListos.length > 1 ? "s" : ""}</span>
+                )}
+              </span>
+
+              {/* Islas y agujeros: cerrar el anillo actual y arrancar otro.
+                  Dibujar el segundo adentro del primero lo convierte en agujero. */}
+              {modoEdicion !== "trazado" && puntosActuales.length >= 3 && (
+                <button onClick={cerrarAnillo} disabled={guardando}
+                  title="Cierra este anillo y empieza otro. Si lo dibujás dentro del anterior, queda como agujero."
+                  className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-900 text-sky-300 hover:bg-sky-800 border border-sky-800 transition disabled:opacity-60">
+                  ＋ Cerrar anillo y empezar otro
+                </button>
+              )}
+
+              {(puntosActuales.length >= 3 || anillosListos.length > 0) && (
                 <button onClick={handleGuardar} disabled={guardando}
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-green-600 text-white hover:bg-green-500 transition disabled:opacity-60">
                   {guardando ? "Guardando..." : "✓ Guardar"}

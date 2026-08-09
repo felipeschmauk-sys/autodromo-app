@@ -17,8 +17,10 @@ import { supabase } from "@/lib/supabase";
 import {
   getGeocercaActiva,
   puntoEnGeocerca,
+  geocercaDefinida,
   registrarUbicacion,
   type Coordenada,
+  type GeocercaCoords,
 } from "@/lib/gps";
 
 interface Props {
@@ -49,7 +51,7 @@ const BANDERAS: Record<string, { color: string; bg: string; label: string; emoji
 
 export default function GpsPiloto({ pilotoId }: Props) {
   const [sesion, setSesion] = useState<SesionActiva | null>(null);
-  const [geocerca, setGeocerca] = useState<Coordenada[]>([]);
+  const [geocerca, setGeocerca] = useState<GeocercaCoords>([]);
   const [velocidad, setVelocidad] = useState<number>(0);
   const [dentroGeocerca, setDentroGeocerca] = useState<boolean | null>(null);
   const [gpsActivo, setGpsActivo] = useState(false);
@@ -106,7 +108,7 @@ export default function GpsPiloto({ pilotoId }: Props) {
         setPrecision(Math.round(pos.coords.accuracy));
 
         const coord: Coordenada = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (geocerca.length >= 3) {
+        if (geocercaDefinida(geocerca)) {
           setDentroGeocerca(puntoEnGeocerca(coord, geocerca));
         }
       },
@@ -123,7 +125,7 @@ export default function GpsPiloto({ pilotoId }: Props) {
       if (!pos || !pilotoId || !sesion?.id) return;
 
       const coord: Coordenada = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-      const dentro = geocerca.length >= 3 ? puntoEnGeocerca(coord, geocerca) : true;
+      const dentro = geocercaDefinida(geocerca) ? puntoEnGeocerca(coord, geocerca) : true;
 
       await registrarUbicacion({
         piloto_id: pilotoId,
