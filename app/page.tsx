@@ -35,6 +35,8 @@ interface FechaItem {
   cupos_max: number; estado: string;
   tipo: "racing" | "track_day" | "entrenamiento";
   campeonato_id: string;
+  // Marcha blanca: entra al evento apenas se inscribe, sin aprobación ni pago
+  inscripcion_libre?: boolean;
 }
 interface InscripcionItem {
   id: string; fecha_id: string; estado: string; pago_estado: string;
@@ -1074,13 +1076,21 @@ export default function Home() {
   };
 
   const cargarFechas = async (campId: string) => {
-    const { data } = await supabase
+    const cols = "id, nombre, fecha_evento, autodromo, trazado, cupos_max, estado, tipo, campeonato_id";
+    const query = (sel: string) => supabase
       .from("fechas_evento")
-      .select("id, nombre, fecha_evento, autodromo, trazado, cupos_max, estado, tipo, campeonato_id")
+      .select(sel)
       .eq("campeonato_id", campId)
       .in("estado", ["borrador", "abierto"])
       .order("fecha_evento");
-    setFechasDisp((data || []) as FechaItem[]);
+
+    // Compatibilidad: si task-inscripcion-libre-migration aún no se corrió,
+    // recargar sin esa columna para no dejar al piloto sin fechas
+    let { data, error } = await query(`${cols}, inscripcion_libre`);
+    if (error && /inscripcion_libre/i.test(error.message)) {
+      ({ data } = await query(cols));
+    }
+    setFechasDisp((data || []) as unknown as FechaItem[]);
   };
 
   const cargarMisInscripciones = async (pilotoId: string) => {
@@ -1094,15 +1104,19 @@ export default function Home() {
   const inscribirseEnFecha = async (fecha: FechaItem, campNombre: string) => {
     if (!pilotoData?.id) return;
     setInscribiendo(fecha.id);
+    // Marcha blanca: la fecha marcada como libre auto-confirma la inscripción,
+    // saltando la aprobación del admin. El pago queda "pendiente" a propósito —
+    // nadie pagó, y el panel debe seguir mostrándolo así.
+    const estado = fecha.inscripcion_libre ? "confirmado" : "solicitado";
     const { data, error } = await supabase.from("inscripciones").insert({
       piloto_id:    pilotoData.id,
       fecha_id:     fecha.id,
       campeonato_id: fecha.campeonato_id,
-      estado:       "solicitado",
+      estado,
       pago_estado:  "pendiente",
     }).select().single();
     if (!error && data) {
-      setMisInscripciones(prev => [...prev, { id: data.id, fecha_id: fecha.id, estado: "solicitado", pago_estado: "pendiente" }]);
+      setMisInscripciones(prev => [...prev, { id: data.id, fecha_id: fecha.id, estado, pago_estado: "pendiente" }]);
     }
     setInscribiendo(null);
   };
@@ -2543,8 +2557,13 @@ export default function Home() {
                   ) : fechasDisp.map(fecha => {
                     const esBorrador = fecha.estado === "borrador";
                     const insc = misInscripciones.find(i => i.fecha_id === fecha.id);
-                    const puedeEntrar = insc && ["confirmado","en_pista"].includes(insc.estado);
-                    const badge = insc ? INSC_BADGE[insc.estado] : null;
+                    // Marcha blanca: destraba también a quien ya tenía una
+                    // solicitud pendiente de antes de encender el interruptor
+                    const libre = !!fecha.inscripcion_libre;
+                    const entraPorLibre = !!insc && libre && insc.estado !== "rechazado";
+                    const puedeEntrar = (insc && ["confirmado","en_pista"].includes(insc.estado)) || entraPorLibre;
+                    // Con marcha blanca el badge "Solicitado" contradice al botón de entrar
+                    const badge = insc && !entraPorLibre ? INSC_BADGE[insc.estado] : null;
                     const tipo = fecha.tipo as keyof typeof TIPO_LABEL;
 
                     return (
@@ -2564,6 +2583,11 @@ export default function Home() {
                               {esBorrador && (
                                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-800 text-gray-500 border border-gray-700">
                                   Próximamente
+                                </span>
+                              )}
+                              {libre && !esBorrador && (
+                                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-950 text-amber-400 border border-amber-800">
+                                  Inscripción libre
                                 </span>
                               )}
                             </div>

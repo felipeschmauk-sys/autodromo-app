@@ -3,6 +3,25 @@
 
 ---
 
+## [0.15.0] — 8 Agosto 2026
+### Agregado
+- **Inscripción libre por fecha — provisorio, marcha blanca** (migración:
+  `docs/task-inscripcion-libre-migration.sql`): interruptor en el formulario de
+  la fecha, debajo de Estado. Con él encendido el piloto entra al evento apenas
+  aprieta "Inscribirme", sin aprobación del admin ni pago. Badge ámbar en la
+  lista de fechas del admin y en la tarjeta del piloto para que nunca quede duda
+  de qué fechas están abiertas así
+- No reemplaza nada: el flujo normal (solicitado → inscrito → pago → confirmado)
+  queda intacto y es lo que corre con el interruptor apagado. Se revierte
+  desmarcándolo. El pago queda registrado como "pendiente" a propósito — nadie
+  pagó, y el panel debe seguir mostrándolo así
+- Al encenderlo también se destraba a quien ya tenía una solicitud pendiente de
+  antes, sin tener que corregir filas a mano. Los rechazados siguen rechazados
+- **No saltea la prueba de conocimientos** del campeonato, ni reemplaza el
+  escaneo de QR con que el admin abre la sesión en pista
+
+---
+
 ## [0.14.0] — 7 Agosto 2026
 ### Agregado (Cronometraje — instrumentación para validar)
 - Traza GPS cruda (migración: `docs/task-traza-gps-migration.sql`): el teléfono

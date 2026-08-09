@@ -30,6 +30,8 @@ interface FechaEvento {
   estado: "borrador" | "abierto" | "finalizado";
   tipo: "racing" | "track_day" | "entrenamiento";
   descripcion: string | null;
+  // Marcha blanca: saltea confirmación del admin y pago. Provisorio.
+  inscripcion_libre?: boolean;
 }
 
 interface Inscripcion {
@@ -115,6 +117,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
   const [ffTrazado, setFfTrazado]           = useState("");
   const [ffCupos, setFfCupos]               = useState("30");
   const [ffEstado, setFfEstado]             = useState<"borrador" | "abierto" | "finalizado">("borrador");
+  const [ffLibre, setFfLibre]               = useState(false); // marcha blanca
   const [ffTipo, setFfTipo]                 = useState<"racing" | "track_day" | "entrenamiento">("racing");
   const [ffDesc, setFfDesc]                 = useState("");
 
@@ -175,6 +178,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
     setFfNombre(""); setFfNumero(""); setFfFecha("");
     setFfAutodromo(""); setFfTrazado(""); setFfCupos("30");
     setFfTipo("racing"); setFfEstado("borrador"); setFfDesc("");
+    setFfLibre(false);
     setEditingFechaId(null); setShowFormFecha(false);
   };
 
@@ -242,6 +246,7 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
     setFfTrazado(f.trazado || "");
     setFfCupos(f.cupos_max.toString());
     setFfEstado(f.estado === "finalizado" ? "finalizado" : f.estado);
+    setFfLibre(!!f.inscripcion_libre);
     setFfTipo(f.tipo);
     setFfDesc(f.descripcion || "");
     setEditingFechaId(f.id);
@@ -262,11 +267,19 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
       estado:        ffEstado,
       tipo:          ffTipo,
       descripcion:   ffDesc.trim() || null,
+      inscripcion_libre: ffLibre,
     };
-    if (editingFechaId) {
-      await supabase.from("fechas_evento").update(payload).eq("id", editingFechaId);
-    } else {
-      await supabase.from("fechas_evento").insert(payload);
+    // Compatibilidad: si task-inscripcion-libre-migration aún no se corrió,
+    // reintentar sin la columna para no perder la fecha que se está creando
+    const guardar = async (p: typeof payload | Omit<typeof payload, "inscripcion_libre">) =>
+      editingFechaId
+        ? supabase.from("fechas_evento").update(p).eq("id", editingFechaId)
+        : supabase.from("fechas_evento").insert(p);
+
+    const { error } = await guardar(payload);
+    if (error && /inscripcion_libre/i.test(error.message)) {
+      const { inscripcion_libre: _omitido, ...sinLibre } = payload;
+      await guardar(sinLibre);
     }
     if (onContextoCambia) onContextoCambia();
     resetFormFecha();
@@ -416,6 +429,33 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
             <option value="abierto">Inscripciones abiertas</option>
             <option value="finalizado">Finalizado</option>
           </select>
+        </div>
+        {/* ── MARCHA BLANCA — provisorio ──────────────────────
+            No reemplaza el flujo normal: cuando está apagado, la inscripción
+            sigue pasando por confirmación del admin y pago, igual que siempre. */}
+        <div className="col-span-2">
+          <button
+            type="button"
+            onClick={() => setFfLibre(v => !v)}
+            className={`w-full flex items-start gap-3 border rounded-xl px-4 py-3 text-left transition ${
+              ffLibre
+                ? "bg-amber-50 border-amber-300"
+                : "bg-white border-gray-200 hover:border-gray-300"
+            }`}>
+            <span className={`mt-0.5 w-5 h-5 rounded-md border flex items-center justify-center flex-shrink-0 text-xs font-bold ${
+              ffLibre ? "bg-amber-500 border-amber-500 text-white" : "border-gray-300 text-transparent"
+            }`}>✓</span>
+            <span className="min-w-0">
+              <span className={`block text-sm font-semibold ${ffLibre ? "text-amber-900" : "text-gray-700"}`}>
+                Inscripción libre {ffLibre && <span className="font-normal">· activa</span>}
+              </span>
+              <span className="block text-xs text-gray-500 mt-0.5 leading-relaxed">
+                Marcha blanca: el piloto entra al evento apenas se inscribe, sin
+                aprobación del admin ni pago. La prueba de conocimientos se sigue
+                pidiendo. Desmarcar para volver al flujo normal.
+              </span>
+            </span>
+          </button>
         </div>
         <div className="col-span-2">
           <label className={labelCls}>Descripción</label>
@@ -592,6 +632,13 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
                             <span className={`w-1.5 h-1.5 rounded-full ${ef.dot}`} />
                             {ef.label}
                           </span>
+                          {f.inscripcion_libre && (
+                            <span
+                              title="Marcha blanca: los pilotos entran sin aprobación ni pago"
+                              className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                              Inscripción libre
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {new Date(f.fecha_evento + "T12:00:00").toLocaleDateString("es-CL", { weekday: "short", day: "numeric", month: "long", year: "numeric" })}

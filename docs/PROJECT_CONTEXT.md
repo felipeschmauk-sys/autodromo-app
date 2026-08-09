@@ -290,6 +290,12 @@ Todas las tablas tienen políticas abiertas `FOR ALL USING (true)`. El control d
 - ✅ `inscripciones` confirmada en la publicación `supabase_realtime` (2 Jul 2026)
 
 ### Migraciones SQL Pendientes de Ejecutar
+- ⏳ `task-inscripcion-libre-migration.sql` (8 Ago 2026): columna
+  `fechas_evento.inscripcion_libre`. **Provisorio, marcha blanca**: saltea la
+  aprobación del admin y el pago. Sin correrla la app funciona igual y el
+  interruptor simplemente no guarda nada. Para revertir, ver los comandos
+  comentados al final del archivo
+
 El archivo `task-56-migration.sql` debe correrse en Supabase si aún no se ha hecho:
 ```sql
 -- Agregar bandera personal por piloto
