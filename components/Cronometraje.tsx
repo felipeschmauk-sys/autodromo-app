@@ -208,12 +208,13 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       pid: string; cruces: number; completadas: number;
       mejor: number | null; ultima: number | null; lastCruce: number;
       crucesPorNumero: Map<number, number>;
+      sospechosas: number; // vueltas demasiado largas → cruce probablemente perdido
     }
     const por = new Map<string, Stat>();
     for (const v of vueltas) {
       let s = por.get(v.piloto_id);
       if (!s) {
-        s = { pid: v.piloto_id, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map() };
+        s = { pid: v.piloto_id, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map(), sospechosas: 0 };
         por.set(v.piloto_id, s);
       }
       const cruceMs = new Date(v.cruce_at).getTime();
@@ -223,10 +224,32 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     }
     for (const s of por.values()) s.completadas = Math.max(0, s.cruces - 1);
 
+    // ── Vueltas sospechosas: cruces que probablemente se perdieron ──
+    // Si el teléfono pierde señal en pista, el cruce que ocurre en ese hueco no
+    // queda registrado y las dos vueltas se fusionan en una anormalmente larga.
+    // El dato no se puede recuperar (no existe), pero sí avisar de que ese
+    // conteo quedó corto, en vez de descubrirlo al terminar.
+    //
+    // Criterio, calibrado contra la carrera del 9 ago 2026:
+    //  - 2,2× la mejor vuelta DEL PROPIO PILOTO (así no castiga al que gira lento)
+    //  - sin contar su primera vuelta cronometrada: la de largada es lenta de
+    //    verdad —parada, embudo en la primera curva— y daba falso positivo
+    // Detecta el caso de pérdida de señal en pista. No detecta pérdidas ANTES
+    // de la primera vuelta registrada; ese otro origen (geocerca) se corrigió
+    // en la raíz sacándole la geocerca al detector de cruces.
+    for (const s of por.values()) {
+      if (s.mejor == null) continue;
+      const suyas = vueltas
+        .filter(v => v.piloto_id === s.pid && v.tiempo_ms != null)
+        .sort((a, b) => a.numero - b.numero)
+        .slice(1); // saltar la vuelta de apertura
+      s.sospechosas = suyas.filter(v => (v.tiempo_ms as number) > (s.mejor as number) * 2.2).length;
+    }
+
     // Pilotos con posición GPS pero sin vueltas aún también aparecen
     for (const pid of posiciones.keys()) {
       if (!por.has(pid) && pilotosInfo.has(pid)) {
-        por.set(pid, { pid, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map() });
+        por.set(pid, { pid, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map(), sospechosas: 0 });
       }
     }
 
@@ -299,6 +322,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         numero: info?.numero ?? null,
         nombre: info?.nombre ?? s.pid.slice(0, 8),
         completadas: s.completadas,
+        sospechosas: s.sospechosas,
         mejor: s.mejor,
         ultima: s.ultima,
         esMejorAbs: s.mejor != null && s.mejor === mejorAbs,
@@ -547,7 +571,16 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
                   </span>
                   {f.nombre}
                 </td>
-                <td className="py-2.5 px-2 text-center tabular-nums">{f.completadas}</td>
+                <td className="py-2.5 px-2 text-center tabular-nums">
+                  {f.completadas}
+                  {f.sospechosas > 0 && (
+                    <span
+                      title={`${f.sospechosas} vuelta${f.sospechosas > 1 ? "s" : ""} anormalmente larga${f.sospechosas > 1 ? "s" : ""}: probable pérdida de señal, el conteo puede estar corto`}
+                      className="ml-1.5 text-[11px] font-bold"
+                      style={{ color: "#fbbf24" }}
+                    >⚠</span>
+                  )}
+                </td>
                 <td className="py-2.5 px-2 text-right tabular-nums" style={{ color: "#a1a1aa" }}>{f.gap}</td>
                 <td className="py-2.5 px-2 text-right tabular-nums font-medium" style={{ color: f.esMejorAbs ? "#c084fc" : "#e4e4e7" }}>{fmtMs(f.mejor)}</td>
                 <td className="py-2.5 px-2 text-right tabular-nums" style={{ color: "#a1a1aa" }}>{fmtMs(f.ultima)}</td>

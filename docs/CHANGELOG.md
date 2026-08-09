@@ -3,6 +3,35 @@
 
 ---
 
+## [0.17.0] — 9 Agosto 2026
+### Corregido (Cronometraje — las dos fallas de la Carrera 1)
+- **El detector de cruces ya no depende de la geocerca.** Antes exigía estar
+  dentro del polígono y, si no, además BORRABA la memoria de dónde venía el
+  auto — así que un pellizco del polígono cerca de meta borraba el cruce
+  entero. Medido sobre la traza: la geocerca se angosta en la recta de meta
+  (el anillo llega a pasar a 13 m del eje) y los 272 puntos rechazados están
+  todos en el tramo 90-100% y 0-10% de la vuelta. Contar vueltas no puede
+  depender de con cuánto cuidado se dibujó un polígono: ahora se exige ir
+  dentro de un corredor de 45 m alrededor del TRAZADO. La geocerca sigue
+  mandando en "en pista / boxes", que es para lo que sirve
+- **El cruce se detecta por retroceso del progreso**, no por una ventana fija.
+  Antes exigía ver una lectura después del 88% Y otra antes del 12%; si el GPS
+  se salteaba justo esa ventana, la vuelta se perdía. Ahora pregunta si el
+  progreso retrocedió más de media vuelta, que aguanta lecturas perdidas
+- Verificado reproduciendo la carrera completa sobre las 3257 lecturas reales:
+  el piloto que había contado 6 de 9 vueltas cuenta 9; el que contaba bien
+  sigue igual (sin regresión). El tercero sigue perdiendo 1 porque ocurrió
+  dentro de un apagón de GPS de 124 s — ahí no hay dato que recuperar
+
+### Agregado
+- Aviso ⚠ en la tabla de Crono cuando un piloto tiene vueltas anormalmente
+  largas (2,2× su propia mejor, sin contar la de largada): señal de que se le
+  perdió un cruce y su conteo puede estar corto. Calibrado contra la carrera
+  del 9 ago: detecta el apagón de GPS sin marcar al que giró lento en la
+  largada
+
+---
+
 ## [0.16.0] — 9 Agosto 2026
 ### Agregado
 - **Geocercas de varios anillos: islas y agujeros.** La geocerca de pista es un

@@ -774,6 +774,11 @@ function vaciarPilaDeshacer() {
   } catch { /* navegador sin execCommand heredado: nada que hacer */ }
 }
 
+// Ancho del corredor alrededor del trazado dentro del cual un cruce de meta
+// cuenta, en metros. Los autos de la carrera del 9 ago iban hasta 28 m del eje,
+// así que 45 da margen sin llegar a tomar el pit lane como pista.
+const CORREDOR_META_M = 45;
+
 // ── Hora de una lectura del GPS, saneada ──────────────────────
 // pos.timestamp no es confiable en todos los aparatos: algunos reportan el
 // tiempo desde que arrancó el teléfono en vez de la hora real. Con un valor así
@@ -1537,28 +1542,39 @@ export default function Home() {
       // sea exactamente lo que el detector vio.
       const posicionEnTrazado = (lat: number, lng: number) => {
         const tr = trazadoRef.current;
-        if (tr.length < 8) return { idx: null as number | null, prog: null as number | null };
+        if (tr.length < 8) return { idx: null as number | null, prog: null as number | null, dist: null as number | null };
         let idx = 0, min = Infinity;
         for (let i = 0; i < tr.length; i++) {
           const d = (lat - tr[i].lat) ** 2 + (lng - tr[i].lng) ** 2;
           if (d < min) { min = d; idx = i; }
         }
         const metaIdx = tandaPilotoRef.current?.metaIdx ?? 0;
-        return { idx, prog: ((idx - metaIdx + tr.length) % tr.length) / tr.length };
+        // Distancia aproximada al eje de pista, en metros
+        const dLat = lat - tr[idx].lat;
+        const dLng = (lng - tr[idx].lng) * Math.cos((lat * Math.PI) / 180);
+        return {
+          idx,
+          prog: ((idx - metaIdx + tr.length) % tr.length) / tr.length,
+          dist: Math.sqrt(dLat * dLat + dLng * dLng) * 111320,
+        };
       };
 
       // Detector de cruce de meta (corre a ~1 Hz con cada lectura del GPS)
-      const detectarCruceMeta = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null }) => {
+      const detectarCruceMeta = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null; dist: number | null }) => {
         const tanda = tandaPilotoRef.current;
         const tr    = trazadoRef.current;
         const c     = cronoRef.current;
         if (!tanda || c.cerrado || tr.length < 8 || !sesionId) return;
         if (p.prog === null) return;
 
-        const lat = pos.coords.latitude, lng = pos.coords.longitude;
-        // Solo cuentan cruces dentro de la geocerca de pista
-        const gc = geocercaGpsRef.current;
-        if (geocercaDefinida(gc) && !puntoEnGeocerca({ lat, lng }, gc)) { c.progAnt = null; return; }
+        // El detector NO usa la geocerca. Antes sí, y cualquier pellizco del
+        // polígono cerca de meta borraba cruces: en la carrera del 9 ago la
+        // geocerca se angostaba en la recta y le costó 3 vueltas a un piloto,
+        // aunque iba a 9-28 m del eje de pista. Contar vueltas no debe depender
+        // de con cuánto cuidado se dibujó un polígono, así que lo que se exige
+        // es ir CERCA DEL TRAZADO. La geocerca sigue mandando en "en pista /
+        // boxes", que es para lo que sirve.
+        if (p.dist !== null && p.dist > CORREDOR_META_M) return; // sin borrar progAnt
 
         const prog  = p.prog;
         const ahora = msValido(pos.timestamp);
@@ -1566,8 +1582,12 @@ export default function Home() {
         // Histéresis: el detector se arma al pasar por la mitad del circuito
         if (prog > 0.4 && prog < 0.7) c.armado = true;
 
+        // Cruce = el progreso retrocedió más de media vuelta. Antes se exigía
+        // ver una lectura después del 88% Y otra antes del 12%; si el GPS se
+        // salteaba justo esa ventana, la vuelta se perdía entera. Preguntar por
+        // el retroceso aguanta lecturas perdidas.
         const pAnt  = c.progAnt;
-        const cruzo = c.armado && pAnt !== null && pAnt > 0.88 && prog < 0.12;
+        const cruzo = c.armado && pAnt !== null && prog < pAnt - 0.5;
         if (cruzo && pAnt !== null) {
           // Interpolar el instante exacto del cruce entre ambas lecturas
           const tramoAntes   = 1 - pAnt;
