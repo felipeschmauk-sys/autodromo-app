@@ -3,6 +3,33 @@
 
 ---
 
+## [0.20.0] — 10 Agosto 2026
+### Corregido (Precisión — base para los gaps entre pilotos)
+- **Proyección sobre el segmento del trazado** (`lib/trazado.ts`). La posición
+  del auto se resolvía saltando al punto más cercano del trazado: con 84 puntos
+  en 2550 m, bloques de 30 m, y a 135 km/h casi 0,8 s de incertidumbre. Ahora se
+  proyecta sobre el segmento entre dos puntos, así que la distancia recorrida es
+  continua y no depende de cuántos puntos tenga el trazado dibujado
+- **Medido contra MyLaps** replayando la Carrera 2 completa (mismo piloto, mismas
+  10 vueltas, dato externo de transponder):
+
+  | | Por punto | Por segmento |
+  |---|---|---|
+  | Error medio | 0,240 s | **0,014 s** |
+  | Error máximo | 0,475 s | **0,037 s** |
+  | Desviación | 0,299 s | **0,017 s** |
+
+- **El desfase de reloj ya se aplica.** Se medía y guardaba desde 0.14.0 pero no
+  se usaba. Cada cruce se marca con el reloj del teléfono de su piloto, y esos
+  relojes no coinciden — la diferencia contra el líder arrastraba el desfase
+  entero. Sobre las carreras del 9 ago la corrección mueve las diferencias hasta
+  0,607 s. Los tiempos de vuelta NO se corrigen: son restas dentro del mismo
+  aparato y el error del reloj ya se cancela solo
+- El corredor de 45 m de la meta ahora usa la distancia perpendicular real al
+  eje de pista, no la distancia al punto más cercano
+
+---
+
 ## [0.19.0] — 10 Agosto 2026
 ### Agregado (Revisión de resultados)
 - **Vuelta a vuelta por piloto en Crono**: tocando la fila de un piloto se

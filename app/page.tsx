@@ -2,8 +2,9 @@
 import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
-import { medirOffsetReloj, getOffsetReloj } from "@/lib/reloj";
+import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
 import { vueltasDeCarrera, desdeLargadaMs } from "@/lib/carrera";
+import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -1358,7 +1359,13 @@ export default function Home() {
   // independiente de la frecuencia de envío al mapa. El instante del cruce
   // se interpola entre las dos lecturas que rodean la meta.
   const trazadoRef = useRef<Coordenada[]>([]);
-  useEffect(() => { trazadoRef.current = trazado; }, [trazado]);
+  // El trazado preparado (distancias acumuladas) se recalcula solo al cambiar
+  // el circuito, no en cada lectura del GPS
+  const trazadoPrepRef = useRef<TrazadoPreparado | null>(null);
+  useEffect(() => {
+    trazadoRef.current = trazado;
+    trazadoPrepRef.current = prepararTrazado(trazado);
+  }, [trazado]);
   const vueltaMinSRef  = useRef(40); // vuelta mínima válida (por circuito)
   const tandaPilotoRef = useRef<{
     id: string; tipo: string; inicioMs: number;
@@ -1564,21 +1571,17 @@ export default function Home() {
       // usan tanto el detector como la traza cruda, para que lo que se graba
       // sea exactamente lo que el detector vio.
       const posicionEnTrazado = (lat: number, lng: number) => {
-        const tr = trazadoRef.current;
-        if (tr.length < 8) return { idx: null as number | null, prog: null as number | null, dist: null as number | null };
-        let idx = 0, min = Infinity;
-        for (let i = 0; i < tr.length; i++) {
-          const d = (lat - tr[i].lat) ** 2 + (lng - tr[i].lng) ** 2;
-          if (d < min) { min = d; idx = i; }
-        }
-        const metaIdx = tandaPilotoRef.current?.metaIdx ?? 0;
-        // Distancia aproximada al eje de pista, en metros
-        const dLat = lat - tr[idx].lat;
-        const dLng = (lng - tr[idx].lng) * Math.cos((lat * Math.PI) / 180);
+        const tzp = trazadoPrepRef.current;
+        if (!tzp) return { idx: null as number | null, prog: null as number | null, dist: null as number | null };
+        // Proyección sobre el SEGMENTO, no salto al punto más cercano: da una
+        // distancia continua. Medido contra MyLaps sobre la Carrera 2, esto
+        // bajó el error de los tiempos de vuelta de 0,240 s a 0,014 s.
+        const p = proyectar(lat, lng, tzp);
+        const metaDist = distanciaDeMeta(tandaPilotoRef.current?.metaIdx ?? 0, tzp);
         return {
-          idx,
-          prog: ((idx - metaIdx + tr.length) % tr.length) / tr.length,
-          dist: Math.sqrt(dLat * dLat + dLng * dLng) * 111320,
+          idx:  p.idx,
+          prog: progresoDesdeMeta(p.distancia, metaDist, tzp.largo),
+          dist: p.desvio, // distancia perpendicular al eje: el corredor de meta
         };
       };
 
@@ -1621,7 +1624,10 @@ export default function Home() {
           if (!c.ultimoCruceMs || cruceMs - c.ultimoCruceMs >= vueltaMinMs) {
             const tiempo = c.ultimoCruceMs ? Math.round(cruceMs - c.ultimoCruceMs) : null;
             c.numero += 1;
-            c.cruces.push(cruceMs);
+            // Se guarda en hora de SERVIDOR: se compara contra la largada, que
+            // viene del servidor. El tiempo de vuelta sigue saliendo de la resta
+            // de horas del propio teléfono, donde el desfase se cancela solo.
+            c.cruces.push(aHoraServidor(cruceMs));
             c.armado = false;
             c.ultimoCruceMs = cruceMs;
             // offset_ms se GUARDA pero no se aplica: cruce_at sigue siendo la
@@ -1652,7 +1658,8 @@ export default function Home() {
             // ocurra primero. Este cruce cierra la participación del piloto
             // (la vuelta iniciada antes del final SÍ vale):
             // 1) tiempo de tanda cumplido
-            if (tanda.deadlineMs && cruceMs > tanda.deadlineMs) c.cerrado = true;
+            const cruceServidor = aHoraServidor(cruceMs);
+            if (tanda.deadlineMs && cruceServidor > tanda.deadlineMs) c.cerrado = true;
             // 2) carrera a N vueltas: el propio piloto las completó…
             //    Con la largada marcada se cuentan solo las vueltas POSTERIORES
             //    a ella: las pasadas detrás del pace car no son de carrera. Sin
@@ -1663,7 +1670,7 @@ export default function Home() {
             if (tanda.tipo === "carrera" && c.liderTermino) c.cerrado = true;
             // 4) tanda ya finalizada (auto o manual): este cruce fue la
             //    vuelta de gracia — cerrar
-            if (tanda.finMs && cruceMs > tanda.finMs) c.cerrado = true;
+            if (tanda.finMs && cruceServidor > tanda.finMs) c.cerrado = true;
           }
         }
         c.progAnt = prog;

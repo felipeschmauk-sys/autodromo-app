@@ -27,6 +27,17 @@ export function getMargenReloj() {
   return margenMs
 }
 
+/**
+ * Pasa un instante medido con el reloj DEL TELÉFONO a la escala del servidor.
+ * Necesario para comparar contra cualquier hora que venga del servidor (inicio
+ * de tanda, largada, fin) y para comparar pilotos entre sí. Los tiempos de
+ * vuelta NO deben corregirse: son diferencias dentro del mismo aparato y el
+ * error del reloj ya se cancela solo.
+ */
+export function aHoraServidor(msDispositivo: number): number {
+  return offsetMs == null ? msDispositivo : msDispositivo + offsetMs
+}
+
 async function unaMuestra(): Promise<{ offset: number; rtt: number } | null> {
   try {
     const t0 = Date.now()

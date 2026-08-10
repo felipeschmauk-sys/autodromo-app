@@ -40,6 +40,7 @@ interface Tanda {
 }
 interface VueltaRow {
   piloto_id: string; numero: number; cruce_at: string; tiempo_ms: number | null; valida: boolean;
+  offset_ms?: number | null; // desfase del reloj de ESE teléfono contra el servidor
 }
 interface PilotoInfo { nombre: string; numero: string | null; }
 interface PosPiloto { lat: number; lng: number; ts: number; dentro: boolean | null; }
@@ -174,7 +175,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     const cargar = async () => {
       const { data, error } = await supabase
         .from("vueltas")
-        .select("piloto_id, numero, cruce_at, tiempo_ms, valida")
+        .select("piloto_id, numero, cruce_at, tiempo_ms, valida, offset_ms")
         .eq("tanda_id", tid)
         .order("cruce_at");
       if (!error && data) setVueltas(data as VueltaRow[]);
@@ -214,6 +215,12 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     return () => clearInterval(id);
   }, []);
 
+  // Instante del cruce en hora de SERVIDOR. Cada cruce se marca con el reloj
+  // del teléfono de su piloto, y esos relojes no coinciden: en la Carrera 1 del
+  // 9 ago había 4 segundos entre el más adelantado y el más atrasado. Sin
+  // corregir, la diferencia contra el líder arrastra ese desfase entero.
+  const horaServidor = (v: VueltaRow) => new Date(v.cruce_at).getTime() + (v.offset_ms ?? 0);
+
   // ── Estadísticas por piloto ──
   const filas = useMemo(() => {
     if (!tandaSel) return [];
@@ -245,7 +252,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       const ordenadas = [...todas].sort((a, b) => a.numero - b.numero);
       const deCarrera = largadaMs == null
         ? ordenadas.slice(1) // sin marca: fuera la vuelta de salida
-        : ordenadas.filter(v => esVueltaDeCarrera(new Date(v.cruce_at).getTime(), largadaMs));
+        : ordenadas.filter(v => esVueltaDeCarrera(horaServidor(v), largadaMs));
 
       const s: Stat = {
         pid, cruces: ordenadas.length, completadas: deCarrera.length,
@@ -253,7 +260,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         crucesPorNumero: new Map(), sospechosas: 0, detalle: deCarrera,
       };
       deCarrera.forEach((v, i) => {
-        const cruceMs = new Date(v.cruce_at).getTime();
+        const cruceMs = horaServidor(v);
         s.crucesPorNumero.set(i + 1, cruceMs); // renumeradas desde 1
         s.lastCruce = cruceMs;
         s.ultima = v.tiempo_ms;
@@ -280,7 +287,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       const ordenadas = [...(porPiloto.get(s.pid) ?? [])].sort((a, b) => a.numero - b.numero);
       const deCarrera = largadaMs == null
         ? ordenadas.slice(1)
-        : ordenadas.filter(v => esVueltaDeCarrera(new Date(v.cruce_at).getTime(), largadaMs));
+        : ordenadas.filter(v => esVueltaDeCarrera(horaServidor(v), largadaMs));
       const suyas = deCarrera.filter(v => v.tiempo_ms != null).slice(1); // saltar la de largada
       s.sospechosas = suyas.filter(v => (v.tiempo_ms as number) > (s.mejor as number) * 2.2).length;
     }
@@ -385,7 +392,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     let ult: { t: number; ms: number; pid: string } | null = null;
     for (const v of vueltas) {
       if (v.tiempo_ms == null) continue;
-      const t = new Date(v.cruce_at).getTime();
+      const t = horaServidor(v);
       if (!ult || t > ult.t) ult = { t, ms: v.tiempo_ms, pid: v.piloto_id };
     }
     return ult;
