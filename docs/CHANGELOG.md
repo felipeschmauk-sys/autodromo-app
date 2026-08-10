@@ -13,9 +13,12 @@
 - **Pantalla del piloto** siguiendo el diseño de Felipe: posición en carrera
   arriba a la izquierda, vuelta arriba a la derecha, y las dos diferencias en
   las esquinas inferiores, cada una con su flecha de tendencia
-- La flecha sigue al valor con signo y el color dice si conviene: perder terreno
-  contra el de adelante y que el de atrás se acerque son ambos rojos. La
-  tendencia tiene memoria — si la variación no supera un umbral se conserva la
+- **Flecha y color dicen cosas distintas.** La flecha es el hecho físico y es
+  igual en los dos lados: ▼ me acerco, ▲ me alejo. El color dice si eso conviene,
+  y ahí sí se invierte — acercarme al de adelante es verde, que el de atrás se me
+  acerque es rojo. El signo del número no participa: `+` es la etiqueta del
+  piloto de adelante y `−` la del de atrás
+- La tendencia tiene memoria: si la variación no supera un umbral se conserva la
   flecha anterior, para que no titile a 1 Hz
 - **La bandera azul se enciende y se apaga sola.** Entra por debajo de la
   bandera personal en la jerarquía: si el director pone una a mano, esa manda.

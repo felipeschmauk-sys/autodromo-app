@@ -373,15 +373,22 @@ function PizarraLandscape({
   const colorDato = oscuro ? "#111827" : "#ffffff";
   const Dato = ({ valor, tend, alinear }: { valor: number | null; tend: number; alinear: "left" | "right" }) => {
     if (valor == null) return <span />;
-    // tend = +1 el valor absoluto crece, -1 se achica.
-    // Adelante: que crezca es malo (me escapo del rival). Atrás: que crezca es
-    // bueno (lo dejo atrás). La flecha sigue al valor CON signo, que es como se
-    // lee de un vistazo: sube = me va peor de ese lado.
+    // tend = +1 la distancia crece, -1 se achica.
+    //
+    // La FLECHA dice el hecho físico y es igual en los dos lados:
+    //   ▼ me estoy acercando   ·   ▲ me estoy alejando
+    //
+    // El COLOR dice si eso me conviene, y ahí sí se invierte:
+    //   adelante → acercarme es bueno (verde), alejarme es malo (rojo)
+    //   atrás    → que se acerque es malo (rojo), que se aleje es bueno (verde)
+    //
+    // El signo del número no participa de nada de esto: + es la etiqueta del
+    // piloto de adelante y − la del de atrás.
     const bueno = alinear === "left" ? tend < 0 : tend > 0;
-    const flechaArriba = alinear === "left" ? tend > 0 : tend < 0;
+    const flechaArriba = tend > 0;
     const color = tend === 0 ? (oscuro ? "#4b5563" : "rgba(255,255,255,0.55)")
       : bueno ? "#22c55e" : "#ef4444";
-    const txt = (valor >= 0 ? "+" : "") + valor.toFixed(1).replace(".", ",") + "s";
+    const txt = (alinear === "left" ? "+" : "−") + Math.abs(valor).toFixed(1).replace(".", ",") + "s";
     return (
       <span className="flex items-center gap-2" style={{ color: colorDato }}>
         <span style={{ fontSize: "clamp(22px, 4.4vw, 52px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{txt}</span>
