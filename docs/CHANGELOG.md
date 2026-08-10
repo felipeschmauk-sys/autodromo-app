@@ -3,6 +3,32 @@
 
 ---
 
+## [0.22.0] — 10 Agosto 2026
+### Agregado (Cálculo de gaps y bandera azul — motor, todavía sin conectar)
+- `lib/gaps.ts`: diferencia de tiempo entre pilotos y detección de bandera azul.
+  El gap no se calcula restando posiciones sino preguntando "¿hace cuánto que el
+  de adelante pasó por el punto donde estoy yo ahora?", interpolando sobre el
+  historial del otro piloto
+- Reglas implementadas tal como las definió Felipe: los gaps se muestran **solo
+  entre competidores de la misma vuelta** (un doblado no es rival del puntero);
+  la bandera azul es la única excepción y viaja en un solo sentido — la ve
+  únicamente el más lento; quien está en boxes sale del cálculo y al reingresar
+  vuelve a participar
+- Histéresis para la bandera azul: tolera huecos cortos de señal y garantiza una
+  duración mínima en pantalla. Una bandera que titila es peor que no tenerla
+
+### Validado replayando la Carrera 2 completa (969 s, 4 pilotos)
+- Detecta correctamente que **pac fue doblado por fac** — el par real — con la
+  bandera encendida 49 s mientras fac se le acercaba de 5 s a 1,2 s
+- Detecta la segunda aproximación de fac cerca del final, que la carrera cortó
+- Las vueltas finales del replay coinciden con el resultado real de la carrera
+- Consistencia interna: el "atrás" de un piloto coincide con el "adelante" del
+  que lo sigue
+- El replay destapó un parpadeo de la bandera (5 tramos cortados en vez de 2);
+  se corrigió antes de dar por bueno el módulo
+
+---
+
 ## [0.21.0] — 10 Agosto 2026
 ### Agregado (Transporte de posiciones en vivo — base para los gaps)
 - **Posiciones por Realtime broadcast a 1 Hz** (`lib/posiciones.ts`). La única
