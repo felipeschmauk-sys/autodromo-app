@@ -5,6 +5,7 @@ import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida,
 import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
 import { vueltasDeCarrera, desdeLargadaMs } from "@/lib/carrera";
 import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
+import { abrirEmisorPosiciones } from "@/lib/posiciones";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -1362,6 +1363,8 @@ export default function Home() {
   // El trazado preparado (distancias acumuladas) se recalcula solo al cambiar
   // el circuito, no en cada lectura del GPS
   const trazadoPrepRef = useRef<TrazadoPreparado | null>(null);
+  const fechaIdRef = useRef<string | null>(null);
+  useEffect(() => { fechaIdRef.current = eventoActivo?.fechaId ?? null; }, [eventoActivo?.fechaId]);
   useEffect(() => {
     trazadoRef.current = trazado;
     trazadoPrepRef.current = prepararTrazado(trazado);
@@ -1497,6 +1500,22 @@ export default function Home() {
     let intervalo: ReturnType<typeof setInterval> | null = null;
     let ultimaPos: GeolocationPosition | null = null;
 
+    // ── Posiciones en vivo por broadcast (1 Hz) ───────────────
+    // Alimenta el cálculo de diferencias contra el auto de adelante y de atrás.
+    // Es efímero y no escribe en la base: la escritura cada 3 s sigue aparte
+    // como registro y como respaldo si el canal no llega a abrir.
+    let emisor: ReturnType<typeof abrirEmisorPosiciones> | null = null;
+    let fechaEmisor: string | null = null;
+
+    const asegurarEmisor = () => {
+      const fid = fechaIdRef.current;
+      if (fid === fechaEmisor) return emisor;
+      emisor?.cerrar();
+      emisor = fid ? abrirEmisorPosiciones(fid) : null;
+      fechaEmisor = fid;
+      return emisor;
+    };
+
     // ── Traza GPS cruda (diagnóstico de cronometraje) ──────────
     const traza: FilaTrazaGps[] = [];
     let trazaIntervalo: ReturnType<typeof setInterval> | null = null;
@@ -1542,6 +1561,7 @@ export default function Home() {
       if (watchId !== null)  { navigator.geolocation.clearWatch(watchId); watchId = null; }
       if (intervalo)         { clearInterval(intervalo); intervalo = null; }
       if (trazaIntervalo)    { clearInterval(trazaIntervalo); trazaIntervalo = null; }
+      emisor?.cerrar(); emisor = null; fechaEmisor = null;
       sesionId = null;
     };
 
@@ -1581,12 +1601,13 @@ export default function Home() {
         return {
           idx:  p.idx,
           prog: progresoDesdeMeta(p.distancia, metaDist, tzp.largo),
-          dist: p.desvio, // distancia perpendicular al eje: el corredor de meta
+          dist: p.desvio,          // distancia perpendicular al eje: corredor de meta
+          recorrido: p.distancia,  // metros sobre el trazado, para los gaps
         };
       };
 
       // Detector de cruce de meta (corre a ~1 Hz con cada lectura del GPS)
-      const detectarCruceMeta = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null; dist: number | null }) => {
+      const detectarCruceMeta = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null; dist: number | null; recorrido?: number | null }) => {
         const tanda = tandaPilotoRef.current;
         const tr    = trazadoRef.current;
         const c     = cronoRef.current;
@@ -1681,7 +1702,7 @@ export default function Home() {
       // Se acumula en memoria y se vuelca en lotes. Solo se graba lo que sirve
       // para analizar (en tanda, o dentro de la pista): una jornada entera en
       // boxes llenaría la tabla sin aportar nada.
-      const bufferTraza = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null }) => {
+      const bufferTraza = (pos: GeolocationPosition, p: { idx: number | null; prog: number | null; dist?: number | null; recorrido?: number | null }) => {
         const sid = sesionId;
         if (trazaApagada || !sid) return;
         const tanda = tandaPilotoRef.current;
@@ -1712,12 +1733,36 @@ export default function Home() {
         });
       };
 
+      const emitirPosicion = (
+        pos: GeolocationPosition,
+        p: { prog: number | null; recorrido?: number | null },
+      ) => {
+        const em = asegurarEmisor();
+        if (!em) return;
+        const gc = geocercaGpsRef.current;
+        const lat = pos.coords.latitude, lng = pos.coords.longitude;
+        const tanda = tandaPilotoRef.current;
+        em.enviar({
+          pid:   pilotoId,
+          // Hora de servidor: los relojes de los teléfonos no coinciden y sin
+          // alinearlos las diferencias entre pilotos salen corridas
+          t:     aHoraServidor(msValido(pos.timestamp)),
+          lat, lng,
+          d:     p.recorrido ?? null,
+          p:     p.prog,
+          v:     pos.coords.speed ?? null,
+          vu:    vueltasDeCarrera(cronoRef.current.cruces, tanda?.largadaMs ?? null),
+          pista: geocercaDefinida(gc) ? puntoEnGeocerca({ lat, lng }, gc) : null,
+        });
+      };
+
       watchId = navigator.geolocation.watchPosition(
         pos => {
           ultimaPos = pos;
           const p = posicionEnTrazado(pos.coords.latitude, pos.coords.longitude);
           detectarCruceMeta(pos, p);
           bufferTraza(pos, p);
+          emitirPosicion(pos, p);
         },
         null,
         { enableHighAccuracy: true, maximumAge: 1000 }

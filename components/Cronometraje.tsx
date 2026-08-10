@@ -15,6 +15,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esVueltaDeCarrera } from "@/lib/carrera";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
+import { suscribirPosiciones } from "@/lib/posiciones";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
 interface Props {
@@ -43,7 +44,19 @@ interface VueltaRow {
   offset_ms?: number | null; // desfase del reloj de ESE teléfono contra el servidor
 }
 interface PilotoInfo { nombre: string; numero: string | null; }
-interface PosPiloto { lat: number; lng: number; ts: number; dentro: boolean | null; }
+interface PosPiloto {
+  lat: number; lng: number; ts: number; dentro: boolean | null;
+  /** Metros recorridos sobre el trazado. Solo llega por broadcast. */
+  d?: number | null;
+  /** Progreso 0..1 ya calculado en el teléfono, con proyección sobre segmento */
+  p?: number | null;
+  /** Velocidad en m/s */
+  v?: number | null;
+  /** Vueltas de carrera completadas según el propio teléfono */
+  vu?: number;
+  /** true si vino por broadcast (1 Hz) y no de la tabla (3 s) */
+  vivo?: boolean;
+}
 
 const TIPO_CFG: Record<string, { label: string; bg: string }> = {
   libre:         { label: "LIBRE",         bg: "#52525b" },
@@ -191,7 +204,27 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     return () => { supabase.removeChannel(ch); clearInterval(poll); };
   }, [tandaSelId]);
 
-  // ── Posiciones GPS en vivo (estado + progreso de carrera) ──
+  // ── Posiciones GPS en vivo ─────────────────────────────────
+  // Dos fuentes, a propósito:
+  //  · broadcast (1 Hz)  → efímero, es el que sirve para diferencias de tiempo
+  //  · ubicaciones_piloto (3 s) → registro histórico, y respaldo si el canal de
+  //    broadcast no llegó a abrir en ese teléfono
+  // El broadcast pisa a la tabla mientras esté fresco; si se corta, la tabla
+  // vuelve a hacerse cargo sola a los 4 segundos.
+  useEffect(() => {
+    if (!fechaId) return;
+    return suscribirPosiciones(fechaId, (b) => {
+      setPosiciones(prev => {
+        const next = new Map(prev);
+        next.set(b.pid, {
+          lat: b.lat, lng: b.lng, ts: Date.now(), dentro: b.pista,
+          d: b.d, p: b.p, v: b.v, vu: b.vu, vivo: true,
+        });
+        return next;
+      });
+    });
+  }, [fechaId]);
+
   useEffect(() => {
     const ch = supabase
       .channel("crono-ubicaciones")
@@ -200,8 +233,12 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         payload => {
           const u = payload.new as any;
           setPosiciones(prev => {
+            const anterior = prev.get(u.piloto_id);
+            // Si el broadcast de ese piloto sigue vivo, no lo pisamos con el
+            // dato de la tabla, que llega más viejo
+            if (anterior?.vivo && Date.now() - anterior.ts < 4000) return prev;
             const next = new Map(prev);
-            next.set(u.piloto_id, { lat: u.lat, lng: u.lng, ts: Date.now(), dentro: u.dentro_geocerca });
+            next.set(u.piloto_id, { lat: u.lat, lng: u.lng, ts: Date.now(), dentro: u.dentro_geocerca, vivo: false });
             return next;
           });
         })
@@ -302,6 +339,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     // Progreso 0..1 dentro de la vuelta actual (para el orden de carrera)
     const progreso = (pid: string): number => {
       const p = posiciones.get(pid);
+      // El teléfono ya lo calculó proyectando sobre el segmento del trazado,
+      // que es bastante más preciso que redondear al punto más cercano acá
+      if (p?.p != null) return p.p;
       if (!p || trazado.length < 8) return 0;
       let idx = 0, min = Infinity;
       for (let i = 0; i < trazado.length; i++) {

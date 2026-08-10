@@ -3,6 +3,26 @@
 
 ---
 
+## [0.21.0] — 10 Agosto 2026
+### Agregado (Transporte de posiciones en vivo — base para los gaps)
+- **Posiciones por Realtime broadcast a 1 Hz** (`lib/posiciones.ts`). La única
+  fuente eran las escrituras a `ubicaciones_piloto` cada 3 s: suficiente para el
+  semáforo de "en pista / boxes", pero no para diferencias de tiempo — 3 s de
+  atraso son ~110 m a velocidad de carrera. Broadcast es efímero (no escribe una
+  fila por mensaje) y va directo por el socket ya abierto
+- Cada teléfono emite su posición proyectada sobre el trazado, velocidad,
+  vueltas y estado de pista, con la hora ya pasada a escala de servidor
+- **Medido contra el Supabase real**: 10 de 10 mensajes entregados, latencia
+  media 104 ms (mín. 70, máx. 308). Antes: hasta 3 s
+- La escritura cada 3 s se mantiene sin cambios, como registro histórico y como
+  respaldo: si el canal de broadcast de un teléfono no abre, el panel vuelve a
+  usar la tabla solo, a los 4 s de silencio
+- El panel ahora usa el progreso de vuelta que el teléfono ya calculó con
+  proyección sobre segmento, en vez de recalcularlo redondeando al punto más
+  cercano
+
+---
+
 ## [0.20.0] — 10 Agosto 2026
 ### Corregido (Precisión — base para los gaps entre pilotos)
 - **Proyección sobre el segmento del trazado** (`lib/trazado.ts`). La posición
