@@ -13,6 +13,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { esVueltaDeCarrera } from "@/lib/carrera";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
 interface Props {
@@ -34,6 +35,7 @@ const TIPO_LABEL: Record<string, string> = {
 interface Tanda {
   id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
   duracion_min?: number | null; vueltas_programadas?: number | null; meta_idx?: number | null;
+  largada_at?: string | null;
 }
 interface VueltaRow {
   piloto_id: string; numero: number; cruce_at: string; tiempo_ms: number | null; valida: boolean;
@@ -68,6 +70,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const [tandas, setTandas]         = useState<Tanda[]>([]);
   const [tandaSelId, setTandaSelId] = useState<string | null>(null);
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
+  const [marcandoLargada, setMarcandoLargada] = useState(false);
   const [pilotosInfo, setPilotosInfo] = useState<Map<string, PilotoInfo>>(new Map());
   const [posiciones, setPosiciones] = useState<Map<string, PosPiloto>>(new Map());
   const [trazado, setTrazado]       = useState<Coordenada[]>([]);
@@ -210,19 +213,39 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       crucesPorNumero: Map<number, number>;
       sospechosas: number; // vueltas demasiado largas → cruce probablemente perdido
     }
+    // ── Vuelta de formación fuera de la tabla ──────────────────
+    // Con la largada marcada, las pasadas por meta detrás del pace car no son
+    // vueltas de carrera: se descartan y las que quedan se renumeran desde 1.
+    // Sin largada marcada se descarta solo la de salida, como siempre.
+    const largadaMs = tandaSel.largada_at ? new Date(tandaSel.largada_at).getTime() : null;
+
     const por = new Map<string, Stat>();
+    const porPiloto = new Map<string, VueltaRow[]>();
     for (const v of vueltas) {
-      let s = por.get(v.piloto_id);
-      if (!s) {
-        s = { pid: v.piloto_id, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map(), sospechosas: 0 };
-        por.set(v.piloto_id, s);
-      }
-      const cruceMs = new Date(v.cruce_at).getTime();
-      s.crucesPorNumero.set(v.numero, cruceMs);
-      if (v.numero > s.cruces) { s.cruces = v.numero; s.ultima = v.tiempo_ms; s.lastCruce = cruceMs; }
-      if (v.valida && v.tiempo_ms != null && (s.mejor == null || v.tiempo_ms < s.mejor)) s.mejor = v.tiempo_ms;
+      if (!porPiloto.has(v.piloto_id)) porPiloto.set(v.piloto_id, []);
+      porPiloto.get(v.piloto_id)!.push(v);
     }
-    for (const s of por.values()) s.completadas = Math.max(0, s.cruces - 1);
+
+    for (const [pid, todas] of porPiloto) {
+      const ordenadas = [...todas].sort((a, b) => a.numero - b.numero);
+      const deCarrera = largadaMs == null
+        ? ordenadas.slice(1) // sin marca: fuera la vuelta de salida
+        : ordenadas.filter(v => esVueltaDeCarrera(new Date(v.cruce_at).getTime(), largadaMs));
+
+      const s: Stat = {
+        pid, cruces: ordenadas.length, completadas: deCarrera.length,
+        mejor: null, ultima: null, lastCruce: 0,
+        crucesPorNumero: new Map(), sospechosas: 0,
+      };
+      deCarrera.forEach((v, i) => {
+        const cruceMs = new Date(v.cruce_at).getTime();
+        s.crucesPorNumero.set(i + 1, cruceMs); // renumeradas desde 1
+        s.lastCruce = cruceMs;
+        s.ultima = v.tiempo_ms;
+        if (v.valida && v.tiempo_ms != null && (s.mejor == null || v.tiempo_ms < s.mejor)) s.mejor = v.tiempo_ms;
+      });
+      por.set(pid, s);
+    }
 
     // ── Vueltas sospechosas: cruces que probablemente se perdieron ──
     // Si el teléfono pierde señal en pista, el cruce que ocurre en ese hueco no
@@ -239,10 +262,11 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     // en la raíz sacándole la geocerca al detector de cruces.
     for (const s of por.values()) {
       if (s.mejor == null) continue;
-      const suyas = vueltas
-        .filter(v => v.piloto_id === s.pid && v.tiempo_ms != null)
-        .sort((a, b) => a.numero - b.numero)
-        .slice(1); // saltar la vuelta de apertura
+      const ordenadas = [...(porPiloto.get(s.pid) ?? [])].sort((a, b) => a.numero - b.numero);
+      const deCarrera = largadaMs == null
+        ? ordenadas.slice(1)
+        : ordenadas.filter(v => esVueltaDeCarrera(new Date(v.cruce_at).getTime(), largadaMs));
+      const suyas = deCarrera.filter(v => v.tiempo_ms != null).slice(1); // saltar la de largada
       s.sospechosas = suyas.filter(v => (v.tiempo_ms as number) > (s.mejor as number) * 2.2).length;
     }
 
@@ -387,17 +411,50 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   }
 
   // ── Control de tanda (compartido con el Log de acciones) ──
-  const nombreTandaActiva = tandas.find(t => t.id === tandaActivaId)?.nombre || "tanda";
+  const tandaActiva = tandas.find(t => t.id === tandaActivaId);
+  const nombreTandaActiva = tandaActiva?.nombre || "tanda";
+
+  const marcarLargada = async () => {
+    if (!tandaActivaId || marcandoLargada) return;
+    setMarcandoLargada(true);
+    const ahora = new Date().toISOString();
+    const { error } = await supabase.from("tandas").update({ largada_at: ahora }).eq("id", tandaActivaId);
+    if (!error) {
+      setTandas(prev => prev.map(t => (t.id === tandaActivaId ? { ...t, largada_at: ahora } : t)));
+    }
+    setMarcandoLargada(false);
+  };
   const controlTanda = onIniciarTanda ? (
     <div className="flex items-center gap-2 flex-wrap">
       {tandaActivaId ? (
-        <button
-          onClick={onFinalizarTanda}
-          className="text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
-          style={{ background: "#dc2626", color: "#fff" }}
-        >
-          ⏹ Finalizar {nombreTandaActiva}
-        </button>
+        <>
+          {/* Largada: se marca cuando se retira el pace car. Los cruces
+              anteriores son vuelta de formación y dejan de contar. */}
+          {tandaActiva?.tipo === "carrera" && !tandaActiva?.largada_at && (
+            <button
+              onClick={marcarLargada}
+              disabled={marcandoLargada}
+              title="Marcar el momento de la largada: las pasadas detrás del pace car dejan de contar como vueltas de carrera"
+              className="text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85 disabled:opacity-60"
+              style={{ background: "#16a34a", color: "#fff" }}
+            >
+              {marcandoLargada ? "Marcando…" : "🟢 Largada"}
+            </button>
+          )}
+          {tandaActiva?.tipo === "carrera" && tandaActiva?.largada_at && (
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg"
+              style={{ background: "#14532d", color: "#4ade80" }}>
+              🟢 Largada {new Date(tandaActiva.largada_at).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </span>
+          )}
+          <button
+            onClick={onFinalizarTanda}
+            className="text-xs font-bold px-3 py-1.5 rounded-lg transition-opacity hover:opacity-85"
+            style={{ background: "#dc2626", color: "#fff" }}
+          >
+            ⏹ Finalizar {nombreTandaActiva}
+          </button>
+        </>
       ) : cfgTipo ? (
         <>
           <span className="text-xs font-bold" style={{ color: "#e4e4e7" }}>▶ {TIPO_LABEL[cfgTipo]}</span>

@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
 import { medirOffsetReloj, getOffsetReloj } from "@/lib/reloj";
+import { vueltasDeCarrera, desdeLargadaMs } from "@/lib/carrera";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -1363,6 +1364,7 @@ export default function Home() {
     id: string; tipo: string; inicioMs: number;
     deadlineMs: number | null; metaIdx: number;
     vueltasProg: number | null;
+    largadaMs: number | null; // se retiró el pace car; antes = vuelta de formación
     finMs: number | null; // tanda finalizada: gracia para cerrar la vuelta en curso
   } | null>(null);
   const cronoRef = useRef({
@@ -1371,6 +1373,7 @@ export default function Home() {
     armado: false,                  // histéresis: pasó por mitad de circuito
     ultimoCruceMs: 0,
     numero: 0,
+    cruces: [] as number[],         // instantes de los cruces propios (para separar formación de carrera)
     cerrado: false,                 // cruzó la meta tras el fin de la carrera/tanda
     liderTermino: false,            // alguien ya completó las vueltas programadas
   });
@@ -1394,7 +1397,7 @@ export default function Home() {
       if (tandaPilotoRef.current?.id !== t.id) {
         // Tanda nueva: reiniciar el detector y retomar la cuenta si la app
         // se recargó a mitad de tanda
-        cronoRef.current = { progAnt: null, tAnt: 0, armado: false, ultimoCruceMs: 0, numero: 0, cerrado: false, liderTermino: false };
+        cronoRef.current = { progAnt: null, tAnt: 0, armado: false, ultimoCruceMs: 0, numero: 0, cruces: [], cerrado: false, liderTermino: false };
         supabase
           .from("vueltas")
           .select("numero, cruce_at")
@@ -1418,21 +1421,41 @@ export default function Home() {
         deadlineMs: t.duracion_min ? inicioMs + t.duracion_min * 60000 : null,
         metaIdx: t.meta_idx ?? 0,
         vueltasProg: t.vueltas_programadas ?? null,
+        largadaMs: t.largada_at ? new Date(t.largada_at).getTime() : null,
         finMs,
       };
       // Carrera a N vueltas: vigilar si el líder ya completó las programadas
-      // (basta ver el máximo número de cruce de la tanda)
       if (t.tipo === "carrera" && t.vueltas_programadas && !cronoRef.current.liderTermino) {
-        supabase
-          .from("vueltas")
-          .select("numero")
-          .eq("tanda_id", t.id)
-          .order("numero", { ascending: false })
-          .limit(1)
-          .then(({ data }) => {
-            const maxCruces = (data?.[0] as any)?.numero || 0;
-            if (maxCruces - 1 >= t.vueltas_programadas) cronoRef.current.liderTermino = true;
-          });
+        const desde = desdeLargadaMs(t.largada_at ? new Date(t.largada_at).getTime() : null);
+        if (desde == null) {
+          // Sin largada marcada: el máximo número de cruce, como siempre
+          supabase
+            .from("vueltas")
+            .select("numero")
+            .eq("tanda_id", t.id)
+            .order("numero", { ascending: false })
+            .limit(1)
+            .then(({ data }) => {
+              const maxCruces = (data?.[0] as any)?.numero || 0;
+              if (maxCruces - 1 >= t.vueltas_programadas) cronoRef.current.liderTermino = true;
+            });
+        } else {
+          // Con largada marcada hay que contar por piloto: el número de cruce
+          // incluye las pasadas detrás del pace car, que no son de carrera
+          supabase
+            .from("vueltas")
+            .select("piloto_id")
+            .eq("tanda_id", t.id)
+            .gt("cruce_at", new Date(desde).toISOString())
+            .then(({ data }) => {
+              const cuenta = new Map<string, number>();
+              for (const v of (data ?? []) as { piloto_id: string }[]) {
+                cuenta.set(v.piloto_id, (cuenta.get(v.piloto_id) ?? 0) + 1);
+              }
+              const lider = cuenta.size ? Math.max(...cuenta.values()) : 0;
+              if (lider >= t.vueltas_programadas) cronoRef.current.liderTermino = true;
+            });
+        }
       }
     };
 
@@ -1598,6 +1621,7 @@ export default function Home() {
           if (!c.ultimoCruceMs || cruceMs - c.ultimoCruceMs >= vueltaMinMs) {
             const tiempo = c.ultimoCruceMs ? Math.round(cruceMs - c.ultimoCruceMs) : null;
             c.numero += 1;
+            c.cruces.push(cruceMs);
             c.armado = false;
             c.ultimoCruceMs = cruceMs;
             // offset_ms se GUARDA pero no se aplica: cruce_at sigue siendo la
@@ -1630,7 +1654,10 @@ export default function Home() {
             // 1) tiempo de tanda cumplido
             if (tanda.deadlineMs && cruceMs > tanda.deadlineMs) c.cerrado = true;
             // 2) carrera a N vueltas: el propio piloto las completó…
-            const completadas = c.numero - 1;
+            //    Con la largada marcada se cuentan solo las vueltas POSTERIORES
+            //    a ella: las pasadas detrás del pace car no son de carrera. Sin
+            //    marcar, se descuenta la de salida como siempre.
+            const completadas = vueltasDeCarrera(c.cruces, tanda.largadaMs);
             if (tanda.tipo === "carrera" && tanda.vueltasProg && completadas >= tanda.vueltasProg) c.cerrado = true;
             // 3) …o el líder ya las completó (bandera de cuadros)
             if (tanda.tipo === "carrera" && c.liderTermino) c.cerrado = true;

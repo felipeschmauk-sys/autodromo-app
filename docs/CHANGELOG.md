@@ -3,6 +3,36 @@
 
 ---
 
+## [0.18.0] — 9 Agosto 2026
+### Agregado
+- **Botón "🟢 Largada" y vuelta de formación fuera de la tabla** (migración:
+  `docs/task-largada-migration.sql`). El protocolo real es: los autos salen de
+  boxes detrás del pace car, dan una vuelta de formación y la carrera larga en
+  el SEGUNDO paso por meta. Esas pasadas se contaban como vueltas de carrera, y
+  había que compensarlo configurando una vuelta de más (11 programadas para una
+  carrera de 10). Ahora el director marca la largada y el sistema sabe cuáles
+  son de formación: se ocultan de la tabla y las de carrera se renumeran desde 1
+- Se puede configurar la **distancia real** de la carrera (10, no 11)
+- No hace falta apretar el botón en el instante exacto: el pelotón viene
+  apiñado detrás del pace car (en la Carrera 2 los cuatro autos cruzaron dentro
+  de 2 s, contra 13-18 s de dispersión en vuelta normal), así que se descarta
+  todo cruce dentro de 10 s de la marca. Como la vuelta mínima válida son 40 s,
+  ese margen no puede confundirse con una vuelta real
+- Sirve igual para relargadas tras bandera roja o safety car, que un contador
+  fijo de vueltas previas no podría expresar
+
+### Detalle
+- La regla vive en `lib/carrera.ts` y la usan los cuatro lugares que deciden el
+  fin de carrera: el detector del teléfono, la vigilancia del líder, el
+  auto-cierre del panel y la tabla de Crono
+- **Retrocompatible por diseño**: con `largada_at` en NULL el comportamiento es
+  idéntico al anterior en los cuatro. Es opcional carrera por carrera
+- Verificado sobre las vueltas reales de la Carrera 2: los tres que terminaron
+  pasan de 11 a 10 vueltas y el rezagado de 10 a 9, con las mejores vueltas
+  intactas. Desaparece la vuelta de formación de 124 s
+
+---
+
 ## [0.17.0] — 9 Agosto 2026
 ### Corregido (Cronometraje — las dos fallas de la Carrera 1)
 - **El detector de cruces ya no depende de la geocerca.** Antes exigía estar

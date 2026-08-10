@@ -9,6 +9,7 @@ import {
   cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { desdeLargadaMs } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
@@ -383,7 +384,7 @@ export default function AdminPage() {
   // ── Tandas de la fecha (entrenamiento / clasificación / carrera) ─────────
   interface Tanda {
     id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
-    duracion_min?: number | null; vueltas_programadas?: number | null;
+    duracion_min?: number | null; vueltas_programadas?: number | null; largada_at?: string | null;
   }
   const TIPO_TANDA_LABEL: Record<string, string> = {
     libre: "Libre", entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
@@ -495,16 +496,38 @@ export default function AdminPage() {
       // "Libre" corre sin reglas de término; el resto por tiempo/vueltas
       if (t.tipo !== "libre" && t.duracion_min && Date.now() >= inicioMs + t.duracion_min * 60000) terminar = true;
       try {
-        const { data } = await supabase
-          .from("vueltas")
-          .select("numero")
-          .eq("tanda_id", t.id)
-          .order("numero", { ascending: false })
-          .limit(1);
-        const maxCruces = (data?.[0] as any)?.numero || 0;
-        setCrucesTanda(maxCruces);
-        if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && maxCruces - 1 >= t.vueltas_programadas) {
-          terminar = true;
+        const desde = desdeLargadaMs(t.largada_at ? new Date(t.largada_at).getTime() : null);
+        if (desde == null) {
+          // Sin largada marcada: el máximo número de cruce, como siempre
+          const { data } = await supabase
+            .from("vueltas")
+            .select("numero")
+            .eq("tanda_id", t.id)
+            .order("numero", { ascending: false })
+            .limit(1);
+          const maxCruces = (data?.[0] as any)?.numero || 0;
+          setCrucesTanda(maxCruces);
+          if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && maxCruces - 1 >= t.vueltas_programadas) {
+            terminar = true;
+          }
+        } else {
+          // Con largada marcada: contar por piloto solo los cruces posteriores.
+          // crucesTanda se deja en (vueltas del líder + 1) para que la pantalla,
+          // que muestra "cruces - 1", siga marcando la vuelta correcta.
+          const { data } = await supabase
+            .from("vueltas")
+            .select("piloto_id")
+            .eq("tanda_id", t.id)
+            .gt("cruce_at", new Date(desde).toISOString());
+          const cuenta = new Map<string, number>();
+          for (const v of (data ?? []) as { piloto_id: string }[]) {
+            cuenta.set(v.piloto_id, (cuenta.get(v.piloto_id) ?? 0) + 1);
+          }
+          const lider = cuenta.size ? Math.max(...cuenta.values()) : 0;
+          setCrucesTanda(lider + 1);
+          if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && lider >= t.vueltas_programadas) {
+            terminar = true;
+          }
         }
       } catch { /* vueltas sin migrar */ }
       if (terminar) {
