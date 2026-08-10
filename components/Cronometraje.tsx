@@ -257,6 +257,13 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     if (!fechaId || !largoCircuito || !tandaActivaId) return;
     const emisor = abrirEmisorEstado(fechaId);
 
+    // Congelado al cruzar la meta final. La carrera termina cuando cruza el
+    // primero, pero los demás siguen girando hasta pasar por meta: a cada uno
+    // se le congela su dato en SU cruce, con la diferencia con la que terminó.
+    const congelados = new Map<string, EstadoCarreraViva["pilotos"][string]>();
+    const vueltasAlTerminarElLider = new Map<string, number>();
+    let liderTermino = false;
+
     const id = setInterval(() => {
       const ahora = Date.now();
       const estados: EstadoPiloto[] = [];
@@ -282,6 +289,30 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         azulRef.current.set(e.pid, est);
         pilotos[e.pid] = { pos: i + 1, vu: e.vueltas, ad: g.adelante, at: g.atras, azul: est.activa };
       });
+
+      // ── Meta final: congelar a cada uno en su propio cruce ──
+      const programadas = tandaSel?.vueltas_programadas ?? null;
+      if (programadas && orden.length) {
+        if (!liderTermino && orden[0].vueltas >= programadas) {
+          liderTermino = true;
+          // Se anota en qué vuelta venía cada uno cuando cayó la bandera: su
+          // meta es el cruce SIGUIENTE
+          orden.forEach(e => vueltasAlTerminarElLider.set(e.pid, e.vueltas));
+        }
+        for (const e of orden) {
+          if (congelados.has(e.pid)) continue;
+          const suyo = pilotos[e.pid];
+          if (!suyo) continue;
+          const yaCruzoSuMeta =
+            e.vueltas >= programadas ||
+            (liderTermino && e.vueltas > (vueltasAlTerminarElLider.get(e.pid) ?? Infinity));
+          if (yaCruzoSuMeta) congelados.set(e.pid, { ...suyo, azul: false, fin: true });
+        }
+      }
+      // El dato congelado pisa al vivo: el piloto ya terminó y no debe ver
+      // números que sigan moviéndose
+      congelados.forEach((v, pid) => { pilotos[pid] = v; });
+
       emisor.enviar({ t: ahora, pilotos });
     }, 1000);
 

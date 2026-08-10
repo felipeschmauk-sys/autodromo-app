@@ -3,6 +3,22 @@
 
 ---
 
+## [0.24.0] — 10 Agosto 2026
+### Agregado
+- **Cada piloto congela su dato al cruzar su meta.** La carrera termina cuando
+  cruza el primero, pero los demás siguen girando hasta pasar por meta: a cada
+  uno se le congela lo suyo en SU cruce, mostrando con qué diferencia terminó en
+  vez de vaciarse la pantalla. Arriba a la derecha aparece "FINAL" en lugar de
+  la vuelta, para que no se lea como un número vivo que dejó de moverse
+- La bandera azul se apaga al congelar: ya no tiene sentido
+
+### Corregido
+- La flecha se calcula sobre el número REDONDEADO que se exhibe, no sobre el
+  valor crudo. Antes usaba un umbral fijo de 0,08 s, que podía mover la flecha
+  sin que el número cambiara y viceversa. Ahora las dos cosas van juntas
+
+---
+
 ## [0.23.0] — 10 Agosto 2026
 ### Agregado (Gaps en la pantalla del piloto y bandera azul automática)
 - **El panel calcula y reparte.** Es el único que conoce la clasificación

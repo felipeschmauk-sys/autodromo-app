@@ -413,7 +413,11 @@ function PizarraLandscape({
           style={{ padding: "3vh 4vw 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em" }}
         >
           <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>Pos. {gaps.pos}</span>
-          <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>LAP {String(gaps.vu).padStart(2, "0")}</span>
+          {/* Al cruzar su meta el dato queda congelado: hay que decirlo, o el
+              piloto lee como vivo un número que ya no se mueve */}
+          <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>
+            {gaps.fin ? "FINAL" : `LAP ${String(gaps.vu).padStart(2, "0")}`}
+          </span>
         </div>
       )}
 

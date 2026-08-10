@@ -96,6 +96,12 @@ export interface GapsPiloto {
   at: number | null
   /** Bandera azul activa: lo están por doblar */
   azul: boolean
+  /**
+   * Ya cruzó su meta final: el dato queda congelado con la diferencia con la
+   * que terminó. La carrera termina cuando cruza el primero, pero cada piloto
+   * sigue girando hasta pasar por meta, y ahí se le congela lo suyo.
+   */
+  fin?: boolean
 }
 
 export interface EstadoCarreraViva {
