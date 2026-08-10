@@ -1315,8 +1315,11 @@ export default function Home() {
   }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Diferencias con los rivales (llegan del panel, 1 Hz) ─────
-  // La tendencia se guarda con memoria: si la variación es menor al umbral se
-  // conserva la flecha anterior, para que no titile de un segundo a otro.
+  // La flecha compara el número ACTUAL contra el último EXHIBIDO, no contra el
+  // valor crudo: se redondea a la décima —que es lo que el piloto ve— y solo
+  // cambia cuando cambia el número en pantalla. Si el dígito no se movió, se
+  // conserva la flecha anterior en vez de inventar una dirección con ruido que
+  // ni siquiera se está mostrando.
   const tendRef = useRef<{ ad: number | null; at: number | null; fAd: number; fAt: number }>(
     { ad: null, at: null, fAd: 0, fAt: 0 });
   useEffect(() => {
@@ -1328,10 +1331,11 @@ export default function Home() {
       const r = tendRef.current;
       const tend = (nuevo: number | null, viejo: number | null, previa: number) => {
         if (nuevo == null || viejo == null) return 0;
-        const d = Math.abs(nuevo) - Math.abs(viejo);
-        if (d > 0.08) return 1;    // se agranda
-        if (d < -0.08) return -1;  // se achica
-        return previa;             // sin cambio claro: se mantiene la flecha
+        const a = Math.round(Math.abs(nuevo) * 10);   // décimas exhibidas
+        const b = Math.round(Math.abs(viejo) * 10);
+        if (a > b) return 1;   // el número subió → se aleja
+        if (a < b) return -1;  // el número bajó  → se acerca
+        return previa;         // mismo número en pantalla: misma flecha
       };
       const fAd = tend(mio.ad, r.ad, r.fAd);
       const fAt = tend(mio.at, r.at, r.fAt);
