@@ -3,6 +3,28 @@
 
 ---
 
+## [0.26.0] — 10 Agosto 2026
+### Cambiado (Modo conducción — se elimina la detección de orientación)
+- **El pizarrón se abre con un botón, ya no girando el teléfono.** Se eliminó la
+  detección de orientación por completo: el acelerómetro no distingue la
+  gravedad de la fuerza lateral, así que en curva el teléfono "creía" que lo
+  habían girado y la vista se caía en el peor momento
+- Dentro del modo conducción el pizarrón se dibuja **apaisado dentro de la
+  pantalla vertical**. El piloto gira el teléfono y lo ve derecho, sin que el
+  sistema tenga que rotar nada. El sistema de giro no se usa en ningún momento
+- Botón "⛶ PISTA" en la vista del piloto. Para salir, mantener presionado 1,5 s
+
+### Corregido
+- **La rotación salía cortada** (reportado con foto). La causa: el cambio previo
+  que pasó las medidas a variables CSS alcanzó también a las que posicionaban el
+  contenedor, y `left`, `width` y `height` quedaron intercambiados entre sí — el
+  pizarrón terminaba fuera de pantalla
+- Ahora la pantalla se mide en **píxeles** y la rotación es alrededor del centro,
+  sin aritmética de esquinas. Si la orientación llega a cambiar igual, se decide
+  midiendo y no preguntándole al sensor, así que no puede desincronizarse
+
+---
+
 ## [0.25.0] — 10 Agosto 2026
 ### Corregido (Modo conducción — la pantalla se daba vuelta en las curvas)
 - **El pizarrón ya no depende de la orientación del teléfono.** En curva la

@@ -246,9 +246,6 @@ function PizarraLandscape({
   bandera,
   esPersonal,
   gaps,
-  fijo = false,
-  viewportLandscape = true,
-  onFijar,
   onSalir,
 }: {
   trazado: Coordenada[];
@@ -257,11 +254,7 @@ function PizarraLandscape({
   esPersonal: boolean;
   /** Datos de carrera: posición, vuelta y diferencias con los rivales */
   gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
-  /** Modo conducción fijado: la orientación del teléfono deja de mandar */
-  fijo?: boolean;
-  /** Orientación REAL del viewport, para saber si hay que rotar por CSS */
-  viewportLandscape?: boolean;
-  onFijar?: () => void;
+  /** Salir del modo conducción (se dispara con pulsación larga) */
   onSalir?: () => void;
 }) {
   // Fondo por bandera (el color ES la información)
@@ -418,7 +411,6 @@ function PizarraLandscape({
   const [saliendo, setSaliendo] = useState(false);
   const salirRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const iniciarSalida = () => {
-    if (!fijo) return;
     setSaliendo(true);
     salirRef.current = setTimeout(() => { setSaliendo(false); onSalir?.(); }, 1500);
   };
@@ -427,31 +419,51 @@ function PizarraLandscape({
     if (salirRef.current) { clearTimeout(salirRef.current); salirRef.current = null; }
   };
 
-  // Si el teléfono giró solo (curva) y el modo está fijo, se rota el contenido
-  // por CSS: el piloto sigue viendo lo mismo, sin importar qué crea el sensor
-  const rotar = fijo && !viewportLandscape;
-  const estiloBase: React.CSSProperties = rotar
-    ? {
-        position: "fixed", top: 0, left: "calc(var(--uw) * 100)",
-        width: "calc(var(--uh) * 100)", height: "calc(var(--uw) * 100)",
-        transform: "rotate(90deg)", transformOrigin: "0 0",
-      }
-    : { position: "fixed", inset: 0 };
+  // La pantalla se mide en PÍXELES, no en vw/vh. Con unidades de viewport el
+  // contenedor rotado terminaba con el ancho y el alto intercambiados y el
+  // pizarrón salía cortado; midiendo no queda lugar a ambigüedad.
+  const [pantalla, setPantalla] = useState({ w: 0, h: 0 });
+  useEffect(() => {
+    const medir = () => setPantalla({ w: window.innerWidth, h: window.innerHeight });
+    medir();
+    window.addEventListener("resize", medir);
+    window.addEventListener("orientationchange", medir);
+    return () => {
+      window.removeEventListener("resize", medir);
+      window.removeEventListener("orientationchange", medir);
+    };
+  }, []);
+
+  // El pizarrón SIEMPRE se dibuja apaisado. Si la pantalla está vertical se
+  // rota el contenido: el piloto gira el teléfono y lo ve derecho, sin que el
+  // sistema tenga que rotar nada. Se decide MIDIENDO, no preguntándole al
+  // sensor, así que no puede quedar desincronizado con lo que se ve.
+  const rotar = pantalla.h > pantalla.w;
+  const anchoPiz = rotar ? pantalla.h : pantalla.w;
+  const altoPiz  = rotar ? pantalla.w : pantalla.h;
 
   return (
     <div
       className="flex flex-col"
-      onClick={!fijo ? onFijar : undefined}
-      onPointerDown={fijo ? iniciarSalida : undefined}
+      onPointerDown={iniciarSalida}
       onPointerUp={cancelarSalida}
       onPointerLeave={cancelarSalida}
       onPointerCancel={cancelarSalida}
+      style={{ position: "fixed", inset: 0, zIndex: 2000, background: fondo, maxWidth: "none", touchAction: "none", overflow: "hidden" }}
+    >
+    <div
+      className="flex flex-col"
       style={{
-        ...estiloBase, zIndex: 2000, background: fondo, maxWidth: "none", touchAction: "none",
-        // Unidades propias: al rotar, ancho y alto del contenedor son el alto
-        // y el ancho del viewport, así que se intercambian acá una sola vez
-        ["--uw" as string]: rotar ? "1vh" : "1vw",
-        ["--uh" as string]: rotar ? "1vw" : "1vh",
+        position: "absolute", top: "50%", left: "50%",
+        width: anchoPiz || undefined, height: altoPiz || undefined,
+        // Rotar alrededor del CENTRO evita la aritmética de esquinas, que es
+        // justo donde se había roto
+        transform: `translate(-50%, -50%)${rotar ? " rotate(90deg)" : ""}`,
+        background: fondo,
+        // Las unidades de la pizarra van contra SU propio tamaño, en píxeles, y
+        // no contra el viewport: si no, al rotar los textos salen diminutos
+        ["--uw" as string]: `${anchoPiz / 100}px`,
+        ["--uh" as string]: `${altoPiz / 100}px`,
       } as React.CSSProperties}
     >
       {/* Aviso de fijar / salir, discreto para no competir con la bandera */}
@@ -468,9 +480,8 @@ function PizarraLandscape({
             color: oscuro ? "#111827" : "#ffffff",
           }}
         >
-          {!fijo ? "TOCÁ PARA FIJAR LA PANTALLA"
-            : saliendo ? "SOLTÁ PARA SEGUIR · MANTENÉ PARA SALIR"
-            : "PANTALLA FIJA · MANTENÉ PRESIONADO PARA SALIR"}
+          {saliendo ? "SOLTÁ PARA SEGUIR · MANTENÉ PARA SALIR"
+            : "MANTENÉ PRESIONADO PARA SALIR"}
         </span>
       </div>
       {/* Fila superior: posición en carrera y vuelta */}
@@ -540,6 +551,7 @@ function PizarraLandscape({
         )}
       </div>
     </div>
+  </div>
   );
 }
 
@@ -958,12 +970,10 @@ export default function Home() {
   const [geocerca, setGeocerca]       = useState<GeocercaCoords>([]);    // pista
   const [geocercaRecinto, setGeocercaRecinto] = useState<GeocercaCoords>([]); // recinto
   const [sectores, setSectores]       = useState<Sector[]>([]);
-  const [isLandscape, setIsLandscape] = useState(false);
   // Modo conducción FIJO. En curva la fuerza lateral engaña al acelerómetro y
   // iOS gira la pantalla solo: si el pizarrón dependiera de la orientación, se
   // caería en cada curva. Una vez fijado, la orientación deja de importar.
   const [modoFijo, setModoFijo] = useState(false);
-  const [viewportH, setViewportH]     = useState(600);
 
   // ── Evento activo ──────────────────────────────────────────────
   const [eventoActivo, setEventoActivo]       = useState<EventoActivo | null>(null);
@@ -2053,29 +2063,11 @@ export default function Home() {
   }, [stage, pilotoData?.id, gpsPermiso]); // eslint-disable-line react-hooks/exhaustive-deps
 
 
-  // ── Detección de orientación ──
-  useEffect(() => {
-    const update = () => {
-      // Solo activar landscape en dispositivos móviles/táctiles reales.
-      // En PC el ancho siempre supera al alto, pero no queremos el modo cockpit ahí.
-      const isMobile = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
-      const landscape = isMobile && window.innerWidth > window.innerHeight;
-      setIsLandscape(landscape);
-      setViewportH(window.innerHeight);
-      if (landscape) setSecView("main");
-      // Ojo: esto ya NO decide si se muestra el pizarrón cuando está fijado.
-      // Es solo el estado real del viewport, que sirve para saber si hay que
-      // rotar el contenido por CSS.
-    };
-    update();
-    window.addEventListener("resize", update);
-    const onOrient = () => setTimeout(update, 100);
-    window.addEventListener("orientationchange", onOrient);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.removeEventListener("orientationchange", onOrient);
-    };
-  }, []);
+  // Nota: acá vivía la detección de orientación. Se eliminó a propósito.
+  // El acelerómetro no distingue la gravedad de la fuerza lateral, así que en
+  // curva el teléfono "creía" que lo habían girado y el pizarrón se caía. Ahora
+  // el modo conducción se entra por botón y se dibuja apaisado dentro de la
+  // pantalla vertical, sin consultar la orientación en ningún momento.
 
   // El modo fijo sobrevive a una recarga (iOS puede reiniciar la app sola a
   // mitad de tanda) pero no a cerrar la pestaña
@@ -2093,8 +2085,10 @@ export default function Home() {
   // pizarrón si la pulsación larga no le funciona
   useEffect(() => { if (stage !== "app") setModoFijo(false); }, [stage]);
 
-  // Con el modo fijo activo el pizarrón manda, gire o no el teléfono
-  const enConduccion = isLandscape || modoFijo;
+  // El pizarrón se abre SOLO con el botón. Girar el teléfono ya no lo abre ni
+  // lo cierra: el acelerómetro no distingue la gravedad de la fuerza lateral,
+  // así que en curva creía que el teléfono se había girado.
+  const enConduccion = modoFijo;
 
   // ── Handlers existentes (sin cambios) ──
   const agregarAuto = () => setAutos([...autos, { id: Date.now(), marca: "", modelo: "" }]);
@@ -3142,9 +3136,6 @@ export default function Home() {
               sectores={sectores}
               bandera={banderaEfectiva}
               gaps={misGaps}
-              fijo={modoFijo}
-              viewportLandscape={isLandscape}
-              onFijar={() => setModoFijo(true)}
               onSalir={() => setModoFijo(false)}
               esPersonal={flagEsPersonal}
             />
@@ -3262,6 +3253,21 @@ export default function Home() {
           {renderBottomNav()}
 
           {/* ── BOTÓN QR FLOTANTE — oculto en landscape ── */}
+          {/* Entrar al modo conducción. El pizarrón se dibuja apaisado dentro de
+              la pantalla vertical, así que el piloto solo gira el teléfono y lo
+              ve derecho — sin depender del giro del sistema. */}
+          {!enConduccion && (
+            <button
+              onClick={() => setModoFijo(true)}
+              title="Pantalla de conducción"
+              className="fixed bottom-40 right-4 w-16 h-16 rounded-2xl z-40 flex flex-col items-center justify-center gap-1 active:scale-95 transition-transform"
+              style={{ background: "#111827", boxShadow: "0 8px 32px rgba(0,0,0,0.5)" }}
+            >
+              <span style={{ fontSize: 22, lineHeight: 1, color: "#fff" }}>⛶</span>
+              <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: 1, color: "#fff" }}>PISTA</span>
+            </button>
+          )}
+
           {!enConduccion && (
             <button
               onClick={() => habilitado ? setShowQRModal(true) : setStage("prueba")}
