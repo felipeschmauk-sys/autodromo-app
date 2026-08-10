@@ -5,7 +5,7 @@ import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida,
 import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
 import { vueltasDeCarrera, desdeLargadaMs } from "@/lib/carrera";
 import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
-import { abrirEmisorPosiciones } from "@/lib/posiciones";
+import { abrirEmisorPosiciones, suscribirEstado, type GapsPiloto } from "@/lib/posiciones";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -245,11 +245,14 @@ function PizarraLandscape({
   sectores,
   bandera,
   esPersonal,
+  gaps,
 }: {
   trazado: Coordenada[];
   sectores: Sector[];
   bandera: string;
   esPersonal: boolean;
+  /** Datos de carrera: posición, vuelta y diferencias con los rivales */
+  gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
 }) {
   // Fondo por bandera (el color ES la información)
   const FONDOS: Record<string, string> = {
@@ -363,15 +366,65 @@ function PizarraLandscape({
     );
   }
 
+  // ── Datos de carrera sobre el fondo de bandera ──────────────
+  // Un número con su flecha de tendencia. La flecha apunta según cómo cambia el
+  // valor con signo, y el color dice si eso le conviene al piloto: perder
+  // terreno contra el de adelante y que el de atrás se acerque son ambos rojos.
+  const colorDato = oscuro ? "#111827" : "#ffffff";
+  const Dato = ({ valor, tend, alinear }: { valor: number | null; tend: number; alinear: "left" | "right" }) => {
+    if (valor == null) return <span />;
+    // tend = +1 el valor absoluto crece, -1 se achica.
+    // Adelante: que crezca es malo (me escapo del rival). Atrás: que crezca es
+    // bueno (lo dejo atrás). La flecha sigue al valor CON signo, que es como se
+    // lee de un vistazo: sube = me va peor de ese lado.
+    const bueno = alinear === "left" ? tend < 0 : tend > 0;
+    const flechaArriba = alinear === "left" ? tend > 0 : tend < 0;
+    const color = tend === 0 ? (oscuro ? "#4b5563" : "rgba(255,255,255,0.55)")
+      : bueno ? "#22c55e" : "#ef4444";
+    const txt = (valor >= 0 ? "+" : "") + valor.toFixed(1).replace(".", ",") + "s";
+    return (
+      <span className="flex items-center gap-2" style={{ color: colorDato }}>
+        <span style={{ fontSize: "clamp(22px, 4.4vw, 52px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{txt}</span>
+        {tend !== 0 && (
+          <span style={{ color, fontSize: "clamp(16px, 3vw, 34px)", lineHeight: 1 }}>
+            {flechaArriba ? "▲" : "▼"}
+          </span>
+        )}
+      </span>
+    );
+  };
+
   return (
     <div
       className="fixed inset-0 flex flex-col"
       style={{ zIndex: 2000, background: fondo, maxWidth: "none" }}
     >
+      {/* Fila superior: posición en carrera y vuelta */}
+      {gaps && (
+        <div
+          className="flex items-start justify-between"
+          style={{ padding: "3vh 4vw 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em" }}
+        >
+          <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>Pos. {gaps.pos}</span>
+          <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>LAP {String(gaps.vu).padStart(2, "0")}</span>
+        </div>
+      )}
+
       {/* Circuito flotante, levemente sobre el centro */}
       <div className="flex-1 flex items-center justify-center overflow-hidden" style={{ paddingBottom: "2vh" }}>
         {svg}
       </div>
+
+      {/* Diferencias con los rivales, en las esquinas inferiores */}
+      {gaps && (
+        <div
+          className="absolute inset-x-0 flex items-end justify-between pointer-events-none"
+          style={{ bottom: "3.5vh", padding: "0 4vw", zIndex: 1 }}
+        >
+          <Dato valor={gaps.ad} tend={gaps.tendAd} alinear="left" />
+          <Dato valor={gaps.at} tend={gaps.tendAt} alinear="right" />
+        </div>
+      )}
 
       {/* Texto inferior: solo icono + texto, sin cajas */}
       <div className="flex flex-col items-center gap-1.5" style={{ paddingBottom: "5vh" }}>
@@ -905,6 +958,8 @@ export default function Home() {
 
   // ── Task #58: jerarquía de banderas ──
   const [banderaPersonal, setBanderaPersonal] = useState<string | null>(null);
+  // Diferencias con los rivales, calculadas por el panel y repartidas a 1 Hz
+  const [misGaps, setMisGaps] = useState<(GapsPiloto & { tendAd: number; tendAt: number }) | null>(null);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
   // ── Prueba de conocimientos POR CAMPEONATO ─────────────────────
@@ -1251,6 +1306,32 @@ export default function Home() {
       supabase.removeChannel(chSectores);
     };
   }, [stage, eventoActivo?.fechaId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Diferencias con los rivales (llegan del panel, 1 Hz) ─────
+  // La tendencia se guarda con memoria: si la variación es menor al umbral se
+  // conserva la flecha anterior, para que no titile de un segundo a otro.
+  const tendRef = useRef<{ ad: number | null; at: number | null; fAd: number; fAt: number }>(
+    { ad: null, at: null, fAd: 0, fAt: 0 });
+  useEffect(() => {
+    if (stage !== "app" || !eventoActivo?.fechaId || !pilotoData?.id) return;
+    const pid = pilotoData.id;
+    return suscribirEstado(eventoActivo.fechaId, (e) => {
+      const mio = e.pilotos[pid];
+      if (!mio) { setMisGaps(null); return; }
+      const r = tendRef.current;
+      const tend = (nuevo: number | null, viejo: number | null, previa: number) => {
+        if (nuevo == null || viejo == null) return 0;
+        const d = Math.abs(nuevo) - Math.abs(viejo);
+        if (d > 0.08) return 1;    // se agranda
+        if (d < -0.08) return -1;  // se achica
+        return previa;             // sin cambio claro: se mantiene la flecha
+      };
+      const fAd = tend(mio.ad, r.ad, r.fAd);
+      const fAt = tend(mio.at, r.at, r.fAt);
+      tendRef.current = { ad: mio.ad, at: mio.at, fAd, fAt };
+      setMisGaps({ ...mio, tendAd: fAd, tendAt: fAt });
+    });
+  }, [stage, eventoActivo?.fechaId, pilotoData?.id]);
 
   // ── Wake Lock — evita que la pantalla se apague mientras el piloto está en pista ──
   // iOS suelta el bloqueo SOLO cada vez que la página pierde el foco: una alerta
@@ -2286,10 +2367,16 @@ export default function Home() {
   })();
   const banderaSector = sectorActual && sectorActual.bandera !== "verde" ? sectorActual.bandera : null;
 
+  // La bandera azul automática se ubica DEBAJO de la personal: si el director
+  // pone una bandera a mano, esa manda y la automática no la pisa. Se enciende
+  // y se apaga sola según el cálculo de gaps (se apaga cuando lo adelantaron).
+  const azulAutomatica = misGaps?.azul ? "azul" : null;
+
   const banderaEfectiva =
     estadoPista.bandera === "cuadros" ? "cuadros"
     : estadoPista.bandera === "roja"  ? "roja"
     : banderaPersonal                 ? banderaPersonal
+    : azulAutomatica                  ? azulAutomatica
     : banderaSector                   ? banderaSector
     : estadoPista.bandera;
 
@@ -2946,6 +3033,7 @@ export default function Home() {
               trazado={trazado}
               sectores={sectores}
               bandera={banderaEfectiva}
+              gaps={misGaps}
               esPersonal={flagEsPersonal}
             />
           )}

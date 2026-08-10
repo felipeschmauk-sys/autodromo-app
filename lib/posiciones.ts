@@ -75,3 +75,60 @@ export function suscribirPosiciones(fechaId: string, alRecibir: (pos: PosicionVi
 
   return () => { supabase.removeChannel(canal) }
 }
+
+// ── Camino de vuelta: el panel reparte los gaps ───────────────
+//
+// El panel es el único que conoce la clasificación completa, así que es quien
+// resuelve quién va adelante y quién atrás de cada piloto. El admin NO necesita
+// ver estos números —su vista actual le alcanza—, solo los calcula y los emite.
+//
+// Va UN mensaje por segundo con el estado de todos, no uno por piloto: así el
+// costo no crece con la cantidad de autos en pista.
+
+export interface GapsPiloto {
+  /** Posición en carrera */
+  pos: number
+  /** Vueltas de carrera completadas */
+  vu: number
+  /** Segundos hasta el competidor de adelante (positivo). null = va puntero */
+  ad: number | null
+  /** Segundos hasta el competidor de atrás (negativo). null = va último */
+  at: number | null
+  /** Bandera azul activa: lo están por doblar */
+  azul: boolean
+}
+
+export interface EstadoCarreraViva {
+  t: number
+  pilotos: Record<string, GapsPiloto>
+}
+
+const canalEstado = (fechaId: string) => `estado-${fechaId}`
+
+/** Panel: abre el canal para repartir el estado de carrera. */
+export function abrirEmisorEstado(fechaId: string) {
+  const canal = supabase.channel(canalEstado(fechaId), {
+    config: { broadcast: { self: false, ack: false } },
+  })
+  let listo = false
+  canal.subscribe((e) => { listo = e === 'SUBSCRIBED' })
+  return {
+    enviar(estado: EstadoCarreraViva) {
+      if (!listo) return
+      canal.send({ type: 'broadcast', event: 'estado', payload: estado }).catch(() => {})
+    },
+    cerrar() { supabase.removeChannel(canal) },
+  }
+}
+
+/** Piloto: escucha el estado de carrera y se queda con lo suyo. */
+export function suscribirEstado(fechaId: string, alRecibir: (e: EstadoCarreraViva) => void) {
+  const canal = supabase
+    .channel(canalEstado(fechaId), { config: { broadcast: { self: false } } })
+    .on('broadcast', { event: 'estado' }, ({ payload }) => {
+      const e = payload as EstadoCarreraViva
+      if (e && e.pilotos) alRecibir(e)
+    })
+    .subscribe()
+  return () => { supabase.removeChannel(canal) }
+}

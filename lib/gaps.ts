@@ -36,6 +36,14 @@ export interface GapPiloto {
   atras: number | null
   /** Bandera azul: lo está por doblar alguien y viene a menos del umbral */
   azul: { pid: string; segundos: number } | null
+  /**
+   * Pilotos que le sacaban una vuelta y acaban de pasarlo (ya van adelante en
+   * pista). Es lo que apaga la bandera azul: no se apaga porque el gap creció,
+   * se apaga porque el adelantamiento se consumó. Va por piloto y no como
+   * bandera global, porque en pista puede haber varios doblando a la vez y solo
+   * debe apagarla el que efectivamente la había encendido.
+   */
+  pasaronPor: string[]
 }
 
 export interface OpcionesGap {
@@ -122,7 +130,7 @@ export function calcularGaps(
   // En boxes o sin señal reciente: no participa, pero se lo devuelve vacío para
   // que su pantalla muestre guiones en vez de un número congelado
   const activos = pilotos.filter(p => p.enPista !== false && ahora - p.t <= frescuraMs)
-  for (const p of pilotos) salida.set(p.pid, { adelante: null, atras: null, azul: null })
+  for (const p of pilotos) salida.set(p.pid, { adelante: null, atras: null, azul: null, pasaronPor: [] })
   if (activos.length < 2 || !largo) return salida
 
   // Orden de carrera: más recorrido = más adelante
@@ -130,7 +138,7 @@ export function calcularGaps(
 
   for (let i = 0; i < orden.length; i++) {
     const yo = orden[i]
-    const g: GapPiloto = { adelante: null, atras: null, azul: null }
+    const g: GapPiloto = { adelante: null, atras: null, azul: null, pasaronPor: [] }
     const miRec = recorridoTotal(yo, largo)
 
     // ── Competidor de adelante: el primero que NO me saque una vuelta ──
@@ -150,12 +158,27 @@ export function calcularGaps(
       break
     }
 
+    // ── ¿Ya lo pasaron? ───────────────────────────────────────
+    // Quien le sacaba una vuelta y ahora aparece JUSTO adelante en pista acaba
+    // de adelantarlo. Ahí la bandera azul cumplió su función y debe apagarse,
+    // sin esperar a que el gap crezca.
+    for (const otro of activos) {
+      if (otro.pid === yo.pid || otro.vueltas <= yo.vueltas) continue
+      // Diferencia de posición en pista, 0..1 hacia adelante
+      const delta = (((otro.progreso - yo.progreso) % 1) + 1) % 1
+      if (delta > 0 && delta < 0.2) g.pasaronPor.push(otro.pid)
+    }
+
     // ── Bandera azul ──────────────────────────────────────────
     // Se busca a quien viene ALCANZÁNDOME por pista y ya me sacó una vuelta.
     // Está físicamente detrás mío en el trazado, pero adelante en la carrera.
     for (const otro of activos) {
       if (otro.pid === yo.pid) continue
       if (otro.vueltas <= yo.vueltas) continue // no me está doblando
+      // Si ya me pasó, no corresponde bandera: va adelante mío en pista.
+      // Sin este filtro, la referencia de vuelta podía caer en la anterior y
+      // devolver un número chico para alguien que en realidad ya se fue.
+      if (g.pasaronPor.includes(otro.pid)) continue
 
       // ¿Cuándo pasé YO por donde está él ahora? Si él viene más atrás en la
       // vuelta que yo, fue en esta misma vuelta; si no, en la anterior.
@@ -197,27 +220,41 @@ export interface EstadoAzul {
   pid: string | null
   desde: number
   ultimoOk: number
+  /** pid → instante hasta el cual no puede volver a encender la bandera */
+  bloqueados?: Record<string, number>
 }
 
 export function sostenerAzul(
   previo: EstadoAzul | undefined,
   azul: GapPiloto['azul'],
   ahora: number,
-  opciones: { soltarMs?: number; minimoMs?: number } = {},
+  opciones: { soltarMs?: number; minimoMs?: number; pasaronPor?: string[]; bloqueoMs?: number } = {},
 ): EstadoAzul {
-  const { soltarMs = 3000, minimoMs = 5000 } = opciones
-  const est: EstadoAzul = previo ?? { activa: false, pid: null, desde: 0, ultimoOk: 0 }
+  const { soltarMs = 3000, minimoMs = 5000, pasaronPor = [], bloqueoMs = 20000 } = opciones
+  const est: EstadoAzul = previo ?? { activa: false, pid: null, desde: 0, ultimoOk: 0, bloqueados: {} }
+  const bloqueados = { ...(est.bloqueados ?? {}) }
 
-  if (azul) {
+  // El adelantamiento se consumó: se apaga ya, sin esperar los amortiguadores.
+  // Y ese piloto queda bloqueado un rato: con el ruido del GPS el auto que
+  // acaba de pasar puede parecer que retrocede un instante, y sin bloqueo la
+  // bandera se volvía a encender de inmediato.
+  if (est.activa && est.pid && pasaronPor.includes(est.pid)) {
+    bloqueados[est.pid] = ahora + bloqueoMs
+    return { activa: false, pid: null, desde: 0, ultimoOk: 0, bloqueados }
+  }
+
+  const vigente = azul && !(bloqueados[azul.pid] > ahora) ? azul : null
+  if (vigente) {
     return {
       activa: true,
-      pid: azul.pid,
+      pid: vigente.pid,
       desde: est.activa ? est.desde : ahora,
       ultimoOk: ahora,
+      bloqueados,
     }
   }
-  if (!est.activa) return est
-  if (ahora - est.ultimoOk < soltarMs) return est   // hueco corto: sigue
-  if (ahora - est.desde < minimoMs) return est      // recién encendida: sigue
-  return { activa: false, pid: null, desde: 0, ultimoOk: 0 }
+  if (!est.activa) return { ...est, bloqueados }
+  if (ahora - est.ultimoOk < soltarMs) return { ...est, bloqueados }  // hueco corto: sigue
+  if (ahora - est.desde < minimoMs) return { ...est, bloqueados }     // recién encendida: sigue
+  return { activa: false, pid: null, desde: 0, ultimoOk: 0, bloqueados }
 }

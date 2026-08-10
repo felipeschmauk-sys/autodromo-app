@@ -15,7 +15,9 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esVueltaDeCarrera } from "@/lib/carrera";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
-import { suscribirPosiciones } from "@/lib/posiciones";
+import { suscribirPosiciones, abrirEmisorEstado, type EstadoCarreraViva } from "@/lib/posiciones";
+import { calcularGaps, sostenerAzul, recorridoTotal, type EstadoPiloto, type Muestra, type EstadoAzul } from "@/lib/gaps";
+import { prepararTrazado } from "@/lib/trazado";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
 interface Props {
@@ -54,6 +56,8 @@ interface PosPiloto {
   v?: number | null;
   /** Vueltas de carrera completadas según el propio teléfono */
   vu?: number;
+  /** Instante de la lectura en hora de servidor */
+  t?: number;
   /** true si vino por broadcast (1 Hz) y no de la tabla (3 s) */
   vivo?: boolean;
 }
@@ -99,9 +103,17 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
   const [marcandoLargada, setMarcandoLargada] = useState(false);
   const [pilotoAbierto, setPilotoAbierto] = useState<string | null>(null);
+  // Historial de recorrido por piloto: el gap se calcula sobre el recorrido del
+  // OTRO, no sobre su posición actual, así que hay que guardarlo
+  const historiaRef = useRef<Map<string, Muestra[]>>(new Map());
+  const azulRef     = useRef<Map<string, EstadoAzul>>(new Map());
+  // Espejo de las posiciones para que el intervalo de cálculo vea siempre lo
+  // último sin tener que reiniciarse en cada mensaje
+  const posicionesRef = useRef<Map<string, PosPiloto>>(new Map());
   const [pilotosInfo, setPilotosInfo] = useState<Map<string, PilotoInfo>>(new Map());
   const [posiciones, setPosiciones] = useState<Map<string, PosPiloto>>(new Map());
   const [trazado, setTrazado]       = useState<Coordenada[]>([]);
+  const largoCircuito = useMemo(() => prepararTrazado(trazado)?.largo ?? 0, [trazado]);
   const [, setTick]                 = useState(0); // reloj de sesión (1 s)
   const [migracionOk, setMigracionOk] = useState(true);
 
@@ -218,12 +230,63 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         const next = new Map(prev);
         next.set(b.pid, {
           lat: b.lat, lng: b.lng, ts: Date.now(), dentro: b.pista,
-          d: b.d, p: b.p, v: b.v, vu: b.vu, vivo: true,
+          d: b.d, p: b.p, v: b.v, vu: b.vu, t: b.t, vivo: true,
         });
         return next;
       });
+      // Historial para los gaps (se guarda ~5 min y se descarta lo viejo)
+      // Sin el largo del circuito el recorrido saldría en unidades falsas y
+      // envenenaría el historial: mejor no guardar nada hasta tenerlo
+      if (b.p != null && largoCircuito > 0) {
+        const h = historiaRef.current.get(b.pid) ?? [];
+        const rec = (b.vu + b.p) * largoCircuito;
+        if (!h.length || h[h.length - 1].t < b.t) h.push({ t: b.t, recorrido: rec });
+        if (h.length > 300) h.shift();
+        historiaRef.current.set(b.pid, h);
+      }
     });
-  }, [fechaId]);
+  }, [fechaId, largoCircuito]);
+
+  useEffect(() => { posicionesRef.current = posiciones; }, [posiciones]);
+
+  // ── Cálculo de gaps y reparto a los pilotos (1 Hz) ────────────
+  // El panel es el único que conoce la clasificación completa, así que es quien
+  // resuelve quién va adelante y quién atrás. Estos números NO se muestran acá:
+  // el admin no los necesita, van directo a la pantalla de cada piloto.
+  useEffect(() => {
+    if (!fechaId || !largoCircuito || !tandaActivaId) return;
+    const emisor = abrirEmisorEstado(fechaId);
+
+    const id = setInterval(() => {
+      const ahora = Date.now();
+      const estados: EstadoPiloto[] = [];
+      posicionesRef.current.forEach((p, pid) => {
+        if (p.p == null || p.vu == null) return;
+        const h = historiaRef.current.get(pid);
+        if (!h || h.length < 2) return;
+        estados.push({ pid, vueltas: p.vu, progreso: p.p, t: p.t ?? p.ts, enPista: p.dentro, historia: h });
+      });
+      if (estados.length < 2) return;
+
+      const gaps = calcularGaps(estados, { largo: largoCircuito, ahora });
+      const orden = [...estados].sort(
+        (a, b) => recorridoTotal(b, largoCircuito) - recorridoTotal(a, largoCircuito));
+
+      const pilotos: EstadoCarreraViva["pilotos"] = {};
+      orden.forEach((e, i) => {
+        const g = gaps.get(e.pid);
+        if (!g) return;
+        // La bandera azul se enciende y se apaga sola. La histéresis evita que
+        // titile, y el adelantamiento consumado la baja de inmediato.
+        const est = sostenerAzul(azulRef.current.get(e.pid), g.azul, ahora, { pasaronPor: g.pasaronPor });
+        azulRef.current.set(e.pid, est);
+        pilotos[e.pid] = { pos: i + 1, vu: e.vueltas, ad: g.adelante, at: g.atras, azul: est.activa };
+      });
+      emisor.enviar({ t: ahora, pilotos });
+    }, 1000);
+
+    return () => { clearInterval(id); emisor.cerrar(); };
+  }, [fechaId, largoCircuito, tandaActivaId]);
 
   useEffect(() => {
     const ch = supabase

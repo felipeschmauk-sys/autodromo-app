@@ -3,6 +3,36 @@
 
 ---
 
+## [0.23.0] — 10 Agosto 2026
+### Agregado (Gaps en la pantalla del piloto y bandera azul automática)
+- **El panel calcula y reparte.** Es el único que conoce la clasificación
+  completa, así que resuelve quién va adelante y quién atrás de cada piloto y lo
+  emite a 1 Hz. El admin **no ve estos números** — su vista actual le alcanza —,
+  solo los calcula. Va un único mensaje por segundo con el estado de todos, así
+  el costo no crece con la cantidad de autos
+- **Pantalla del piloto** siguiendo el diseño de Felipe: posición en carrera
+  arriba a la izquierda, vuelta arriba a la derecha, y las dos diferencias en
+  las esquinas inferiores, cada una con su flecha de tendencia
+- La flecha sigue al valor con signo y el color dice si conviene: perder terreno
+  contra el de adelante y que el de atrás se acerque son ambos rojos. La
+  tendencia tiene memoria — si la variación no supera un umbral se conserva la
+  flecha anterior, para que no titile a 1 Hz
+- **La bandera azul se enciende y se apaga sola.** Entra por debajo de la
+  bandera personal en la jerarquía: si el director pone una a mano, esa manda.
+  Se apaga cuando el adelantamiento se consumó, no cuando el gap creció
+
+### Corregido en el motor, encontrado replayando
+- La bandera se apagaba con **cualquier** auto que sacara una vuelta, no con el
+  que la había encendido. Ahora el release es por piloto
+- Un auto ya adelantado podía volver a encender la bandera: se lo descarta antes
+  de evaluarla, y queda bloqueado un rato para que el ruido del GPS no la
+  reactive en el momento del cruce
+- Con las tres correcciones el replay de la Carrera 2 arroja **una sola bandera
+  azul, continua**: pac por fac, de 18:04:04 a 18:04:49, encendida al entrar en
+  los 5 s y apagada exactamente cuando lo pasa
+
+---
+
 ## [0.22.0] — 10 Agosto 2026
 ### Agregado (Cálculo de gaps y bandera azul — motor, todavía sin conectar)
 - `lib/gaps.ts`: diferencia de tiempo entre pilotos y detección de bandera azul.
