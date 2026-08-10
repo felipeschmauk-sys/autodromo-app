@@ -11,9 +11,10 @@
  * Cronometraje REFERENCIAL (GPS ±1 s aprox), no tiempos oficiales.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esVueltaDeCarrera } from "@/lib/carrera";
+import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
 interface Props {
@@ -56,6 +57,18 @@ function fmtMs(ms: number | null | undefined): string {
   const s = (ms % 60000) / 1000;
   return `${m}:${s < 10 ? "0" : ""}${s.toFixed(3)}`;
 }
+/** Diferencia contra la mejor vuelta propia, estilo planilla de cronometraje. */
+function fmtDif(ms: number | null): string {
+  if (ms == null || ms === 0) return "";
+  const s = ms / 1000;
+  return s >= 60 ? `+${Math.floor(s / 60)}:${(s % 60) < 10 ? "0" : ""}${(s % 60).toFixed(3)}` : `+${s.toFixed(3)}`;
+}
+/** Hora del día del cruce, con milésimas (como en la planilla impresa). */
+function fmtHora(iso: string): string {
+  const d = new Date(iso);
+  const p = (n: number, l = 2) => String(n).padStart(l, "0");
+  return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}.${p(d.getMilliseconds(), 3)}`;
+}
 function fmtReloj(totalS: number): string {
   const m = Math.floor(totalS / 60);
   const s = Math.floor(totalS % 60);
@@ -71,6 +84,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const [tandaSelId, setTandaSelId] = useState<string | null>(null);
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
   const [marcandoLargada, setMarcandoLargada] = useState(false);
+  const [pilotoAbierto, setPilotoAbierto] = useState<string | null>(null);
   const [pilotosInfo, setPilotosInfo] = useState<Map<string, PilotoInfo>>(new Map());
   const [posiciones, setPosiciones] = useState<Map<string, PosPiloto>>(new Map());
   const [trazado, setTrazado]       = useState<Coordenada[]>([]);
@@ -212,6 +226,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       mejor: number | null; ultima: number | null; lastCruce: number;
       crucesPorNumero: Map<number, number>;
       sospechosas: number; // vueltas demasiado largas → cruce probablemente perdido
+      detalle: VueltaRow[]; // vueltas de carrera en orden, para el desplegable
     }
     // ── Vuelta de formación fuera de la tabla ──────────────────
     // Con la largada marcada, las pasadas por meta detrás del pace car no son
@@ -235,7 +250,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       const s: Stat = {
         pid, cruces: ordenadas.length, completadas: deCarrera.length,
         mejor: null, ultima: null, lastCruce: 0,
-        crucesPorNumero: new Map(), sospechosas: 0,
+        crucesPorNumero: new Map(), sospechosas: 0, detalle: deCarrera,
       };
       deCarrera.forEach((v, i) => {
         const cruceMs = new Date(v.cruce_at).getTime();
@@ -273,7 +288,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     // Pilotos con posición GPS pero sin vueltas aún también aparecen
     for (const pid of posiciones.keys()) {
       if (!por.has(pid) && pilotosInfo.has(pid)) {
-        por.set(pid, { pid, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map(), sospechosas: 0 });
+        por.set(pid, { pid, cruces: 0, completadas: 0, mejor: null, ultima: null, lastCruce: 0, crucesPorNumero: new Map(), sospechosas: 0, detalle: [] });
       }
     }
 
@@ -352,6 +367,14 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         esMejorAbs: s.mejor != null && s.mejor === mejorAbs,
         gap,
         estado,
+        // Vuelta a vuelta del piloto, ya renumerado desde 1 y sin la formación
+        detalle: s.detalle.map((v, i) => ({
+          n: i + 1,
+          tiempoMs: v.tiempo_ms,
+          cruceAt: v.cruce_at,
+          difMejor: v.tiempo_ms != null && s.mejor != null ? v.tiempo_ms - s.mejor : null,
+          esMejor: v.tiempo_ms != null && v.tiempo_ms === s.mejor,
+        })),
       };
     });
   }, [vueltas, pilotosInfo, posiciones, trazado, tandaSel]);
@@ -368,25 +391,41 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     return ult;
   }, [vueltas]);
 
-  // Descargar los resultados de la tanda visible como CSV (abre en Excel)
+  // Descargar la tanda visible como .xlsx con DOS hojas:
+  //  1. "Resultado"       → la tabla oficial, tal cual se ve en pantalla
+  //  2. "Vuelta a vuelta" → un bloque por piloto con todas sus vueltas, con el
+  //     formato de las planillas de cronometraje (vuelta, tiempo, diferencia
+  //     contra su mejor, hora del día)
   const descargarResultados = () => {
     if (!tandaSel || filas.length === 0) return;
-    const esc = (s: unknown) => `"${String(s).replace(/"/g, '""')}"`;
-    const csv = "﻿" + [
-      `Resultados;${tandaSel.nombre};${new Date(tandaSel.inicio).toLocaleDateString("es-CL")} ${new Date(tandaSel.inicio).toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })};${tandaSel.fin ? "Finalizada" : "En curso"}`,
-      "Pos;Número;Piloto;Vueltas;Diferencia;Mejor;Última;Estado",
-      ...filas.map(f =>
-        [f.pos, f.numero || "", f.nombre, f.completadas, f.gap, fmtMs(f.mejor), fmtMs(f.ultima), f.estado.label]
-          .map(esc).join(";")
-      ),
-    ].join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `resultados-${tandaSel.nombre.replace(/\s+/g, "-")}-${new Date(tandaSel.inicio).toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const fecha = new Date(tandaSel.inicio);
+    const cab = `${tandaSel.nombre} · ${fecha.toLocaleDateString("es-CL")} ${fecha.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} · ${tandaSel.fin ? "Finalizada" : "En curso"}`;
+
+    const hojaResultado: Celda[][] = [
+      [cab],
+      [],
+      ["Pos", "Número", "Piloto", "Vueltas", "Diferencia", "Mejor", "Última", "Estado"],
+      ...filas.map(f => [f.pos, f.numero || "", f.nombre, f.completadas, f.gap, fmtMs(f.mejor), fmtMs(f.ultima), f.estado.label] as Celda[]),
+    ];
+
+    const hojaVueltas: Celda[][] = [[cab], []];
+    for (const f of filas) {
+      hojaVueltas.push([`${f.numero ? `(${f.numero}) ` : ""}${f.nombre}`]);
+      hojaVueltas.push(["Vuelta", "Tiempo de vuelta", "Dif. resp. mejor", "Hora del día"]);
+      if (f.detalle.length === 0) {
+        hojaVueltas.push(["", "sin vueltas completadas"]);
+      } else {
+        for (const v of f.detalle) {
+          hojaVueltas.push([v.n, fmtMs(v.tiempoMs), v.esMejor ? "" : fmtDif(v.difMejor), fmtHora(v.cruceAt)]);
+        }
+      }
+      hojaVueltas.push([]);
+    }
+
+    descargarXlsx(
+      [{ nombre: "Resultado", filas: hojaResultado }, { nombre: "Vuelta a vuelta", filas: hojaVueltas }],
+      `resultados-${tandaSel.nombre.replace(/\s+/g, "-")}-${fecha.toISOString().slice(0, 10)}.xlsx`,
+    );
   };
 
   const cfg = tandaSel ? (TIPO_CFG[tandaSel.tipo] || TIPO_CFG.entrenamiento) : null;
@@ -620,8 +659,17 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           </thead>
           <tbody>
             {filas.map(f => (
-              <tr key={f.pid} style={{ borderTop: "1px solid #1c1f27", color: "#d4d4d8" }}>
-                <td className="py-2.5 pl-4 sm:pl-5 pr-2 font-bold" style={{ color: f.pos === 1 ? "#facc15" : "#71717a" }}>{f.pos}</td>
+              <Fragment key={f.pid}>
+              <tr
+                onClick={() => setPilotoAbierto(p => (p === f.pid ? null : f.pid))}
+                title="Ver el vuelta a vuelta de este piloto"
+                className="cursor-pointer"
+                style={{ borderTop: "1px solid #1c1f27", color: "#d4d4d8",
+                         background: pilotoAbierto === f.pid ? "#15181f" : undefined }}>
+                <td className="py-2.5 pl-4 sm:pl-5 pr-2 font-bold" style={{ color: f.pos === 1 ? "#facc15" : "#71717a" }}>
+                  <span style={{ color: "#52525b", fontSize: 10, marginRight: 4 }}>{pilotoAbierto === f.pid ? "▾" : "▸"}</span>
+                  {f.pos}
+                </td>
                 <td className="py-2.5 px-2 whitespace-nowrap">
                   <span className="inline-flex items-center justify-center min-w-[26px] h-[22px] rounded-md text-[11px] font-bold mr-2 px-1" style={{ background: "#27272a", color: "#fbbf24" }}>
                     {f.numero || f.nombre.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
@@ -647,6 +695,48 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
                   </span>
                 </td>
               </tr>
+
+              {/* Vuelta a vuelta del piloto */}
+              {pilotoAbierto === f.pid && (
+                <tr style={{ background: "#0d0f14" }}>
+                  <td colSpan={7} className="px-4 sm:px-5 py-3">
+                    {f.detalle.length === 0 ? (
+                      <p className="text-xs" style={{ color: "#71717a" }}>Todavía no completó vueltas.</p>
+                    ) : (
+                      <table className="w-full text-xs" style={{ borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ color: "#71717a" }}>
+                            <th className="text-left font-semibold py-1 pr-3">Vuelta</th>
+                            <th className="text-right font-semibold py-1 px-3">Tiempo</th>
+                            <th className="text-right font-semibold py-1 px-3">Dif. a su mejor</th>
+                            <th className="text-right font-semibold py-1 pl-3">Hora del día</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {f.detalle.map(v => (
+                            <tr key={v.n} style={{ borderTop: "1px solid #16181e" }}>
+                              <td className="py-1 pr-3 tabular-nums" style={{ color: "#a1a1aa" }}>{v.n}</td>
+                              <td className="py-1 px-3 text-right tabular-nums font-medium"
+                                  style={v.esMejor
+                                    ? { background: "#2e1065", color: "#c084fc", borderRadius: 4 }
+                                    : { color: "#e4e4e7" }}>
+                                {fmtMs(v.tiempoMs)}
+                              </td>
+                              <td className="py-1 px-3 text-right tabular-nums" style={{ color: "#71717a" }}>
+                                {v.esMejor ? "—" : fmtDif(v.difMejor)}
+                              </td>
+                              <td className="py-1 pl-3 text-right tabular-nums" style={{ color: "#52525b" }}>
+                                {fmtHora(v.cruceAt)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </td>
+                </tr>
+              )}
+              </Fragment>
             ))}
             {filas.length === 0 && (
               <tr>

@@ -3,6 +3,25 @@
 
 ---
 
+## [0.19.0] — 10 Agosto 2026
+### Agregado (Revisión de resultados)
+- **Vuelta a vuelta por piloto en Crono**: tocando la fila de un piloto se
+  despliega su lista de vueltas — número, tiempo, diferencia contra su propia
+  mejor y hora del día — con la mejor vuelta destacada. Funciona sobre cualquier
+  tanda de la fecha usando el selector que ya existía
+- **La descarga pasa de CSV a .xlsx con dos hojas**: "Resultado" (la tabla
+  oficial tal cual se ve en pantalla) y "Vuelta a vuelta" (un bloque por piloto
+  con todas sus vueltas, con el formato de las planillas de cronometraje)
+- Ambas vistas respetan la marca de largada: la vuelta de formación no aparece
+  y las de carrera van numeradas desde 1
+
+### Detalle técnico
+- `lib/xlsx.ts`: escritor mínimo de .xlsx (ZIP + XML) escrito a mano para no
+  sumar una librería de ~1 MB al panel. Solo texto y números, sin formato.
+  Validado generando un archivo real de la Carrera 2 y abriéndolo con openpyxl
+
+---
+
 ## [0.18.0] — 9 Agosto 2026
 ### Agregado
 - **Botón "🟢 Largada" y vuelta de formación fuera de la tabla** (migración:
