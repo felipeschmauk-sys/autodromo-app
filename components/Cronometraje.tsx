@@ -273,7 +273,11 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         if (!h || h.length < 2) return;
         estados.push({ pid, vueltas: p.vu, progreso: p.p, t: p.t ?? p.ts, enPista: p.dentro, historia: h });
       });
-      if (estados.length < 2) return;
+      // Con un solo auto en pista igual se emite: la posición y la vuelta son
+      // información válida aunque no haya con quién compararse. Antes se exigían
+      // dos pilotos y el resultado era que probando solo no aparecía NADA en la
+      // pantalla, ni siquiera el número de vuelta.
+      if (estados.length < 1) return;
 
       const gaps = calcularGaps(estados, { largo: largoCircuito, ahora });
       const orden = [...estados].sort(
@@ -412,7 +416,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     //    verdad —parada, embudo en la primera curva— y daba falso positivo
     // Detecta el caso de pérdida de señal en pista. No detecta pérdidas ANTES
     // de la primera vuelta registrada; ese otro origen (geocerca) se corrigió
-    // en la raíz sacándole la geocerca al detector de cruces.
+    // en la raíz quitándole la geocerca al detector de cruces.
     for (const s of por.values()) {
       if (s.mejor == null) continue;
       const ordenadas = [...(porPiloto.get(s.pid) ?? [])].sort((a, b) => a.numero - b.numero);

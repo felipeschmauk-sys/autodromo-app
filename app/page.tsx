@@ -449,7 +449,13 @@ function PizarraLandscape({
       onPointerUp={cancelarSalida}
       onPointerLeave={cancelarSalida}
       onPointerCancel={cancelarSalida}
-      style={{ position: "fixed", inset: 0, zIndex: 2000, background: fondo, maxWidth: "none", touchAction: "none", overflow: "hidden" }}
+      style={{
+        position: "fixed", inset: 0, zIndex: 2000, background: fondo,
+        maxWidth: "none", touchAction: "none", overflow: "hidden",
+        // Sin esto, la pulsación larga para salir dispara el selector de
+        // texto de iOS y aparece la lupa encima del pizarrón
+        userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none",
+      } as React.CSSProperties}
     >
     <div
       className="flex flex-col"
@@ -480,8 +486,8 @@ function PizarraLandscape({
             color: oscuro ? "#111827" : "#ffffff",
           }}
         >
-          {saliendo ? "SOLTÁ PARA SEGUIR · MANTENÉ PARA SALIR"
-            : "MANTENÉ PRESIONADO PARA SALIR"}
+          {saliendo ? "SUELTA PARA SEGUIR · MANTÉN PARA SALIR"
+            : "MANTÉN PRESIONADO PARA SALIR"}
         </span>
       </div>
       {/* Fila superior: posición en carrera y vuelta */}
@@ -515,9 +521,12 @@ function PizarraLandscape({
         </div>
       )}
 
-      {/* Texto inferior: solo icono + texto, sin cajas */}
+      {/* Texto inferior. Con bandera verde no se muestra nada: el color verde ya
+          dice que la pista está habilitada, y el tilde con el texto solo tapaban
+          espacio. En las demás banderas el texto es información de seguridad y
+          se mantiene. */}
       <div className="flex flex-col items-center gap-1.5" style={{ paddingBottom: "calc(var(--uh) * 5)" }}>
-        <div className="flex items-center gap-3.5">
+        <div className="flex items-center gap-3.5" style={{ display: bandera === "verde" ? "none" : undefined }}>
           <span
             className="w-10 h-10 rounded-full border-2 flex items-center justify-center text-lg font-bold flex-shrink-0"
             style={{

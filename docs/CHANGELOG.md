@@ -3,6 +3,24 @@
 
 ---
 
+## [0.27.0] — 10 Agosto 2026
+### Corregido
+- **Con un solo auto en pista no aparecía nada** en la pantalla de conducción:
+  ni posición, ni vuelta, ni diferencias. El panel exigía dos pilotos para emitir
+  el estado de carrera. Ahora emite con uno: la posición y la vuelta son datos
+  válidos aunque no haya con quién compararse
+- Se bloquea la selección de texto en la pantalla de conducción. Al mantener
+  presionado para salir, iOS abría el selector con la lupa encima del pizarrón
+- Con bandera verde ya no se muestran el tilde ni "Circulación normal
+  habilitada": el color verde ya dice que la pista está habilitada. En las demás
+  banderas el texto es información de seguridad y se mantiene
+
+### Cambiado
+- Se corrigió el lenguaje de la app a **español neutro**, sin voseo: "mantén
+  presionado", "si lo dibujas"
+
+---
+
 ## [0.26.0] — 10 Agosto 2026
 ### Cambiado (Modo conducción — se elimina la detección de orientación)
 - **El pizarrón se abre con un botón, ya no girando el teléfono.** Se eliminó la

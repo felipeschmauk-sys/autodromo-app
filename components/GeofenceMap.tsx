@@ -484,7 +484,7 @@ export default function GeofenceMap({ pilotosEnPista = [] }: Props) {
                   Dibujar el segundo adentro del primero lo convierte en agujero. */}
               {modoEdicion !== "trazado" && puntosActuales.length >= 3 && (
                 <button onClick={cerrarAnillo} disabled={guardando}
-                  title="Cierra este anillo y empieza otro. Si lo dibujás dentro del anterior, queda como agujero."
+                  title="Cierra este anillo y empieza otro. Si lo dibujas dentro del anterior, queda como agujero."
                   className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-900 text-sky-300 hover:bg-sky-800 border border-sky-800 transition disabled:opacity-60">
                   ＋ Cerrar anillo y empezar otro
                 </button>

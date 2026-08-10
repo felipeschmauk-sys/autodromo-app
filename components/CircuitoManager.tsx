@@ -321,7 +321,7 @@ function MapaCircuito({
             {/* Islas y agujeros: evita tener que cortar la geocerca en la meta */}
             {pts.length >= 3 && (
               <button onClick={cerrarAnillo}
-                title="Cierra este anillo y empieza otro. Si lo dibujás dentro del anterior, queda como agujero."
+                title="Cierra este anillo y empieza otro. Si lo dibujas dentro del anterior, queda como agujero."
                 className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-sky-900 text-sky-300 hover:bg-sky-800 border border-sky-800 transition">
                 ＋ Cerrar anillo y empezar otro
               </button>
