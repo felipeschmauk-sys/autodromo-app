@@ -3,6 +3,29 @@
 
 ---
 
+## [0.25.0] — 10 Agosto 2026
+### Corregido (Modo conducción — la pantalla se daba vuelta en las curvas)
+- **El pizarrón ya no depende de la orientación del teléfono.** En curva la
+  fuerza lateral engaña al acelerómetro —no distingue la gravedad de la
+  aceleración lateral— y iOS gira la pantalla solo, tirando abajo la vista de
+  conducción en el peor momento. Ahora un toque la **fija**, y desde ahí la
+  orientación deja de mandar
+- Si el teléfono igual gira, el contenido se **rota por CSS**: el piloto sigue
+  viendo lo mismo, sin importar qué crea el sensor. En iOS no existe forma de
+  bloquear la orientación desde la web, así que se compensa en vez de pelearla
+- Para salir hay que **mantener presionado 1,5 s**. Con el auto en pista los
+  toques accidentales sobran, y salirse del pizarrón a 130 km/h por un golpe
+  sería peor que no tener el modo
+- El modo fijo sobrevive a una recarga (iOS puede reiniciar la app sola a mitad
+  de tanda) pero se suelta al salir del evento, para que nadie quede atrapado
+
+### Detalle técnico
+- Dentro del contenedor rotado, `vw` y `vh` siguen apuntando al viewport real,
+  así que todos los tamaños salían intercambiados. Se pasaron a variables
+  propias que el contenedor intercambia una sola vez al rotar (17 usos)
+
+---
+
 ## [0.24.0] — 10 Agosto 2026
 ### Agregado
 - **Cada piloto congela su dato al cruzar su meta.** La carrera termina cuando

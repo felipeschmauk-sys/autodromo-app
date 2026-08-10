@@ -246,6 +246,10 @@ function PizarraLandscape({
   bandera,
   esPersonal,
   gaps,
+  fijo = false,
+  viewportLandscape = true,
+  onFijar,
+  onSalir,
 }: {
   trazado: Coordenada[];
   sectores: Sector[];
@@ -253,6 +257,12 @@ function PizarraLandscape({
   esPersonal: boolean;
   /** Datos de carrera: posición, vuelta y diferencias con los rivales */
   gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
+  /** Modo conducción fijado: la orientación del teléfono deja de mandar */
+  fijo?: boolean;
+  /** Orientación REAL del viewport, para saber si hay que rotar por CSS */
+  viewportLandscape?: boolean;
+  onFijar?: () => void;
+  onSalir?: () => void;
 }) {
   // Fondo por bandera (el color ES la información)
   const FONDOS: Record<string, string> = {
@@ -328,8 +338,8 @@ function PizarraLandscape({
       <svg
         viewBox={`0 0 ${W} ${H}`}
         style={{
-          width: "min(90vw, 1500px)",
-          maxHeight: "68vh",
+          width: "min(calc(var(--uw) * 90), 1500px)",
+          maxHeight: "calc(var(--uh) * 68)",
           filter: "drop-shadow(0 10px 16px rgba(0,0,0,0.35))",
         }}
       >
@@ -391,9 +401,9 @@ function PizarraLandscape({
     const txt = (alinear === "left" ? "+" : "−") + Math.abs(valor).toFixed(1).replace(".", ",") + "s";
     return (
       <span className="flex items-center gap-2" style={{ color: colorDato }}>
-        <span style={{ fontSize: "clamp(22px, 4.4vw, 52px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{txt}</span>
+        <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.4), 52px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{txt}</span>
         {tend !== 0 && (
-          <span style={{ color, fontSize: "clamp(16px, 3vw, 34px)", lineHeight: 1 }}>
+          <span style={{ color, fontSize: "clamp(16px, calc(var(--uw) * 3), 34px)", lineHeight: 1 }}>
             {flechaArriba ? "▲" : "▼"}
           </span>
         )}
@@ -401,28 +411,85 @@ function PizarraLandscape({
     );
   };
 
+  // ── Fijar y salir ───────────────────────────────────────────
+  // Un toque fija el modo. Para salir hay que MANTENER presionado: con el auto
+  // en pista los toques accidentales sobran, y salirse del pizarrón a 130 km/h
+  // por un golpe en la baliza sería peor que no tener el modo.
+  const [saliendo, setSaliendo] = useState(false);
+  const salirRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const iniciarSalida = () => {
+    if (!fijo) return;
+    setSaliendo(true);
+    salirRef.current = setTimeout(() => { setSaliendo(false); onSalir?.(); }, 1500);
+  };
+  const cancelarSalida = () => {
+    setSaliendo(false);
+    if (salirRef.current) { clearTimeout(salirRef.current); salirRef.current = null; }
+  };
+
+  // Si el teléfono giró solo (curva) y el modo está fijo, se rota el contenido
+  // por CSS: el piloto sigue viendo lo mismo, sin importar qué crea el sensor
+  const rotar = fijo && !viewportLandscape;
+  const estiloBase: React.CSSProperties = rotar
+    ? {
+        position: "fixed", top: 0, left: "calc(var(--uw) * 100)",
+        width: "calc(var(--uh) * 100)", height: "calc(var(--uw) * 100)",
+        transform: "rotate(90deg)", transformOrigin: "0 0",
+      }
+    : { position: "fixed", inset: 0 };
+
   return (
     <div
-      className="fixed inset-0 flex flex-col"
-      style={{ zIndex: 2000, background: fondo, maxWidth: "none" }}
+      className="flex flex-col"
+      onClick={!fijo ? onFijar : undefined}
+      onPointerDown={fijo ? iniciarSalida : undefined}
+      onPointerUp={cancelarSalida}
+      onPointerLeave={cancelarSalida}
+      onPointerCancel={cancelarSalida}
+      style={{
+        ...estiloBase, zIndex: 2000, background: fondo, maxWidth: "none", touchAction: "none",
+        // Unidades propias: al rotar, ancho y alto del contenedor son el alto
+        // y el ancho del viewport, así que se intercambian acá una sola vez
+        ["--uw" as string]: rotar ? "1vh" : "1vw",
+        ["--uh" as string]: rotar ? "1vw" : "1vh",
+      } as React.CSSProperties}
     >
+      {/* Aviso de fijar / salir, discreto para no competir con la bandera */}
+      <div
+        className="absolute inset-x-0 flex justify-center pointer-events-none"
+        style={{ top: "calc(var(--uh) * 0.8)", zIndex: 3 }}
+      >
+        <span
+          style={{
+            fontSize: "clamp(9px, calc(var(--uw) * 1.4), 14px)",
+            letterSpacing: "0.14em",
+            fontWeight: 700,
+            opacity: saliendo ? 1 : 0.45,
+            color: oscuro ? "#111827" : "#ffffff",
+          }}
+        >
+          {!fijo ? "TOCÁ PARA FIJAR LA PANTALLA"
+            : saliendo ? "SOLTÁ PARA SEGUIR · MANTENÉ PARA SALIR"
+            : "PANTALLA FIJA · MANTENÉ PRESIONADO PARA SALIR"}
+        </span>
+      </div>
       {/* Fila superior: posición en carrera y vuelta */}
       {gaps && (
         <div
           className="flex items-start justify-between"
-          style={{ padding: "3vh 4vw 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em" }}
+          style={{ padding: "calc(var(--uh) * 3) calc(var(--uw) * 4) 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em" }}
         >
-          <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>Pos. {gaps.pos}</span>
+          <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.6), 56px)" }}>Pos. {gaps.pos}</span>
           {/* Al cruzar su meta el dato queda congelado: hay que decirlo, o el
               piloto lee como vivo un número que ya no se mueve */}
-          <span style={{ fontSize: "clamp(22px, 4.6vw, 56px)" }}>
+          <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.6), 56px)" }}>
             {gaps.fin ? "FINAL" : `LAP ${String(gaps.vu).padStart(2, "0")}`}
           </span>
         </div>
       )}
 
       {/* Circuito flotante, levemente sobre el centro */}
-      <div className="flex-1 flex items-center justify-center overflow-hidden" style={{ paddingBottom: "2vh" }}>
+      <div className="flex-1 flex items-center justify-center overflow-hidden" style={{ paddingBottom: "calc(var(--uh) * 2)" }}>
         {svg}
       </div>
 
@@ -430,7 +497,7 @@ function PizarraLandscape({
       {gaps && (
         <div
           className="absolute inset-x-0 flex items-end justify-between pointer-events-none"
-          style={{ bottom: "3.5vh", padding: "0 4vw", zIndex: 1 }}
+          style={{ bottom: "calc(var(--uh) * 3.5)", padding: "0 calc(var(--uw) * 4)", zIndex: 1 }}
         >
           <Dato valor={gaps.ad} tend={gaps.tendAd} alinear="left" />
           <Dato valor={gaps.at} tend={gaps.tendAt} alinear="right" />
@@ -438,7 +505,7 @@ function PizarraLandscape({
       )}
 
       {/* Texto inferior: solo icono + texto, sin cajas */}
-      <div className="flex flex-col items-center gap-1.5" style={{ paddingBottom: "5vh" }}>
+      <div className="flex flex-col items-center gap-1.5" style={{ paddingBottom: "calc(var(--uh) * 5)" }}>
         <div className="flex items-center gap-3.5">
           <span
             className="w-10 h-10 rounded-full border-2 flex items-center justify-center text-lg font-bold flex-shrink-0"
@@ -892,6 +959,10 @@ export default function Home() {
   const [geocercaRecinto, setGeocercaRecinto] = useState<GeocercaCoords>([]); // recinto
   const [sectores, setSectores]       = useState<Sector[]>([]);
   const [isLandscape, setIsLandscape] = useState(false);
+  // Modo conducción FIJO. En curva la fuerza lateral engaña al acelerómetro y
+  // iOS gira la pantalla solo: si el pizarrón dependiera de la orientación, se
+  // caería en cada curva. Una vez fijado, la orientación deja de importar.
+  const [modoFijo, setModoFijo] = useState(false);
   const [viewportH, setViewportH]     = useState(600);
 
   // ── Evento activo ──────────────────────────────────────────────
@@ -1992,6 +2063,9 @@ export default function Home() {
       setIsLandscape(landscape);
       setViewportH(window.innerHeight);
       if (landscape) setSecView("main");
+      // Ojo: esto ya NO decide si se muestra el pizarrón cuando está fijado.
+      // Es solo el estado real del viewport, que sirve para saber si hay que
+      // rotar el contenido por CSS.
     };
     update();
     window.addEventListener("resize", update);
@@ -2002,6 +2076,25 @@ export default function Home() {
       window.removeEventListener("orientationchange", onOrient);
     };
   }, []);
+
+  // El modo fijo sobrevive a una recarga (iOS puede reiniciar la app sola a
+  // mitad de tanda) pero no a cerrar la pestaña
+  useEffect(() => {
+    if (typeof sessionStorage === "undefined") return;
+    if (sessionStorage.getItem("modo_conduccion") === "1") setModoFijo(true);
+  }, []);
+  useEffect(() => {
+    if (typeof sessionStorage === "undefined") return;
+    if (modoFijo) sessionStorage.setItem("modo_conduccion", "1");
+    else sessionStorage.removeItem("modo_conduccion");
+  }, [modoFijo]);
+
+  // Salir del evento suelta el modo fijo: nadie debe quedar atrapado en el
+  // pizarrón si la pulsación larga no le funciona
+  useEffect(() => { if (stage !== "app") setModoFijo(false); }, [stage]);
+
+  // Con el modo fijo activo el pizarrón manda, gire o no el teléfono
+  const enConduccion = isLandscape || modoFijo;
 
   // ── Handlers existentes (sin cambios) ──
   const agregarAuto = () => setAutos([...autos, { id: Date.now(), marca: "", modelo: "" }]);
@@ -2281,7 +2374,7 @@ export default function Home() {
   );
 
   // ── Render compartido: barra de navegación inferior ──
-  const renderBottomNav = () => !isLandscape && (
+  const renderBottomNav = () => !enConduccion && (
             <div className="border-t border-gray-200 bg-white flex items-center justify-around px-1 py-1.5">
               {([
                 { id: "main",        emoji: "🏁", label: "Pista"    },
@@ -3043,12 +3136,16 @@ export default function Home() {
           {/* ══ LANDSCAPE — MODO CONDUCCIÓN ══ */}
           {/* Rediseño solo visual: misma bandera efectiva (jerarquía existente),
               mismos trazado y sectores — cambia únicamente la presentación */}
-          {isLandscape && (
+          {enConduccion && (
             <PizarraLandscape
               trazado={trazado}
               sectores={sectores}
               bandera={banderaEfectiva}
               gaps={misGaps}
+              fijo={modoFijo}
+              viewportLandscape={isLandscape}
+              onFijar={() => setModoFijo(true)}
+              onSalir={() => setModoFijo(false)}
               esPersonal={flagEsPersonal}
             />
           )}
@@ -3105,7 +3202,7 @@ export default function Home() {
                 )}
 
                 {/* TRAZADO — Mapa Leaflet (solo en portrait) */}
-                {!isLandscape && (
+                {!enConduccion && (
                   <LeafletPilotMap
                     trazado={trazado}
                     bandera={estadoPista.bandera}
@@ -3165,7 +3262,7 @@ export default function Home() {
           {renderBottomNav()}
 
           {/* ── BOTÓN QR FLOTANTE — oculto en landscape ── */}
-          {!isLandscape && (
+          {!enConduccion && (
             <button
               onClick={() => habilitado ? setShowQRModal(true) : setStage("prueba")}
               className="fixed bottom-20 right-4 w-16 h-16 rounded-2xl z-40 flex flex-col items-center justify-center gap-0.5 active:scale-95 transition-transform"
