@@ -290,9 +290,12 @@ Todas las tablas tienen políticas abiertas `FOR ALL USING (true)`. El control d
 - ✅ `inscripciones` confirmada en la publicación `supabase_realtime` (2 Jul 2026)
 
 ### Migraciones SQL Pendientes de Ejecutar
-- ⏳ `task-largada-migration.sql` (9 Ago 2026): columna `tandas.largada_at`.
-  Separa la vuelta de formación (pace car) de las vueltas de carrera. Opcional
-  y retrocompatible: en NULL todo se comporta como antes
+- ⏳ `task-categorias-migration.sql` (10 Ago 2026): tabla `categorias` +
+  `pilotos.categoria_id`. Un piloto compite contra los de SU categoría; las
+  diferencias con el auto de adelante/atrás y la bandera azul sí mezclan todas.
+  Sin categoría = lista de espera: sin posición ni diferencias, pero opera
+  normal en pista
+- ⏳ `task-largada-migration.sql` (9 Ago 2026): columna `tandas.largada_at`
 - ⏳ `task-inscripcion-libre-migration.sql` (8 Ago 2026): columna
   `fechas_evento.inscripcion_libre`. **Provisorio, marcha blanca**: saltea la
   aprobación del admin y el pago. Sin correrla la app funciona igual y el

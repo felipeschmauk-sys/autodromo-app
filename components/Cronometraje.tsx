@@ -45,7 +45,7 @@ interface VueltaRow {
   piloto_id: string; numero: number; cruce_at: string; tiempo_ms: number | null; valida: boolean;
   offset_ms?: number | null; // desfase del reloj de ESE teléfono contra el servidor
 }
-interface PilotoInfo { nombre: string; numero: string | null; }
+interface PilotoInfo { nombre: string; numero: string | null; categoria: string | null; }
 interface PosPiloto {
   lat: number; lng: number; ts: number; dentro: boolean | null;
   /** Metros recorridos sobre el trazado. Solo llega por broadcast. */
@@ -103,6 +103,8 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
   const [marcandoLargada, setMarcandoLargada] = useState(false);
   const [pilotoAbierto, setPilotoAbierto] = useState<string | null>(null);
+  // Filtro solo para la descarga: la tabla en pantalla muestra todo junto
+  const [catDescarga, setCatDescarga] = useState<string>("");
   // Historial de recorrido por piloto: el gap se calcula sobre el recorrido del
   // OTRO, no sobre su posición actual, así que hay que guardarlo
   const historiaRef = useRef<Map<string, Muestra[]>>(new Map());
@@ -156,21 +158,34 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // ── Nombres y números de los pilotos del evento ──
   useEffect(() => {
     const cargar = async () => {
+      // Se pide la categoría junto con el nombre. Si la migración de categorías
+      // aún no se corrió, se cae al pedido de siempre y todo sigue funcionando.
       const res = await supabase
         .from("inscripciones")
-        .select("piloto_id, pilotos(nombre, numero)")
+        .select("piloto_id, pilotos(nombre, numero, categorias(nombre))")
         .eq("fecha_id", fechaId);
       let data: any[] | null = res.data as any;
       if (res.error) {
         const r2 = await supabase
           .from("inscripciones")
-          .select("piloto_id, pilotos(nombre)")
+          .select("piloto_id, pilotos(nombre, numero)")
           .eq("fecha_id", fechaId);
         data = r2.data as any;
+        if (r2.error) {
+          const r3 = await supabase
+            .from("inscripciones")
+            .select("piloto_id, pilotos(nombre)")
+            .eq("fecha_id", fechaId);
+          data = r3.data as any;
+        }
       }
       const m = new Map<string, PilotoInfo>();
       (data || []).forEach((r: any) => {
-        m.set(r.piloto_id, { nombre: r.pilotos?.nombre || "Piloto", numero: r.pilotos?.numero ?? null });
+        m.set(r.piloto_id, {
+          nombre:    r.pilotos?.nombre || "Piloto",
+          numero:    r.pilotos?.numero ?? null,
+          categoria: r.pilotos?.categorias?.nombre ?? null,
+        });
       });
       setPilotosInfo(m);
     };
@@ -505,6 +520,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         pid: s.pid,
         numero: info?.numero ?? null,
         nombre: info?.nombre ?? s.pid.slice(0, 8),
+        categoria: info?.categoria ?? null,
         completadas: s.completadas,
         sospechosas: s.sospechosas,
         mejor: s.mejor,
@@ -543,18 +559,24 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   //     contra su mejor, hora del día)
   const descargarResultados = () => {
     if (!tandaSel || filas.length === 0) return;
+    // La descarga puede acotarse a una categoría; la tabla en pantalla no se
+    // separa, solo aclara a cuál pertenece cada piloto
+    const filasDesc = catDescarga
+      ? filas.filter(f => (f.categoria ?? "") === catDescarga)
+      : filas;
+    if (filasDesc.length === 0) return;
     const fecha = new Date(tandaSel.inicio);
     const cab = `${tandaSel.nombre} · ${fecha.toLocaleDateString("es-CL")} ${fecha.toLocaleTimeString("es-CL", { hour: "2-digit", minute: "2-digit" })} · ${tandaSel.fin ? "Finalizada" : "En curso"}`;
 
     const hojaResultado: Celda[][] = [
-      [cab],
+      [cab + (catDescarga ? ` · ${catDescarga}` : "")],
       [],
-      ["Pos", "Número", "Piloto", "Vueltas", "Diferencia", "Mejor", "Última", "Estado"],
-      ...filas.map(f => [f.pos, f.numero || "", f.nombre, f.completadas, f.gap, fmtMs(f.mejor), fmtMs(f.ultima), f.estado.label] as Celda[]),
+      ["Pos", "Número", "Piloto", "Categoría", "Vueltas", "Diferencia", "Mejor", "Última", "Estado"],
+      ...filasDesc.map(f => [f.pos, f.numero || "", f.nombre, f.categoria ?? "", f.completadas, f.gap, fmtMs(f.mejor), fmtMs(f.ultima), f.estado.label] as Celda[]),
     ];
 
     const hojaVueltas: Celda[][] = [[cab], []];
-    for (const f of filas) {
+    for (const f of filasDesc) {
       hojaVueltas.push([`${f.numero ? `(${f.numero}) ` : ""}${f.nombre}`]);
       hojaVueltas.push(["Vuelta", "Tiempo de vuelta", "Dif. resp. mejor", "Hora del día"]);
       if (f.detalle.length === 0) {
@@ -569,9 +591,14 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
 
     descargarXlsx(
       [{ nombre: "Resultado", filas: hojaResultado }, { nombre: "Vuelta a vuelta", filas: hojaVueltas }],
-      `resultados-${tandaSel.nombre.replace(/\s+/g, "-")}-${fecha.toISOString().slice(0, 10)}.xlsx`,
+      `resultados-${tandaSel.nombre.replace(/\s+/g, "-")}${catDescarga ? "-" + catDescarga.replace(/\s+/g, "-") : ""}-${fecha.toISOString().slice(0, 10)}.xlsx`,
     );
   };
+
+  // Categorías presentes en esta tanda, para ofrecerlas en el filtro
+  const categoriasEnTanda = Array.from(
+    new Set(filas.map(f => f.categoria).filter((c): c is string => !!c))
+  ).sort();
 
   const cfg = tandaSel ? (TIPO_CFG[tandaSel.tipo] || TIPO_CFG.entrenamiento) : null;
   const esCarrera = tandaSel?.tipo === "carrera";
@@ -766,10 +793,24 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           </p>
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {/* Filtro solo de la descarga: la tabla en pantalla siempre muestra
+              todas las categorías juntas, con la columna CAT. para distinguir */}
+          {categoriasEnTanda.length > 0 && (
+            <select
+              value={catDescarga}
+              onChange={e => setCatDescarga(e.target.value)}
+              title="Categoría a incluir en la descarga"
+              className="text-xs font-medium px-2 py-1 rounded-lg"
+              style={{ background: "transparent", color: "#a1a1aa", border: "1px solid #3f3f46" }}
+            >
+              <option value="">Todas las categorías</option>
+              {categoriasEnTanda.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          )}
           <button
             onClick={descargarResultados}
             disabled={filas.length === 0}
-            title="Descargar los resultados de esta tanda (CSV, se abre en Excel)"
+            title="Descargar los resultados de esta tanda en Excel, con una hoja por vuelta a vuelta"
             className="text-xs font-medium px-2.5 py-1 rounded-lg transition-colors hover:text-white disabled:opacity-40 disabled:cursor-not-allowed"
             style={{ background: "transparent", color: "#a1a1aa", border: "1px solid #3f3f46" }}
           >
@@ -795,6 +836,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
             <tr className="text-left text-[10px] tracking-wider" style={{ color: "#52525b" }}>
               <th className="py-2 pl-4 sm:pl-5 pr-2 w-9">POS</th>
               <th className="py-2 px-2">PILOTO</th>
+              <th className="py-2 px-2">CAT.</th>
               <th className="py-2 px-2 text-center">VUELTAS</th>
               <th className="py-2 px-2 text-right">{esCarrera ? "DIF. LÍDER" : "DIF. MEJOR"}</th>
               <th className="py-2 px-2 text-right">MEJOR</th>
@@ -821,6 +863,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
                   </span>
                   {f.nombre}
                 </td>
+                <td className="py-2.5 px-2 whitespace-nowrap" style={{ color: f.categoria ? "#a1a1aa" : "#52525b" }}>
+                  {f.categoria ?? "—"}
+                </td>
                 <td className="py-2.5 px-2 text-center tabular-nums">
                   {f.completadas}
                   {f.sospechosas > 0 && (
@@ -844,7 +889,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
               {/* Vuelta a vuelta del piloto */}
               {pilotoAbierto === f.pid && (
                 <tr style={{ background: "#0d0f14" }}>
-                  <td colSpan={7} className="px-4 sm:px-5 py-3">
+                  <td colSpan={8} className="px-4 sm:px-5 py-3">
                     {f.detalle.length === 0 ? (
                       <p className="text-xs" style={{ color: "#71717a" }}>Todavía no completó vueltas.</p>
                     ) : (
@@ -885,7 +930,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
             ))}
             {filas.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-10 text-center text-sm" style={{ color: "#52525b" }}>
+                <td colSpan={8} className="py-10 text-center text-sm" style={{ color: "#52525b" }}>
                   Esperando el primer cruce de meta…
                 </td>
               </tr>

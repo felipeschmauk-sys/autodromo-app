@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { desdeLargadaMs } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
+const CategoriasPilotos = dynamic(() => import('@/components/CategoriasPilotos'), { ssr: false })
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
   ssr: false,
   loading: () => (
@@ -1976,6 +1977,10 @@ export default function AdminPage() {
 
           return (
             <>
+              {/* Categorías: se crean acá y se asignan a los pilotos registrados.
+                  Plegada por defecto para no estorbar la operación del día. */}
+              <CategoriasPilotos />
+
               {/* Stats */}
               <div className="grid grid-cols-4 gap-2">
                 {[

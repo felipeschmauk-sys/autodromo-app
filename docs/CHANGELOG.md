@@ -3,6 +3,29 @@
 
 ---
 
+## [0.28.0] — 10 Agosto 2026
+### Agregado (Categorías de pilotos — base para separar la clasificación)
+- **Categorías** (migración: `docs/task-categorias-migration.sql`). Sección
+  nueva en la pestaña Pilotos, plegada por defecto: se crean, renombran y
+  eliminan categorías, y se asigna a cada piloto registrado la suya
+- Un piloto sin categoría queda en **lista de espera**: sale a pista con
+  normalidad y su perfil sigue funcionando para banderas y seguridad, pero no
+  tendrá posición ni diferencias con otros autos. El panel lo avisa
+- Al eliminar una categoría, sus pilotos vuelven a la lista de espera
+- **Columna CAT.** en la tabla de Crono. La tabla NO se separa por categoría:
+  solo aclara a cuál pertenece cada piloto
+- **La descarga se puede filtrar por categoría.** El archivo sale con la
+  categoría en el nombre y en el encabezado; sin filtro salen todas
+
+### Nota de diseño
+- La categoría vive en el piloto, no en la inscripción: se asigna una vez y
+  vale para todos los eventos
+- Pendiente en los pasos siguientes: separar la lógica por tipo de tanda
+  (entrenamiento/clasificación vs carrera) y calcular la posición dentro de la
+  categoría
+
+---
+
 ## [0.27.0] — 10 Agosto 2026
 ### Corregido
 - **Con un solo auto en pista no aparecía nada** en la pantalla de conducción:
