@@ -3,6 +3,34 @@
 
 ---
 
+## [0.29.0] — 10 Agosto 2026
+### Agregado (La pantalla del piloto cambia según el tipo de tanda)
+- **Entrenamiento y clasificación usan otra lógica**, no una variante de la de
+  carrera. En carrera el orden sale de la distancia total recorrida, porque
+  todos largaron juntos. En entrenamiento eso no significa nada: cada uno entró
+  a pista cuando quiso y lleva vueltas distintas, así que el orden es
+  **circular por posición en pista** — quién tengo físicamente delante y detrás,
+  sin importar su vuelta ni su categoría
+- **La posición es dentro de SU categoría.** En carrera, por orden de carrera;
+  en entrenamiento y clasificación, por mejor vuelta. Un piloto de una categoría
+  más rápida ya no empuja a otro hacia abajo en la tabla
+- Sin tiempo marcado todavía, o sin categoría asignada, la pantalla muestra
+  `Pos. --`
+- **La bandera azul solo existe en carrera.** En entrenamiento nadie está
+  doblando a nadie
+
+### Detalle
+- El piloto sin categoría no tiene posición ni diferencias, pero **sí participa
+  de la bandera azul** (es seguridad, no clasificación) y **sigue contando como
+  referencia** para los gaps de los demás: si se lo excluyera, el gap de quien
+  lo tiene delante saltaría al auto siguiente y no coincidiría con lo que ve por
+  el parabrisas
+- Verificado replayando el Entrenamiento 1 del 9 ago: con dos autos en pista los
+  números salen espejados (uno ve +42,7 s adelante y el otro −42,7 s atrás) y no
+  se enciende ninguna bandera azul
+
+---
+
 ## [0.28.0] — 10 Agosto 2026
 ### Agregado (Categorías de pilotos — base para separar la clasificación)
 - **Categorías** (migración: `docs/task-categorias-migration.sql`). Sección

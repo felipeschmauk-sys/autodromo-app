@@ -86,8 +86,12 @@ export function suscribirPosiciones(fechaId: string, alRecibir: (pos: PosicionVi
 // costo no crece con la cantidad de autos en pista.
 
 export interface GapsPiloto {
-  /** Posición en carrera */
-  pos: number
+  /**
+   * Posición dentro de SU categoría. En carrera, por orden de carrera; en
+   * entrenamiento y clasificación, por mejor vuelta. null = sin categoría
+   * asignada o todavía sin tiempo marcado → en pantalla se muestra "--".
+   */
+  pos: number | null
   /** Vueltas de carrera completadas */
   vu: number
   /** Segundos hasta el competidor de adelante (positivo). null = va puntero */

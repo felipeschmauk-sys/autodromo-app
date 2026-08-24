@@ -294,19 +294,73 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // pantalla, ni siquiera el número de vuelta.
       if (estados.length < 1) return;
 
-      const gaps = calcularGaps(estados, { largo: largoCircuito, ahora });
+      // En carrera manda la distancia recorrida; en entrenamiento y
+      // clasificación, la posición en pista (cada uno lleva vueltas distintas)
+      const esCarreraTanda = tandaSel?.tipo === "carrera";
+      const gaps = calcularGaps(estados, {
+        largo: largoCircuito, ahora, modo: esCarreraTanda ? "carrera" : "libre",
+      });
       const orden = [...estados].sort(
         (a, b) => recorridoTotal(b, largoCircuito) - recorridoTotal(a, largoCircuito));
 
+      // ── Posición DENTRO de la categoría ───────────────────────
+      // Un piloto compite contra los de su categoría: uno de una categoría más
+      // rápida no debe empujarlo hacia abajo. Sin categoría no hay posición —
+      // queda en lista de espera, pero sigue operando en pista.
+      const info = new Map(filasRef.current.map(f => [f.pid, f]));
+      const catDe = (pid: string) => info.get(pid)?.categoria ?? null;
+      const posDe = new Map<string, number | null>();
+
+      if (esCarreraTanda) {
+        // Por orden de carrera, contando solo a los de la misma categoría
+        const vistos = new Map<string, number>();
+        for (const e of orden) {
+          const cat = catDe(e.pid);
+          if (!cat) { posDe.set(e.pid, null); continue; }
+          const n = (vistos.get(cat) ?? 0) + 1;
+          vistos.set(cat, n);
+          posDe.set(e.pid, n);
+        }
+      } else {
+        // Por tabla de tiempos: manda la mejor vuelta. Sin tiempo marcado no
+        // hay posición todavía, y en pantalla se muestra "--"
+        const porCat = new Map<string, { pid: string; mejor: number }[]>();
+        for (const e of estados) {
+          const cat = catDe(e.pid);
+          const mejor = info.get(e.pid)?.mejor ?? null;
+          if (!cat || mejor == null) { posDe.set(e.pid, null); continue; }
+          if (!porCat.has(cat)) porCat.set(cat, []);
+          porCat.get(cat)!.push({ pid: e.pid, mejor });
+        }
+        porCat.forEach(lista => {
+          lista.sort((a, b) => a.mejor - b.mejor);
+          lista.forEach((x, i) => posDe.set(x.pid, i + 1));
+        });
+      }
+
       const pilotos: EstadoCarreraViva["pilotos"] = {};
-      orden.forEach((e, i) => {
+      orden.forEach((e) => {
         const g = gaps.get(e.pid);
         if (!g) return;
         // La bandera azul se enciende y se apaga sola. La histéresis evita que
-        // titile, y el adelantamiento consumado la baja de inmediato.
-        const est = sostenerAzul(azulRef.current.get(e.pid), g.azul, ahora, { pasaronPor: g.pasaronPor });
+        // titile, y el adelantamiento consumado la baja de inmediato. Solo
+        // existe en carrera: en entrenamiento nadie está doblando a nadie.
+        const est = esCarreraTanda
+          ? sostenerAzul(azulRef.current.get(e.pid), g.azul, ahora, { pasaronPor: g.pasaronPor })
+          : { activa: false, pid: null, desde: 0, ultimoOk: 0 };
         azulRef.current.set(e.pid, est);
-        pilotos[e.pid] = { pos: i + 1, vu: e.vueltas, ad: g.adelante, at: g.atras, azul: est.activa };
+        // Sin categoría: no hay posición ni diferencias, pero sí bandera azul.
+        // Es seguridad, no clasificación. Y sigue contando como referencia para
+        // los demás: si no, el gap de quien lo tiene delante saltaría al auto
+        // siguiente y no coincidiría con lo que ve por el parabrisas.
+        const sinCat = catDe(e.pid) == null;
+        pilotos[e.pid] = {
+          pos:  posDe.get(e.pid) ?? null,
+          vu:   e.vueltas,
+          ad:   sinCat ? null : g.adelante,
+          at:   sinCat ? null : g.atras,
+          azul: est.activa,
+        };
       });
 
       // ── Meta final: congelar a cada uno en su propio cruce ──
@@ -539,6 +593,11 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       };
     });
   }, [vueltas, pilotosInfo, posiciones, trazado, tandaSel]);
+
+  // Espejo de las filas: el intervalo necesita la categoría y la mejor vuelta
+  // de cada piloto para armar la posición dentro de su propia categoría
+  const filasRef = useRef<typeof filas>([]);
+  useEffect(() => { filasRef.current = filas; }, [filas]);
 
   // ── Datos de cabecera ──
   const mejorAbsFila  = filas.reduce<typeof filas[0] | null>((m, f) => (f.mejor != null && (m == null || f.mejor < (m.mejor as number)) ? f : m), null);

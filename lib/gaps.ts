@@ -49,6 +49,20 @@ export interface GapPiloto {
 export interface OpcionesGap {
   /** Largo del circuito en metros */
   largo: number
+  /**
+   * Cómo se resuelve quién va adelante y quién atrás:
+   *
+   *  · "carrera": por distancia total recorrida. Todos largaron juntos, así que
+   *    la distancia acumulada ES la clasificación. Los doblados quedan fuera de
+   *    los gaps y se activa la bandera azul.
+   *
+   *  · "libre" (entrenamiento y clasificación): por POSICIÓN EN PISTA, de forma
+   *    circular. Cada uno entró cuando quiso y lleva vueltas distintas, así que
+   *    la distancia acumulada no significa nada: lo único que importa es quién
+   *    tengo físicamente delante y detrás, sin importar su vuelta ni su
+   *    categoría. Sin bandera azul: nadie está doblando a nadie.
+   */
+  modo?: 'carrera' | 'libre'
   /** Umbral de bandera azul, en segundos */
   umbralAzul?: number
   /** Cuánto puede tener de viejo un piloto para seguir participando (ms) */
@@ -109,6 +123,32 @@ export function gapEntre(adelante: EstadoPiloto, atras: EstadoPiloto, largo: num
 }
 
 /**
+ * Instante en que `otro` pasó por un punto del TRAZADO (no por una distancia
+ * acumulada). Sirve cuando los pilotos llevan vueltas distintas y no se pueden
+ * comparar por recorrido total, que es el caso de entrenamiento.
+ */
+export function instanteEnPista(
+  otro: EstadoPiloto,
+  progresoObjetivo: number,
+  largo: number,
+): number | null {
+  // Si el punto que busco quedó atrás suyo en esta vuelta, pasó por ahí en la
+  // vuelta actual; si no, en la anterior. Se prueba también una vuelta más
+  // atrás porque cerca de meta el redondeo puede correr la referencia.
+  const base = progresoObjetivo <= otro.progreso ? otro.vueltas : otro.vueltas - 1
+  for (const vr of [base, base - 1]) {
+    const t = instanteEn(otro.historia, (vr + progresoObjetivo) * largo)
+    if (t != null) return t
+  }
+  return null
+}
+
+/** Separación en pista de `otro` respecto de `yo`, 0..1 hacia adelante. */
+function deltaPista(yo: EstadoPiloto, otro: EstadoPiloto): number {
+  return (((otro.progreso - yo.progreso) % 1) + 1) % 1
+}
+
+/**
  * Calcula, para cada piloto, la diferencia con el competidor de adelante y el
  * de atrás, y si le corresponde bandera azul.
  *
@@ -124,7 +164,7 @@ export function calcularGaps(
   pilotos: EstadoPiloto[],
   opciones: OpcionesGap,
 ): Map<string, GapPiloto> {
-  const { largo, umbralAzul = 5, frescuraMs = 8000, ahora = Date.now() } = opciones
+  const { largo, umbralAzul = 5, frescuraMs = 8000, ahora = Date.now(), modo = 'carrera' } = opciones
   const salida = new Map<string, GapPiloto>()
 
   // En boxes o sin señal reciente: no participa, pero se lo devuelve vacío para
@@ -132,6 +172,36 @@ export function calcularGaps(
   const activos = pilotos.filter(p => p.enPista !== false && ahora - p.t <= frescuraMs)
   for (const p of pilotos) salida.set(p.pid, { adelante: null, atras: null, azul: null, pasaronPor: [] })
   if (activos.length < 2 || !largo) return salida
+
+  // ── Entrenamiento y clasificación ─────────────────────────
+  // Nadie está corriendo contra nadie en pista: solo importa quién tengo
+  // físicamente delante y detrás, dando la vuelta al circuito.
+  if (modo === 'libre') {
+    for (const yo of activos) {
+      const g: GapPiloto = { adelante: null, atras: null, azul: null, pasaronPor: [] }
+
+      let ade: EstadoPiloto | null = null, dAde = Infinity
+      let atr: EstadoPiloto | null = null, dAtr = Infinity
+      for (const otro of activos) {
+        if (otro.pid === yo.pid) continue
+        const d = deltaPista(yo, otro)
+        if (d <= 0) continue
+        if (d < dAde) { dAde = d; ade = otro }          // el más cercano adelante
+        if (1 - d < dAtr) { dAtr = 1 - d; atr = otro }  // el más cercano atrás
+      }
+
+      if (ade) {
+        const t = instanteEnPista(ade, yo.progreso, largo)
+        if (t != null) g.adelante = (yo.t - t) / 1000
+      }
+      if (atr) {
+        const t = instanteEnPista(yo, atr.progreso, largo)
+        if (t != null) g.atras = -((atr.t - t) / 1000)
+      }
+      salida.set(yo.pid, g)
+    }
+    return salida
+  }
 
   // Orden de carrera: más recorrido = más adelante
   const orden = [...activos].sort((a, b) => recorridoTotal(b, largo) - recorridoTotal(a, largo))
