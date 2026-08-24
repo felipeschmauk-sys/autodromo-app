@@ -496,7 +496,9 @@ function PizarraLandscape({
           className="flex items-start justify-between"
           style={{ padding: "calc(var(--uh) * 3) calc(var(--uw) * 4) 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em" }}
         >
-          <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.6), 56px)" }}>Pos. {gaps.pos}</span>
+          {/* Sin categoría asignada o sin tiempo marcado todavía: "--". El
+              piloto opera normal en pista, solo no tiene clasificación. */}
+          <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.6), 56px)" }}>Pos. {gaps.pos ?? "--"}</span>
           {/* Al cruzar su meta el dato queda congelado: hay que decirlo, o el
               piloto lee como vivo un número que ya no se mueve */}
           <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.6), 56px)" }}>
