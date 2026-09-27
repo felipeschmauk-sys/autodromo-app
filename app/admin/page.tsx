@@ -9,7 +9,7 @@ import {
   cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { desdeLargadaMs } from "@/lib/carrera";
+import { desdeLargadaMs, transcurridoTandaS, deadlineTanda, tandaEnPausa } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 const CategoriasPilotos = dynamic(() => import('@/components/CategoriasPilotos'), { ssr: false })
@@ -130,7 +130,8 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
 function TandaStatusCard({
   tanda, cruces,
 }: {
-  tanda: { nombre: string; tipo: string; inicio: string; duracion_min?: number | null; vueltas_programadas?: number | null };
+  tanda: { nombre: string; tipo: string; inicio: string; duracion_min?: number | null; vueltas_programadas?: number | null;
+           pausado_ms?: number | null; pausa_desde?: string | null };
   cruces: number;
 }) {
   const [, setT] = useState(0);
@@ -142,9 +143,10 @@ function TandaStatusCard({
     libre: "bg-gray-600", entrenamiento: "bg-emerald-600",
     clasificacion: "bg-blue-600", carrera: "bg-red-600",
   };
-  const inicioMs     = new Date(tanda.inicio).getTime();
-  const transcurrido = Math.max(0, Math.floor((Date.now() - inicioMs) / 1000));
+  // El tiempo no cuenta mientras hay bandera roja
+  const transcurrido = transcurridoTandaS(tanda);
   const restante     = tanda.duracion_min ? Math.max(0, tanda.duracion_min * 60 - transcurrido) : null;
+  const detenida     = tandaEnPausa(tanda);
   const fmt = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
   const esCarrera = tanda.tipo === "carrera";
   return (
@@ -152,10 +154,17 @@ function TandaStatusCard({
       <span className={`text-[11px] font-bold tracking-wider text-white px-2.5 py-1 rounded-full flex-shrink-0 ${COLOR[tanda.tipo] || "bg-gray-600"}`}>
         {tanda.nombre.toUpperCase()}
       </span>
-      <span className="flex items-center gap-1.5 text-xs font-semibold text-green-400">
-        <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
-        En curso
-      </span>
+      {detenida ? (
+        <span className="flex items-center gap-1.5 text-xs font-bold text-red-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+          Cronómetro detenido
+        </span>
+      ) : (
+        <span className="flex items-center gap-1.5 text-xs font-semibold text-green-400">
+          <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+          En curso
+        </span>
+      )}
       <div className="ml-auto text-right leading-tight">
         {esCarrera && tanda.vueltas_programadas ? (
           <p className="text-white font-bold tabular-nums text-sm">
@@ -386,6 +395,7 @@ export default function AdminPage() {
   interface Tanda {
     id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
     duracion_min?: number | null; vueltas_programadas?: number | null; largada_at?: string | null;
+    pausado_ms?: number | null; pausa_desde?: string | null;
   }
   const TIPO_TANDA_LABEL: Record<string, string> = {
     libre: "Libre", entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
@@ -495,7 +505,8 @@ export default function AdminPage() {
       let terminar = false;
       const inicioMs = new Date(t.inicio).getTime();
       // "Libre" corre sin reglas de término; el resto por tiempo/vueltas
-      if (t.tipo !== "libre" && t.duracion_min && Date.now() >= inicioMs + t.duracion_min * 60000) terminar = true;
+      const dl = deadlineTanda(t);
+      if (t.tipo !== "libre" && dl && Date.now() >= dl) terminar = true;
       try {
         const desde = desdeLargadaMs(t.largada_at ? new Date(t.largada_at).getTime() : null);
         if (desde == null) {
@@ -851,6 +862,37 @@ export default function AdminPage() {
     });
   }, [sectores, contexto.fechaId]);
 
+  // ── El cronómetro se detiene con la roja ────────────────────
+  // Con bandera roja nadie corre, así que el tiempo de la tanda se congela y
+  // vuelve a correr con la verde. En la clasificación del 27 sep se puso roja
+  // hasta que se acabó el tiempo y esa tanda se perdió entera.
+  //
+  // Se escribe en la tanda ACTIVA, para que lo vean por igual el panel y los
+  // teléfonos. Si la columna no está migrada no pasa nada: el reloj sigue
+  // corriendo como antes.
+  const ajustarPausa = useCallback(async (nuevaBandera: string) => {
+    const tid = tandaActiva?.id;
+    if (!tid || tandaActiva?.fin) return;
+    try {
+      const { data } = await supabase
+        .from("tandas").select("pausado_ms, pausa_desde").eq("id", tid).maybeSingle();
+      if (!data) return;
+      const abierta = (data as any).pausa_desde as string | null;
+
+      if (nuevaBandera === "roja") {
+        if (abierta) return;                       // ya estaba detenida
+        await supabase.from("tandas")
+          .update({ pausa_desde: new Date().toISOString() }).eq("id", tid);
+      } else {
+        if (!abierta) return;                      // no había pausa que cerrar
+        const suma = ((data as any).pausado_ms ?? 0) +
+          Math.max(0, Date.now() - new Date(abierta).getTime());
+        await supabase.from("tandas")
+          .update({ pausado_ms: Math.round(suma), pausa_desde: null }).eq("id", tid);
+      }
+    } catch { /* migración sin correr: el reloj sigue como antes */ }
+  }, [tandaActiva]);
+
   const aplicarBandera = useCallback(async (nuevaBandera: string) => {
     setCargandoBandera(true);
     setBandera(nuevaBandera); // optimistic
@@ -869,11 +911,12 @@ export default function AdminPage() {
           tipo: "bandera_global",
           descripcion: `Bandera global: ${NOMBRE_BANDERA[nuevaBandera] || nuevaBandera}`,
         });
+        await ajustarPausa(nuevaBandera);
       }
     } finally {
       setCargandoBandera(false);
     }
-  }, [cargarBandera, contexto.fechaId]);
+  }, [cargarBandera, contexto.fechaId, ajustarPausa]);
 
   useEffect(() => {
     if (!autenticado) return;

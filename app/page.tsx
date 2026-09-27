@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import dynamic from "next/dynamic";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
 import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
-import { vueltasDeCarrera, desdeLargadaMs } from "@/lib/carrera";
+import { vueltasDeCarrera, desdeLargadaMs, deadlineTanda } from "@/lib/carrera";
 import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
 import { abrirEmisorPosiciones, suscribirEstado, type GapsPiloto } from "@/lib/posiciones";
 import { supabase } from "@/lib/supabase";
@@ -1671,7 +1671,7 @@ export default function Home() {
         id: t.id,
         tipo: t.tipo,
         inicioMs,
-        deadlineMs: t.duracion_min ? inicioMs + t.duracion_min * 60000 : null,
+        deadlineMs: deadlineTanda(t),
         metaIdx: t.meta_idx ?? 0,
         vueltasProg: t.vueltas_programadas ?? null,
         largadaMs: t.largada_at ? new Date(t.largada_at).getTime() : null,

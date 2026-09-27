@@ -13,7 +13,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import { esVueltaDeCarrera } from "@/lib/carrera";
+import { esVueltaDeCarrera, deadlineTanda, transcurridoTandaS, tandaEnPausa } from "@/lib/carrera";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { suscribirPosiciones, abrirEmisorEstado, type EstadoCarreraViva } from "@/lib/posiciones";
 import { calcularGaps, sostenerAzul, recorridoTotal, type EstadoPiloto, type Muestra, type EstadoAzul } from "@/lib/gaps";
@@ -39,6 +39,7 @@ const TIPO_LABEL: Record<string, string> = {
 interface Tanda {
   id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
   duracion_min?: number | null; vueltas_programadas?: number | null; meta_idx?: number | null;
+  pausado_ms?: number | null; pausa_desde?: string | null;
   largada_at?: string | null;
 }
 interface VueltaRow {
@@ -529,7 +530,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     if (!tandaSel) return [];
     const metaIdx  = tandaSel.meta_idx ?? 0;
     const inicioMs = new Date(tandaSel.inicio).getTime();
-    const deadline = tandaSel.duracion_min ? inicioMs + tandaSel.duracion_min * 60000 : null;
+    const deadline = deadlineTanda(tandaSel);
 
     interface Stat {
       pid: string; cruces: number; completadas: number;
@@ -773,7 +774,8 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const liderVueltas = filas[0]?.completadas ?? 0;
   const inicioMs = tandaSel ? new Date(tandaSel.inicio).getTime() : 0;
   const finMs    = tandaSel?.fin ? new Date(tandaSel.fin).getTime() : null;
-  const transcurridoS = tandaSel ? Math.max(0, Math.floor(((finMs ?? Date.now()) - inicioMs) / 1000)) : 0;
+  // El tiempo de la tanda no corre mientras hay bandera roja
+  const transcurridoS = tandaSel ? transcurridoTandaS(tandaSel, finMs ?? Date.now()) : 0;
   const restanteS = tandaSel?.duracion_min ? Math.max(0, tandaSel.duracion_min * 60 - transcurridoS) : null;
 
   if (!migracionOk) {

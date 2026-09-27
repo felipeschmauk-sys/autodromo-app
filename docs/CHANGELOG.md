@@ -3,6 +3,32 @@
 
 ---
 
+## [0.31.0] — 27 Septiembre 2026
+### Agregado (El cronómetro se detiene con bandera roja)
+- Con bandera roja **el tiempo de la tanda se congela**, y vuelve a correr con la
+  verde. Aplica a entrenamiento, clasificación y carrera
+- Antes el reloj seguía corriendo igual: en la clasificación del 27 de
+  septiembre se puso roja hasta que se acabó el tiempo y esa tanda se perdió
+  entera. En una carrera real ese tiempo se recupera al resolver el problema
+- El indicador de tanda activa muestra **"Cronómetro detenido"** en rojo mientras
+  dura la pausa, para que se vea que el reloj no está corriendo
+- **Si el director finaliza la tanda a mano, se termina y ese tiempo se pierde.**
+  Finalizar es finalizar
+
+### Detalle
+- Migración: `docs/task-pausa-roja-migration.sql`. Agrega `pausado_ms` (la suma
+  de las pausas ya cerradas) y `pausa_desde` (la pausa en curso) a `tandas`
+- El cálculo del reloj estaba repetido en cinco lugares —los dos paneles, el
+  teléfono, el auto-finalizar y la tabla— y ahora vive en `lib/carrera.ts`:
+  `deadlineTanda`, `transcurridoTandaS`, `pausaAcumuladaMs` y `tandaEnPausa`
+- Mientras hay una pausa abierta el final de la tanda se corre al mismo ritmo
+  que el reloj de pared, así que el tiempo restante se queda quieto
+- Retrocompatible: sin la migración el reloj corre como antes, sin fallar
+- Verificado: una tanda de 10 min que arranca 14:00 y se detiene de 14:03 a
+  14:08 termina 14:15 con los 7:00 restantes intactos durante toda la pausa
+
+---
+
 ## [0.30.0] — 27 Septiembre 2026
 ### Agregado (Fijar la línea de meta desde el editor de sectores)
 - La meta ya no se asume en el arranque del trazado. En **Config → Sectores**
