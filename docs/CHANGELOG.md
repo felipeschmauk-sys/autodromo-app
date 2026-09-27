@@ -3,6 +3,29 @@
 
 ---
 
+## [0.34.0] — 27 Septiembre 2026
+### Agregado (La vuelta de formación se ve distinta del verde)
+- En carrera, entre el inicio de la tanda y la largada, la pantalla del piloto
+  muestra **fondo gris** con el texto "Vuelta de formación · No adelantar".
+  Pasa a **verde** recién cuando el director marca la largada
+- El verde significa **pista libre**, y en vuelta de formación la pista no está
+  libre: se sale detrás del pace car. Mostrar verde ahí era decir lo contrario
+  de lo que ocurre
+- Sirve para una o dos vueltas de formación por igual: no cuenta vueltas, mira
+  si la largada ya se marcó
+
+### Detalle
+- Gris neutro a propósito, sin color de bandera: **no es una bandera de
+  reglamento, es la ausencia de verde**
+- Reemplaza **solo al verde**. Si durante la formación cae una amarilla de
+  sector, una roja o una bandera personal, eso es lo que se ve: la formación no
+  tapa ninguna señal de seguridad
+- A diferencia del verde —que no muestra texto porque el color ya lo dice
+  todo—, la formación sí lo muestra: el gris no es un código que el piloto
+  reconozca de antemano
+
+---
+
 ## [0.33.3] — 27 Septiembre 2026
 ### Cambiado (La amarilla automática también sube a 10 km/h)
 - La **amarilla automática por sector** pasa a dispararse bajo **10 km/h**, en vez

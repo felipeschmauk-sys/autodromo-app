@@ -210,6 +210,9 @@ const FLAG_CONFIG: Record<string, {
 }> = {
   // Colores SÓLIDOS y llamativos (fondo = color real de la bandera, sin pulso)
   verde:          { bg: "bg-green-600",  border: "border-green-700",  color: "text-white",      subColor: "text-white/80",   emoji: "🟢",    title: "PISTA LIBRE",      desc: "Circulación normal habilitada",                       pulse: false },
+  // Antes de la largada la pista NO está libre: gris neutro, sin color de
+  // bandera. Pasa a verde recién cuando el director marca la largada.
+  formacion:      { bg: "bg-gray-500",   border: "border-gray-600",   color: "text-white",      subColor: "text-white/80",   emoji: "🏳️",    title: "VUELTA DE FORMACIÓN", desc: "Pista no habilitada · Seguir al pace car · No adelantar", pulse: false },
   amarilla:       { bg: "bg-yellow-400", border: "border-yellow-500", color: "text-black",      subColor: "text-black/70",   emoji: "🟡",    title: "BANDERA AMARILLA", desc: "Reducir velocidad · Prohibido adelantar",              pulse: false },
   amarilla_doble: { bg: "bg-yellow-400", border: "border-yellow-500", color: "text-black",      subColor: "text-black/70",   emoji: "🟡🟡", title: "DOBLE AMARILLA",   desc: "Peligro grave · Velocidad reducida · No adelantar",    pulse: false },
   roja:           { bg: "bg-red-600",    border: "border-red-700",    color: "text-white",      subColor: "text-white/85",   emoji: "🔴",    title: "BANDERA ROJA",     desc: "Detención inmediata · Dirigirse a boxes",              pulse: false },
@@ -274,6 +277,7 @@ function PizarraLandscape({
   // Fondo por bandera (el color ES la información)
   const FONDOS: Record<string, string> = {
     verde:          "#15803d",
+    formacion:      "#52525b",
     amarilla:       "#f5b400",
     amarilla_doble: "#f5b400",
     roja:           "#b91c1c",
@@ -288,6 +292,7 @@ function PizarraLandscape({
   };
   const TEXTOS: Record<string, string> = {
     verde:          "Circulación normal habilitada",
+    formacion:      "Vuelta de formación · No adelantar",
     amarilla:       "Circulación sector amarillo",
     amarilla_doble: "Circulación sector amarillo",
     roja:           "Detención total de la pista",
@@ -302,6 +307,7 @@ function PizarraLandscape({
   };
   const ICONOS: Record<string, string> = {
     negra: "⚑", negra_blanco: "⚑", cuadros: "🏁", rayas: "❚❚", taller: "●",
+    formacion: "⚑",
   };
 
   const fondo  = FONDOS[bandera] || FONDOS.verde;
@@ -1151,6 +1157,9 @@ export default function Home() {
   const [misGaps, setMisGaps] = useState<(GapsPiloto & { tendAd: number; tendAt: number }) | null>(null);
   // Autos detenidos en pista, para marcarlos con la bandera roja puesta
   const [detenidos, setDetenidos] = useState<{ lat: number; lng: number }[]>([]);
+  // Carrera iniciada pero sin largada marcada: los autos están dando la vuelta
+  // de formación detrás del pace car. La pista NO está libre todavía.
+  const [enFormacion, setEnFormacion] = useState(false);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
   // ── Prueba de conocimientos POR CAMPEONATO ─────────────────────
@@ -1678,11 +1687,13 @@ export default function Home() {
     const pid = pilotoData.id;
 
     const aplicar = (t: any | null) => {
-      if (!t) { tandaPilotoRef.current = null; return; }
+      if (!t) { tandaPilotoRef.current = null; setEnFormacion(false); return; }
       // Tanda finalizada: ventana de gracia de 5 min para que el piloto
       // cierre la vuelta que ya venía corriendo (ese cruce SÍ vale)
       const finMs = t.fin ? new Date(t.fin).getTime() : null;
       if (finMs && Date.now() > finMs + 5 * 60000) { tandaPilotoRef.current = null; return; }
+      // Carrera ya iniciada pero sin largada marcada: vuelta de formación
+      setEnFormacion(t.tipo === "carrera" && !t.largada_at && !finMs);
       if (tandaPilotoRef.current?.id !== t.id) {
         // Tanda nueva: reiniciar el detector y retomar la cuenta si la app
         // se recargó a mitad de tanda
@@ -2583,13 +2594,19 @@ export default function Home() {
   // que su carrera terminó, no que terminó la carrera.
   const cuadrosPropia = misGaps?.fin === true;
 
+  // La vuelta de formación reemplaza SOLO al verde, que es el que significa
+  // "pista libre". Cualquier otra bandera sigue mandando: si durante la
+  // formación hay una amarilla de sector o una roja, eso es lo que hay que ver.
+  const baseGlobal = estadoPista.bandera === "verde" && enFormacion
+    ? "formacion" : estadoPista.bandera;
+
   const banderaEfectiva =
     estadoPista.bandera === "cuadros" || cuadrosPropia ? "cuadros"
     : estadoPista.bandera === "roja"  ? "roja"
     : banderaPersonal                 ? banderaPersonal
     : azulAutomatica                  ? azulAutomatica
     : banderaSector                   ? banderaSector
-    : estadoPista.bandera;
+    : baseGlobal;
 
   const flagEsPersonal = !!banderaPersonal && banderaEfectiva === banderaPersonal;
   const flag = FLAG_CONFIG[banderaEfectiva] || FLAG_CONFIG.verde;
