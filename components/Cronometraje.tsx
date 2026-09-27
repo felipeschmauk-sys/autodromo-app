@@ -53,10 +53,15 @@ interface PilotoInfo { nombre: string; numero: string | null; categoria: string 
 // no es un hipo de la red, es que dejamos de ver ese auto.
 const FRESCURA_POS_MS = 10_000;
 
-// Auto detenido en pista. El mismo umbral que usa la amarilla automática, pero
-// exigiendo que se sostenga unos segundos: en una horquilla lenta un auto puede
-// bajar de 5 km/h sin estar detenido, y marcarlo ahí sería ruido.
-const DETENIDO_KMH = 5;
+// Auto detenido o arrastrándose en pista. A ritmo de carrera, andar bajo 10
+// km/h durante cinco segundos seguidos ya no es ir despacio: es un auto con un
+// problema, y los demás tienen que saber dónde está.
+//
+// Dos umbrales y no uno: se marca bajo 10 pero recién se deja de marcar sobre
+// 13. Sin esa banda muerta, un auto arrastrándose justo en 10 haría parpadear
+// el punto una vez por segundo.
+const DETENIDO_KMH = 10;
+const REANUDA_KMH  = 13;
 const DETENIDO_MS  = 5_000;
 interface PosPiloto {
   lat: number; lng: number; ts: number; dentro: boolean | null;
@@ -507,7 +512,13 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           lentoDesdeRef.current.delete(pid);
           return;
         }
-        if (kmh > DETENIDO_KMH) { lentoDesdeRef.current.delete(pid); return; }
+        const yaMarcado = lentoDesdeRef.current.has(pid);
+        // Para dejar de marcarlo hay que superar el umbral alto; para empezar,
+        // basta con bajar del bajo
+        if (kmh > (yaMarcado ? REANUDA_KMH : DETENIDO_KMH)) {
+          lentoDesdeRef.current.delete(pid);
+          return;
+        }
         const desde = lentoDesdeRef.current.get(pid) ?? ahora;
         lentoDesdeRef.current.set(pid, desde);
         if (ahora - desde >= DETENIDO_MS) detenidos.push({ pid, lat: p.lat, lng: p.lng });

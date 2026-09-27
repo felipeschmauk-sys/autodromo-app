@@ -3,6 +3,27 @@
 
 ---
 
+## [0.33.2] — 27 Septiembre 2026
+### Cambiado (Auto detenido: el umbral sube a 10 km/h)
+- Un auto cuenta como detenido bajo **10 km/h** sostenidos 5 segundos, en vez de
+  5 km/h. A ritmo de carrera, arrastrarse cinco segundos bajo 10 ya no es ir
+  despacio: es un auto con un problema
+- Se agregó banda muerta: se marca bajo 10 pero recién se deja de marcar sobre
+  **13**. Sin eso, un auto justo en 10 haría parpadear el punto una vez por
+  segundo
+
+### Medido sobre la jornada del 27 sep
+- Con 5 km/h y con 10 km/h se detectan **los mismos 13 episodios**. El umbral
+  más alto solo los toma uno o dos segundos antes y los sostiene un poco más
+- O sea que subirlo no agrega falsos positivos: no hay autos circulando entre 6
+  y 10 km/h que pasen a marcarse. O están detenidos, o van muy por encima
+
+### Pendiente
+- La **amarilla automática** sigue disparándose a 5 km/h. Ahora el punto aparece
+  antes que la bandera; si conviene alinearlas, es un cambio aparte
+
+---
+
 ## [0.33.1] — 27 Septiembre 2026
 ### Cambiado (El auto detenido se ve con cualquier bandera)
 - El punto del auto detenido ya no aparece solo con bandera roja: **se ve
