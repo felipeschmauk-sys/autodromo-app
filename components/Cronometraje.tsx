@@ -52,6 +52,12 @@ interface PilotoInfo { nombre: string; numero: string | null; categoria: string 
 // Las posiciones llegan a 1 Hz, así que 10 s son diez mensajes perdidos: eso ya
 // no es un hipo de la red, es que dejamos de ver ese auto.
 const FRESCURA_POS_MS = 10_000;
+
+// Auto detenido en pista. El mismo umbral que usa la amarilla automática, pero
+// exigiendo que se sostenga unos segundos: en una horquilla lenta un auto puede
+// bajar de 5 km/h sin estar detenido, y marcarlo ahí sería ruido.
+const DETENIDO_KMH = 5;
+const DETENIDO_MS  = 5_000;
 interface PosPiloto {
   lat: number; lng: number; ts: number; dentro: boolean | null;
   /** Metros recorridos sobre el trazado. Solo llega por broadcast. */
@@ -159,6 +165,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
   // instante para medir.
   const llegadasRef = useRef<Map<string, { vueltas: number; t: number }>>(new Map());
+  // Desde cuándo viene lento cada auto, para no marcar como detenido al que
+  // solo está pasando despacio por una curva
+  const lentoDesdeRef = useRef<Map<string, number>>(new Map());
   useEffect(() => {
     congeladosRef.current = new Map();
     alTerminarRef.current = new Map();
@@ -486,7 +495,25 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // números que sigan moviéndose
       congelados.forEach((v, pid) => { pilotos[pid] = v; });
 
-      emisor.enviar({ t: ahora, pilotos });
+      // ── Autos detenidos en pista ──────────────────────────────
+      // Se reparte la posición, no el sector: con bandera roja la advertencia
+      // de sector queda tapada y el auto detenido se vuelve invisible para el
+      // resto justo cuando más importa saber por dónde pasar con cuidado.
+      const detenidos: EstadoCarreraViva["det"] = [];
+      posicionesRef.current.forEach((p, pid) => {
+        const kmh = p.v != null ? p.v * 3.6 : null;
+        const visto = p.t ?? p.ts;
+        if (p.dentro !== true || kmh == null || ahora - visto > FRESCURA_POS_MS) {
+          lentoDesdeRef.current.delete(pid);
+          return;
+        }
+        if (kmh > DETENIDO_KMH) { lentoDesdeRef.current.delete(pid); return; }
+        const desde = lentoDesdeRef.current.get(pid) ?? ahora;
+        lentoDesdeRef.current.set(pid, desde);
+        if (ahora - desde >= DETENIDO_MS) detenidos.push({ pid, lat: p.lat, lng: p.lng });
+      });
+
+      emisor.enviar({ t: ahora, pilotos, det: detenidos.length ? detenidos : undefined });
     }, 1000);
 
     return () => { clearInterval(id); emisor.cerrar(); };

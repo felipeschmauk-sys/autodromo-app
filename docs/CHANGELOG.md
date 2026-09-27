@@ -3,6 +3,29 @@
 
 ---
 
+## [0.33.0] — 27 Septiembre 2026
+### Agregado (El auto detenido se ve con bandera roja)
+- Con bandera roja, la pantalla del piloto marca con un **punto amarillo
+  pulsante** dónde hay un auto detenido en pista
+- Por qué: la roja se impone sobre cualquier otra bandera —y eso está bien—,
+  pero eso mismo deja **invisible la advertencia de auto detenido** justo
+  cuando hay que saber por dónde pasar con cuidado. Pasó en la prueba del 27 sep
+- Se marca **la posición, no el sector**: basta con ver el punto
+- El punto propio del piloto se dibuja siempre encima, para que nunca se
+  confunda el suyo con uno ajeno
+
+### Detalle
+- El teléfono del piloto no recibe las posiciones de los demás, y eso no cambia:
+  la posición del detenido viaja dentro del mensaje de estado que el panel ya
+  mandaba cada segundo. Es la única excepción, y solo para autos detenidos
+- Un auto cuenta como detenido bajo 5 km/h **sostenidos 5 segundos**, dentro de
+  la geocerca. El umbral es el mismo de la amarilla automática, pero con espera:
+  en una horquilla lenta un auto puede bajar de 5 km/h sin estar detenido
+- Si el detenido es el propio piloto no se le marca: ya lo sabe, y su punto rojo
+  ya está en pantalla
+
+---
+
 ## [0.32.0] — 27 Septiembre 2026
 ### Cambiado (El cronometraje vive debajo del mapa y ya no se apaga)
 - El cronometraje aparece ahora **debajo del mapa en la pestaña Dirección**:

@@ -247,6 +247,7 @@ function PizarraLandscape({
   esPersonal,
   gaps,
   posicion,
+  detenidos,
   onSalir,
 }: {
   trazado: Coordenada[];
@@ -260,6 +261,13 @@ function PizarraLandscape({
    * Solo la suya: en modo conducción no se muestran los demás autos.
    */
   posicion?: { lat: number; lng: number } | null;
+  /**
+   * Autos DETENIDOS en pista. Es la única excepción a no mostrar a los demás,
+   * y solo con bandera roja: la roja se impone sobre la advertencia de sector,
+   * así que el auto detenido queda invisible justo cuando hay que saber por
+   * dónde pasar con cuidado.
+   */
+  detenidos?: { lat: number; lng: number }[];
   /** Salir del modo conducción (se dispara con pulsación larga) */
   onSalir?: () => void;
 }) {
@@ -377,6 +385,18 @@ function PizarraLandscape({
             con la roja, el punto rojo solo se perdería contra el fondo.
             Si el piloto está lejos del circuito el viewBox lo recorta solo, que
             es lo correcto — mejor sin punto que un punto pegado a un borde. */}
+        {/* Autos detenidos, solo con bandera roja. Van ANTES del punto propio
+            para que el suyo quede siempre arriba y nunca se confunda con uno
+            ajeno. Amarillo sobre el fondo rojo: es el color que ya significa
+            "precaución acá" en el resto del sistema. */}
+        {bandera === "roja" && detenidos?.map((d, i) => (
+          <g key={i}>
+            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={34} fill="rgba(250,204,21,0.35)">
+              <animate attributeName="r" values="26;38;26" dur="1.6s" repeatCount="indefinite" />
+            </circle>
+            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={17} fill="#facc15" stroke="#1c1917" strokeWidth={6} />
+          </g>
+        ))}
         {posicion && (
           <g>
             <circle cx={toX(posicion.lng)} cy={toY(posicion.lat)} r={30} fill="rgba(239,68,68,0.3)" />
@@ -1118,6 +1138,8 @@ export default function Home() {
   const [banderaPersonal, setBanderaPersonal] = useState<string | null>(null);
   // Diferencias con los rivales, calculadas por el panel y repartidas a 1 Hz
   const [misGaps, setMisGaps] = useState<(GapsPiloto & { tendAd: number; tendAt: number }) | null>(null);
+  // Autos detenidos en pista, para marcarlos con la bandera roja puesta
+  const [detenidos, setDetenidos] = useState<{ lat: number; lng: number }[]>([]);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
   // ── Prueba de conocimientos POR CAMPEONATO ─────────────────────
@@ -1477,6 +1499,9 @@ export default function Home() {
     if (stage !== "app" || !eventoActivo?.fechaId || !pilotoData?.id) return;
     const pid = pilotoData.id;
     return suscribirEstado(eventoActivo.fechaId, (e) => {
+      // Autos detenidos en pista, sin contarme a mí: si el detenido soy yo, ya
+      // lo sé, y mi propio punto rojo ya está en pantalla
+      setDetenidos((e.det ?? []).filter(d => d.pid !== pid).map(d => ({ lat: d.lat, lng: d.lng })));
       const mio = e.pilotos[pid];
       if (!mio) { setMisGaps(null); return; }
       const r = tendRef.current;
@@ -3210,6 +3235,7 @@ export default function Home() {
               bandera={banderaEfectiva}
               gaps={misGaps}
               posicion={posPiloto}
+              detenidos={detenidos}
               onSalir={() => setModoFijo(false)}
               esPersonal={flagEsPersonal}
             />

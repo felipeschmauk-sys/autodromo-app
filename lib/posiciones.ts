@@ -108,9 +108,23 @@ export interface GapsPiloto {
   fin?: boolean
 }
 
+/** Un auto detenido en pista, para marcarlo en la pantalla de los demás. */
+export interface AutoDetenido {
+  pid: string
+  lat: number
+  lng: number
+}
+
 export interface EstadoCarreraViva {
   t: number
   pilotos: Record<string, GapsPiloto>
+  /**
+   * Autos detenidos en pista. Con bandera roja la advertencia de sector queda
+   * tapada —la roja se impone sobre todo—, así que el auto detenido se vuelve
+   * invisible justo cuando más importa saber dónde está. Viaja la posición, no
+   * el sector: basta con ver el punto para saber dónde tener cuidado.
+   */
+  det?: AutoDetenido[]
 }
 
 const canalEstado = (fechaId: string) => `estado-${fechaId}`
