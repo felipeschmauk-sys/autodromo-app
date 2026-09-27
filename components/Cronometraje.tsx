@@ -46,6 +46,11 @@ interface VueltaRow {
   offset_ms?: number | null; // desfase del reloj de ESE teléfono contra el servidor
 }
 interface PilotoInfo { nombre: string; numero: string | null; categoria: string | null; }
+
+// Cuánto puede tener de viejo el dato de un piloto para seguir clasificándolo.
+// Las posiciones llegan a 1 Hz, así que 10 s son diez mensajes perdidos: eso ya
+// no es un hipo de la red, es que dejamos de ver ese auto.
+const FRESCURA_POS_MS = 10_000;
 interface PosPiloto {
   lat: number; lng: number; ts: number; dentro: boolean | null;
   /** Metros recorridos sobre el trazado. Solo llega por broadcast. */
@@ -357,11 +362,33 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       const posDe = new Map<string, number | null>();
 
       if (esCarreraTanda) {
+        // ── Sin datos recientes no hay posición ─────────────────
+        // La posición de carrera se ordena por lo que cada auto está haciendo
+        // AHORA. Un piloto del que no se sabe hace rato no se puede clasificar,
+        // y tampoco se puede clasificar al resto contra él: si no sé dónde
+        // está, no sé si voy tercero o cuarto.
+        //
+        // En la prueba del 27 sep el notebook del panel viajaba dentro de un
+        // auto colgado de un teléfono. Al cortarse la señal el panel siguió
+        // ordenando con posiciones de minutos atrás, y entregó números que
+        // parecían normales y estaban equivocados —un piloto se vio primero
+        // cuando iba cuarto—. Mejor un guion que un número falso.
+        //
+        // No aplica a entrenamiento ni clasificación: ese orden sale de los
+        // tiempos guardados en la base, que no se degradan si se corta el
+        // broadcast.
+        const catSinDatos = new Set<string>();
+        for (const e of estados) {
+          if (ahora - e.t <= FRESCURA_POS_MS) continue;
+          if (congelados.has(e.pid)) continue; // ya llegó: su resultado ya está fijo
+          const cat = catDe(e.pid);
+          if (cat) catSinDatos.add(cat);
+        }
         // Por orden de carrera, contando solo a los de la misma categoría
         const vistos = new Map<string, number>();
         for (const e of orden) {
           const cat = catDe(e.pid);
-          if (!cat) { posDe.set(e.pid, null); continue; }
+          if (!cat || catSinDatos.has(cat)) { posDe.set(e.pid, null); continue; }
           const n = (vistos.get(cat) ?? 0) + 1;
           vistos.set(cat, n);
           posDe.set(e.pid, n);

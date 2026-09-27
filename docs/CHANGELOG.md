@@ -3,6 +3,32 @@
 
 ---
 
+## [0.29.7] — 27 Septiembre 2026
+### Corregido (Sin datos recientes no hay posición)
+- **El panel clasificaba con datos viejos como si fueran actuales.** Tomaba la
+  última posición conocida de cada piloto sin mirar cuándo había llegado, así
+  que un auto del que no se sabía hace minutos seguía en la tabla con sus
+  vueltas de entonces, y todos los demás se ordenaban contra ese fantasma
+- Ahora, si de algún piloto de la categoría no hay datos de los últimos 10
+  segundos, **nadie de esa categoría recibe posición**: se muestra `Pos. --`
+  hasta que vuelvan los datos. Si no sé dónde está uno, tampoco sé si el otro
+  va tercero o cuarto
+- El cálculo de diferencias ya descartaba lo que tuviera más de 8 s. El de
+  posiciones no filtraba nada
+- No aplica a entrenamiento ni clasificación: ese orden sale de los tiempos
+  guardados en la base, que no se degradan si se corta el broadcast
+
+### Por qué apareció
+- En la prueba del 27 sep el notebook del panel viajaba **dentro de un auto**,
+  conectado por el teléfono del piloto. La señal se cortaba, y como las
+  posiciones viajan por broadcast efímero, lo que no llega no se recupera
+- Simulando un corte de 5 minutos sobre los datos reales de la Carrera 5, el
+  panel mostraba a ese piloto **P1 cuando iba P4**, con los demás congelados en
+  2 y 3 vueltas. Es exactamente lo que reportó en pista
+- Con el filtro, los cinco pasan a `--` en vez de recibir números equivocados
+
+---
+
 ## [0.29.6] — 27 Septiembre 2026
 ### Corregido (La llegada: posición final y estado que no se puede perder)
 - **El estado de llegada ahora vive en refs, no en variables del efecto.** Quién
