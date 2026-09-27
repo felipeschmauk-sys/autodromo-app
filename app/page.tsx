@@ -399,6 +399,17 @@ function PizarraLandscape({
   // valor con signo, y el color dice si eso le conviene al piloto: perder
   // terreno contra el de adelante y que el de atrás se acerque son ambos rojos.
   const colorDato = oscuro ? "#111827" : "#ffffff";
+
+  // ── Fondos de dos tonos ──────────────────────────────────────
+  // La bandera a cuadros, la negra con blanco y la de rayas tienen zonas claras
+  // y oscuras a la vez, así que NINGÚN color de letra funciona por sí solo: la
+  // letra blanca desaparecía sobre los cuadros blancos. Se mantiene el texto
+  // blanco y se le pone un halo oscuro detrás: sobre las zonas negras el halo
+  // no se nota, y sobre las blancas es lo que hace legible la letra.
+  const fondoMixto = bandera === "cuadros" || bandera === "negra_blanco" || bandera === "rayas";
+  const haloDato = fondoMixto
+    ? "0 0 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.9), 0 2px 5px rgba(0,0,0,0.7)"
+    : "none";
   const Dato = ({ valor, tend, alinear }: { valor: number | null; tend: number; alinear: "left" | "right" }) => {
     if (valor == null) return <span />;
     // tend = +1 la distancia crece, -1 se achica.
@@ -418,7 +429,7 @@ function PizarraLandscape({
       : bueno ? "#22c55e" : "#ef4444";
     const txt = (alinear === "left" ? "+" : "−") + Math.abs(valor).toFixed(1).replace(".", ",") + "s";
     return (
-      <span className="flex items-center gap-2" style={{ color: colorDato }}>
+      <span className="flex items-center gap-2" style={{ color: colorDato, textShadow: haloDato }}>
         <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.4), 52px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{txt}</span>
         {tend !== 0 && (
           <span style={{ color, fontSize: "clamp(16px, calc(var(--uw) * 3), 34px)", lineHeight: 1 }}>
@@ -509,6 +520,7 @@ function PizarraLandscape({
             fontWeight: 700,
             opacity: saliendo ? 1 : 0.45,
             color: oscuro ? "#111827" : "#ffffff",
+            textShadow: haloDato,
           }}
         >
           {saliendo ? "SUELTA PARA SEGUIR · MANTÉN PARA SALIR"
@@ -519,7 +531,7 @@ function PizarraLandscape({
       {gaps && (
         <div
           className="flex items-start justify-between"
-          style={{ padding: "calc(var(--uh) * 3) calc(var(--uw) * 4) 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em" }}
+          style={{ padding: "calc(var(--uh) * 3) calc(var(--uw) * 4) 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em", textShadow: haloDato }}
         >
           {/* Sin categoría asignada o sin tiempo marcado todavía: "--". El
               piloto opera normal en pista, solo no tiene clasificación. */}
@@ -559,7 +571,9 @@ function PizarraLandscape({
             style={{
               borderColor: oscuro ? "#111827" : "rgba(255,255,255,0.9)",
               color:       oscuro ? "#111827" : "#ffffff",
-              textShadow:  oscuro ? "none" : "0 2px 6px rgba(0,0,0,0.45)",
+              textShadow:  oscuro ? "none" : fondoMixto ? haloDato : "0 2px 6px rgba(0,0,0,0.45)",
+              // El aro blanco también se perdía sobre los cuadros claros
+              boxShadow:   fondoMixto ? "0 0 0 2px rgba(0,0,0,0.75)" : undefined,
             }}
           >
             {icono}
@@ -568,7 +582,7 @@ function PizarraLandscape({
             className="text-2xl font-bold tracking-tight"
             style={{
               color:      oscuro ? "#111827" : "#ffffff",
-              textShadow: oscuro ? "none" : "0 2px 8px rgba(0,0,0,0.45)",
+              textShadow: oscuro ? "none" : fondoMixto ? haloDato : "0 2px 8px rgba(0,0,0,0.45)",
             }}
           >
             {texto}
@@ -579,7 +593,7 @@ function PizarraLandscape({
             className="text-xs font-bold tracking-widest"
             style={{
               color:      oscuro ? "rgba(17,24,39,0.7)" : "rgba(255,255,255,0.85)",
-              textShadow: oscuro ? "none" : "0 1px 4px rgba(0,0,0,0.4)",
+              textShadow: oscuro ? "none" : fondoMixto ? haloDato : "0 1px 4px rgba(0,0,0,0.4)",
             }}
           >
             DIRIGIDA A TI

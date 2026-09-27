@@ -3,6 +3,27 @@
 
 ---
 
+## [0.29.8] — 27 Septiembre 2026
+### Corregido (El texto desaparecía sobre la bandera a cuadros)
+- Con la bandera a cuadros desplegada, las letras blancas se perdían sobre los
+  cuadros blancos: la posición, la vuelta y las diferencias quedaban ilegibles
+  justo al terminar la carrera
+- Pasa lo mismo en la **negra con blanco** y, en menor medida, en la de **rayas**:
+  son fondos de dos tonos, y sobre ellos **ningún color de letra funciona solo**
+- El texto se mantiene blanco y ahora lleva un halo oscuro detrás. Sobre las
+  zonas negras el halo no se nota; sobre las blancas es lo que dibuja la letra.
+  Es preferible a oscurecer el blanco de la bandera, que dejaría de leerse como
+  bandera a cuadros
+- El aro del icono de bandera también se perdía sobre los cuadros claros: lleva
+  un contorno oscuro
+
+### Detalle
+- `text-shadow` se hereda, así que los triángulos de tendencia quedan cubiertos
+  sin tocarlos
+- Los fondos de un solo tono no cambian: ahí el halo sería ruido
+
+---
+
 ## [0.29.7] — 27 Septiembre 2026
 ### Corregido (Sin datos recientes no hay posición)
 - **El panel clasificaba con datos viejos como si fueran actuales.** Tomaba la
