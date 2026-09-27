@@ -3,6 +3,33 @@
 
 ---
 
+## [0.29.6] — 27 Septiembre 2026
+### Corregido (La llegada: posición final y estado que no se puede perder)
+- **El estado de llegada ahora vive en refs, no en variables del efecto.** Quién
+  ya terminó, en qué posición y con cuántas vueltas venía cada uno cuando cruzó
+  el líder: todo eso se perdía si el efecto se volvía a montar a mitad de
+  carrera —basta con recargar el panel— y entonces el líder "volvía a terminar",
+  los que ya habían llegado se recongelaban con otra posición y el resultado
+  quedaba revuelto
+- **La posición final ya no se recalcula por distancia recorrida.** Manda el
+  número de vueltas, y entre los que tienen las mismas, quién cruzó primero.
+  Antes se medía en el peor instante posible: al cruzar la meta el progreso de
+  vuelta vuelve a cero, así que el que acababa de llegar aparecía detrás de
+  cualquiera que viniera a mitad de su vuelta
+- Un doblado termina detrás de los de la vuelta del líder aunque haya cruzado
+  la meta antes que alguno de ellos
+
+### Verificado contra la Carrera 5 del 27 sep
+- Orden de cruce: ang 13:37:43, cup 13:37:48, Andres 13:38:03 (con 4 vueltas),
+  rik 13:38:10, yo 13:39:21
+- Resultado con la regla corregida: **P1 ang · P2 cup · P3 rik · P4 yo · P5
+  Andres**, que es exactamente lo que el piloto reportó que debía ser. Andres
+  cae a P5 por su vuelta de menos aunque cruzó tercero
+- La bandera azul sí tenía condiciones: **474 instantes bajo el umbral de 5 s**
+  con un acercamiento máximo de 0,4 s. No llegó ninguna a la pantalla
+
+---
+
 ## [0.29.5] — 27 Septiembre 2026
 ### Corregido (El cierre de carrera: cada piloto termina en SU cruce)
 - **La bandera a cuadros ahora cae por piloto.** Cuando cruza el primero, los

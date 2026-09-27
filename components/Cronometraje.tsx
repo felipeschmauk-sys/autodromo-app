@@ -141,6 +141,25 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     tandaVivaRef.current = tandas.find(t => t.id === tandaActivaId) ?? null;
   }, [tandas, tandaActivaId]);
 
+  // ── Llegada: estado que NO puede perderse a mitad de carrera ──
+  // Quién ya terminó, en qué posición llegó, y con cuántas vueltas venía cada
+  // uno cuando cruzó el líder. Se limpia solo al cambiar de tanda.
+  const congeladosRef  = useRef<Map<string, EstadoCarreraViva["pilotos"][string]>>(new Map());
+  const alTerminarRef  = useRef<Map<string, number>>(new Map());
+  const liderTerminoRef = useRef(false);
+  // Cómo llegó cada piloto que ya terminó: con cuántas vueltas y en qué
+  // instante cruzó. El resultado oficial sale de acá —vueltas primero, y entre
+  // iguales quién cruzó antes— y no de la distancia recorrida, porque justo al
+  // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
+  // instante para medir.
+  const llegadasRef = useRef<Map<string, { vueltas: number; t: number }>>(new Map());
+  useEffect(() => {
+    congeladosRef.current = new Map();
+    alTerminarRef.current = new Map();
+    llegadasRef.current   = new Map();
+    liderTerminoRef.current = false;
+  }, [tandaActivaId]);
+
   // Seguir la selección compartida con el Log (cuando apunta a una tanda válida)
   useEffect(() => {
     if (tandaSeleccionada && tandaSeleccionada !== tandaSelId && tandas.some(t => t.id === tandaSeleccionada)) {
@@ -293,9 +312,14 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     // Congelado al cruzar la meta final. La carrera termina cuando cruza el
     // primero, pero los demás siguen girando hasta pasar por meta: a cada uno
     // se le congela su dato en SU cruce, con la diferencia con la que terminó.
-    const congelados = new Map<string, EstadoCarreraViva["pilotos"][string]>();
-    const vueltasAlTerminarElLider = new Map<string, number>();
-    let liderTermino = false;
+    //
+    // Vive en refs y no en variables de este efecto porque el efecto se puede
+    // volver a montar en medio de la carrera —basta con que el panel se recargue
+    // o que cambie una de sus dependencias— y entonces todo esto se perdía: el
+    // líder "volvía a terminar", los que ya habían llegado se recongelaban con
+    // otra posición y el resultado quedaba revuelto.
+    const congelados = congeladosRef.current;
+    const vueltasAlTerminarElLider = alTerminarRef.current;
 
     const id = setInterval(() => {
       const ahora = Date.now();
@@ -387,8 +411,8 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // ── Meta final: congelar a cada uno en su propio cruce ──
       const programadas = tandaViva?.vueltas_programadas ?? null;
       if (programadas && orden.length) {
-        if (!liderTermino && orden[0].vueltas >= programadas) {
-          liderTermino = true;
+        if (!liderTerminoRef.current && orden[0].vueltas >= programadas) {
+          liderTerminoRef.current = true;
           // Se anota en qué vuelta venía cada uno cuando cayó la bandera: su
           // meta es el cruce SIGUIENTE
           orden.forEach(e => vueltasAlTerminarElLider.set(e.pid, e.vueltas));
@@ -399,9 +423,36 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           if (!suyo) continue;
           const yaCruzoSuMeta =
             e.vueltas >= programadas ||
-            (liderTermino && e.vueltas > (vueltasAlTerminarElLider.get(e.pid) ?? Infinity));
-          if (yaCruzoSuMeta) congelados.set(e.pid, { ...suyo, azul: false, fin: true });
+            (liderTerminoRef.current && e.vueltas > (vueltasAlTerminarElLider.get(e.pid) ?? Infinity));
+          if (!yaCruzoSuMeta) continue;
+          // Se anota CÓMO llegó: con cuántas vueltas y en qué instante. La
+          // posición sale de ahí y no de la distancia recorrida, porque al
+          // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
+          // momento para medir: el que acaba de llegar aparecería detrás de
+          // cualquiera que venga a mitad de su vuelta.
+          llegadasRef.current.set(e.pid, { vueltas: e.vueltas, t: ahora });
+          congelados.set(e.pid, { ...suyo, azul: false, fin: true });
         }
+
+        // Posición final de los que ya llegaron: mandan las vueltas, y entre
+        // los que tienen las mismas, quién cruzó primero. Un doblado termina
+        // detrás de los de la vuelta del líder aunque haya cruzado antes que
+        // alguno de ellos. Se recalcula en cada tick porque un piloto puede
+        // llegar después y con MÁS vueltas que otro que ya había terminado.
+        const porCategoria = new Map<string, { pid: string; vueltas: number; t: number }[]>();
+        llegadasRef.current.forEach((ll, pid) => {
+          const cat = catDe(pid);
+          if (!cat) return;
+          if (!porCategoria.has(cat)) porCategoria.set(cat, []);
+          porCategoria.get(cat)!.push({ pid, ...ll });
+        });
+        porCategoria.forEach(lista => {
+          lista.sort((a, b) => b.vueltas - a.vueltas || a.t - b.t);
+          lista.forEach((l, i) => {
+            const cong = congelados.get(l.pid);
+            if (cong) congelados.set(l.pid, { ...cong, pos: i + 1 });
+          });
+        });
       }
       // El dato congelado pisa al vivo: el piloto ya terminó y no debe ver
       // números que sigan moviéndose
