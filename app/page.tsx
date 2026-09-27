@@ -406,10 +406,17 @@ function PizarraLandscape({
   // letra blanca desaparecía sobre los cuadros blancos. Se mantiene el texto
   // blanco y se le pone un halo oscuro detrás: sobre las zonas negras el halo
   // no se nota, y sobre las blancas es lo que hace legible la letra.
+  // Un halo difuso no alcanza sobre un fondo tan movido: lo que hace legible la
+  // letra es un contorno nítido. `paintOrder: stroke` lo dibuja DEBAJO del
+  // relleno, así que engorda la letra por fuera en vez de comérsela por dentro.
   const fondoMixto = bandera === "cuadros" || bandera === "negra_blanco" || bandera === "rayas";
   const haloDato = fondoMixto
-    ? "0 0 4px rgba(0,0,0,0.95), 0 0 10px rgba(0,0,0,0.9), 0 2px 5px rgba(0,0,0,0.7)"
+    ? "0 0 6px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85), 0 3px 6px rgba(0,0,0,0.8)"
     : "none";
+  const contorno = (grosor: string): React.CSSProperties =>
+    fondoMixto
+      ? { WebkitTextStroke: `${grosor} rgba(0,0,0,0.9)`, paintOrder: "stroke fill", textShadow: haloDato }
+      : {};
   const Dato = ({ valor, tend, alinear }: { valor: number | null; tend: number; alinear: "left" | "right" }) => {
     if (valor == null) return <span />;
     // tend = +1 la distancia crece, -1 se achica.
@@ -429,7 +436,7 @@ function PizarraLandscape({
       : bueno ? "#22c55e" : "#ef4444";
     const txt = (alinear === "left" ? "+" : "−") + Math.abs(valor).toFixed(1).replace(".", ",") + "s";
     return (
-      <span className="flex items-center gap-2" style={{ color: colorDato, textShadow: haloDato }}>
+      <span className="flex items-center gap-2" style={{ color: colorDato, ...contorno("3px") }}>
         <span style={{ fontSize: "clamp(22px, calc(var(--uw) * 4.4), 52px)", fontWeight: 800, letterSpacing: "-0.02em" }}>{txt}</span>
         {tend !== 0 && (
           <span style={{ color, fontSize: "clamp(16px, calc(var(--uw) * 3), 34px)", lineHeight: 1 }}>
@@ -518,9 +525,16 @@ function PizarraLandscape({
             fontSize: "clamp(9px, calc(var(--uw) * 1.4), 14px)",
             letterSpacing: "0.14em",
             fontWeight: 700,
-            opacity: saliendo ? 1 : 0.45,
-            color: oscuro ? "#111827" : "#ffffff",
-            textShadow: haloDato,
+            // Sobre un fondo de dos tonos este texto no se salva con contorno:
+            // es chico y va atenuado a propósito. Se le pone una placa oscura
+            // detrás, que es lo único que garantiza contraste, y se sube la
+            // opacidad — sigue siendo discreto pero se lee.
+            opacity: saliendo ? 1 : fondoMixto ? 0.92 : 0.45,
+            color: oscuro && !fondoMixto ? "#111827" : "#ffffff",
+            textShadow: fondoMixto ? "none" : haloDato,
+            background: fondoMixto ? "rgba(0,0,0,0.6)" : undefined,
+            padding: fondoMixto ? "3px 12px" : undefined,
+            borderRadius: fondoMixto ? 999 : undefined,
           }}
         >
           {saliendo ? "SUELTA PARA SEGUIR · MANTÉN PARA SALIR"
@@ -531,7 +545,7 @@ function PizarraLandscape({
       {gaps && (
         <div
           className="flex items-start justify-between"
-          style={{ padding: "calc(var(--uh) * 3) calc(var(--uw) * 4) 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em", textShadow: haloDato }}
+          style={{ padding: "calc(var(--uh) * 3) calc(var(--uw) * 4) 0", color: colorDato, fontWeight: 800, letterSpacing: "-0.02em", ...contorno("3px") }}
         >
           {/* Sin categoría asignada o sin tiempo marcado todavía: "--". El
               piloto opera normal en pista, solo no tiene clasificación. */}
@@ -572,6 +586,7 @@ function PizarraLandscape({
               borderColor: oscuro ? "#111827" : "rgba(255,255,255,0.9)",
               color:       oscuro ? "#111827" : "#ffffff",
               textShadow:  oscuro ? "none" : fondoMixto ? haloDato : "0 2px 6px rgba(0,0,0,0.45)",
+              ...(fondoMixto ? { WebkitTextStroke: "1.5px rgba(0,0,0,0.9)", paintOrder: "stroke fill" as const } : {}),
               // El aro blanco también se perdía sobre los cuadros claros
               boxShadow:   fondoMixto ? "0 0 0 2px rgba(0,0,0,0.75)" : undefined,
             }}
@@ -583,6 +598,7 @@ function PizarraLandscape({
             style={{
               color:      oscuro ? "#111827" : "#ffffff",
               textShadow: oscuro ? "none" : fondoMixto ? haloDato : "0 2px 8px rgba(0,0,0,0.45)",
+              ...(fondoMixto ? { WebkitTextStroke: "2px rgba(0,0,0,0.9)", paintOrder: "stroke fill" as const } : {}),
             }}
           >
             {texto}

@@ -17,10 +17,17 @@
 - El aro del icono de bandera también se perdía sobre los cuadros claros: lleva
   un contorno oscuro
 
+- Un halo difuso no alcanzaba sobre un fondo tan movido. Lo que hace legible la
+  letra es un **contorno nítido**: `paint-order: stroke` lo dibuja debajo del
+  relleno, así que engorda la letra por fuera en vez de comérsela por dentro
+- El aviso de "mantén presionado para salir" no se salva con contorno: es texto
+  chico y va atenuado a propósito. Lleva una **placa oscura detrás**, que es lo
+  único que garantiza contraste a ese tamaño
+
 ### Detalle
 - `text-shadow` se hereda, así que los triángulos de tendencia quedan cubiertos
   sin tocarlos
-- Los fondos de un solo tono no cambian: ahí el halo sería ruido
+- Los fondos de un solo tono no cambian: ahí el contorno sería ruido
 
 ---
 
