@@ -3,6 +3,31 @@
 
 ---
 
+## [0.29.1] — 26 Septiembre 2026
+### Corregido (El mapa de fondo dejó de verse)
+- **CARTO cerró su CDN gratuito de mapas** y empezó a devolver una imagen con la
+  marca "API KEY REQUIRED" en vez del mapa. Lo entrega con código **200 OK**, así
+  que el navegador la trata como una carga exitosa y no aparecía ningún error en
+  consola: el mapa simplemente se veía roto
+- Los tres mapas afectados pasan al **satélite de Esri**, que es el mismo que ya
+  usaban `CircuitoManager` y `GeofenceMap` desde siempre: sin llave, sin cuenta y
+  sin costo. `LeafletAdminMap`, `LeafletSectoresMap` y `LeafletPilotMap`
+- Para un autódromo el satélite además es mejor que el callejero: se ve el
+  asfalto real, que es justo lo que se necesita al dibujar el trazado o al
+  revisar que la geocerca cubra todo el ancho de pista
+
+### Detalle
+- **Esri pide la ruta como `{z}/{y}/{x}`**, con la Y antes que la X, al revés de
+  la convención habitual. Invertirlo no da error: trae imagen de otro punto del
+  planeta. Verificado calculando el tile de las coordenadas del circuito
+- Los contenedores llevan fondo `#0a0a0a`, igual que los otros dos mapas: el gris
+  claro por defecto de Leaflet se notaba como un parpadeo bajo los tiles oscuros
+- Pendiente para antes de publicar en las tiendas: los cinco mapas ocultan la
+  atribución con `display:none`, y tanto Esri como OpenStreetMap la exigen en sus
+  términos
+
+---
+
 ## [0.29.0] — 10 Agosto 2026
 ### Agregado (La pantalla del piloto cambia según el tipo de tanda)
 - **Entrenamiento y clasificación usan otra lógica**, no una variante de la de

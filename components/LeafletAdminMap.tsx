@@ -111,10 +111,14 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
       boxZoom:            false,
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd",
-      maxZoom:    20,
-    }).addTo(map);
+    // Satélite de Esri, el mismo que ya usan CircuitoManager y GeofenceMap.
+    // CARTO cerró su CDN gratuito y devuelve una imagen "API KEY REQUIRED" con
+    // código 200, así que el mapa se veía roto sin ningún error en consola.
+    // Ojo con el orden de la ruta: Esri pide {z}/{y}/{x}, no {z}/{x}/{y}.
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 20 }
+    ).addTo(map);
 
     mapRef.current = map;
 
@@ -369,7 +373,9 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
   return (
     <div
       ref={containerRef}
-      style={{ width: "100%", height: "100%", minHeight: 300 }}
+      // Fondo oscuro bajo los tiles satelitales: el gris claro por defecto de
+      // Leaflet se ve como un parpadeo mientras cargan
+      style={{ width: "100%", height: "100%", minHeight: 300, background: "#0a0a0a" }}
     />
   );
 }

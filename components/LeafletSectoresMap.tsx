@@ -53,9 +53,12 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
       boxZoom:         false,
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
-      subdomains: "abcd", maxZoom: 20,
-    }).addTo(map);
+    // Satélite de Esri: CARTO cerró su CDN gratuito y ahora exige llave.
+    // Ojo con el orden de la ruta: Esri pide {z}/{y}/{x}, no {z}/{x}/{y}.
+    L.tileLayer(
+      "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      { maxZoom: 20 }
+    ).addTo(map);
 
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
@@ -179,6 +182,9 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
       style={{
         width:        "100%",
         height:       240,
+        // Fondo oscuro bajo los tiles satelitales: el gris claro por defecto
+        // de Leaflet se ve como un parpadeo mientras cargan
+        background:   "#0a0a0a",
         borderRadius: "16px",
         overflow:     "hidden",
         position:     "relative",
