@@ -102,6 +102,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const [tandaSelId, setTandaSelId] = useState<string | null>(null);
   const [vueltas, setVueltas]       = useState<VueltaRow[]>([]);
   const [marcandoLargada, setMarcandoLargada] = useState(false);
+  const [errorLargada, setErrorLargada] = useState<string | null>(null);
   const [pilotoAbierto, setPilotoAbierto] = useState<string | null>(null);
   // Filtro solo para la descarga: la tabla en pantalla muestra todo junto
   const [catDescarga, setCatDescarga] = useState<string>("");
@@ -122,6 +123,23 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const tandaSel = tandas.find(t => t.id === tandaSelId) || null;
   const tandaSelRef = useRef<string | null>(null);
   useEffect(() => { tandaSelRef.current = tandaSelId; }, [tandaSelId]);
+
+  // ── La tanda que están CORRIENDO los pilotos ──────────────────
+  // Ojo con la diferencia: `tandaSel` es la que el admin está mirando en el
+  // desplegable, y cambiarla no debe alterar lo que ven los pilotos en pista.
+  //
+  // Va por ref y no por estado porque el emisor de más abajo vive dentro de un
+  // setInterval de larga vida: si leyera la variable directamente se quedaría
+  // con la que existía cuando el intervalo arrancó. Eso fue justamente lo que
+  // pasó en la prueba del 27 sep 2026 — el emisor quedó congelado en la
+  // clasificación anterior, así que durante toda la carrera los pilotos vieron
+  // su posición por mejor vuelta en vez del orden de carrera, y la bandera azul
+  // no llegó a evaluarse nunca. La tabla del panel sí se actualizaba, porque su
+  // useMemo sí declara la tanda como dependencia.
+  const tandaVivaRef = useRef<Tanda | null>(null);
+  useEffect(() => {
+    tandaVivaRef.current = tandas.find(t => t.id === tandaActivaId) ?? null;
+  }, [tandas, tandaActivaId]);
 
   // Seguir la selección compartida con el Log (cuando apunta a una tanda válida)
   useEffect(() => {
@@ -295,8 +313,11 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       if (estados.length < 1) return;
 
       // En carrera manda la distancia recorrida; en entrenamiento y
-      // clasificación, la posición en pista (cada uno lleva vueltas distintas)
-      const esCarreraTanda = tandaSel?.tipo === "carrera";
+      // clasificación, la posición en pista (cada uno lleva vueltas distintas).
+      // Se lee del ref en cada tick: lo que ven los pilotos depende de la tanda
+      // que están corriendo, no de la que el admin tenga abierta en pantalla.
+      const tandaViva = tandaVivaRef.current;
+      const esCarreraTanda = tandaViva?.tipo === "carrera";
       const gaps = calcularGaps(estados, {
         largo: largoCircuito, ahora, modo: esCarreraTanda ? "carrera" : "libre",
       });
@@ -364,7 +385,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       });
 
       // ── Meta final: congelar a cada uno en su propio cruce ──
-      const programadas = tandaSel?.vueltas_programadas ?? null;
+      const programadas = tandaViva?.vueltas_programadas ?? null;
       if (programadas && orden.length) {
         if (!liderTermino && orden[0].vueltas >= programadas) {
           liderTermino = true;
@@ -684,12 +705,23 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   const tandaActiva = tandas.find(t => t.id === tandaActivaId);
   const nombreTandaActiva = tandaActiva?.nombre || "tanda";
 
+  // Antes, si el update fallaba, el botón volvía a su estado normal y no decía
+  // nada: en la prueba del 27 sep 2026 la columna `largada_at` no existía en la
+  // base y la largada se marcó creyendo que había quedado registrada. Un botón
+  // que no puede cumplir tiene que decirlo.
   const marcarLargada = async () => {
     if (!tandaActivaId || marcandoLargada) return;
     setMarcandoLargada(true);
+    setErrorLargada(null);
     const ahora = new Date().toISOString();
     const { error } = await supabase.from("tandas").update({ largada_at: ahora }).eq("id", tandaActivaId);
-    if (!error) {
+    if (error) {
+      setErrorLargada(
+        /largada_at|column|schema cache/i.test(error.message)
+          ? "Falta correr docs/task-largada-migration.sql en Supabase"
+          : `No se pudo marcar: ${error.message}`
+      );
+    } else {
       setTandas(prev => prev.map(t => (t.id === tandaActivaId ? { ...t, largada_at: ahora } : t)));
     }
     setMarcandoLargada(false);
@@ -710,6 +742,12 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
             >
               {marcandoLargada ? "Marcando…" : "🟢 Largada"}
             </button>
+          )}
+          {errorLargada && (
+            <span className="text-xs font-semibold px-2.5 py-1 rounded-lg"
+              style={{ background: "#450a0a", color: "#fca5a5" }}>
+              ⚠ {errorLargada}
+            </span>
           )}
           {tandaActiva?.tipo === "carrera" && tandaActiva?.largada_at && (
             <span className="text-xs font-semibold px-2.5 py-1 rounded-lg"

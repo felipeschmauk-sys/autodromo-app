@@ -3,6 +3,35 @@
 
 ---
 
+## [0.29.4] — 27 Septiembre 2026
+### Corregido (Los pilotos veían la posición de la tanda equivocada)
+- **El emisor de posiciones a los pilotos quedaba congelado en la tanda que
+  estaba seleccionada cuando arrancó.** Leía `tandaSel` dentro de un
+  `setInterval` de larga vida sin declararla como dependencia, así que la
+  capturaba una sola vez. La tabla del panel sí se actualizaba, porque su
+  `useMemo` sí la declara — de ahí el síntoma: el admin veía bien y los pilotos
+  no
+- Ahora lee la tanda **activa** desde un ref que se mantiene al día. Son dos
+  conceptos distintos: la seleccionada es la que el admin mira en el
+  desplegable, y cambiarla no debe alterar lo que ven los pilotos en pista
+- El botón de largada **avisa cuando falla**. Antes volvía a su estado normal en
+  silencio
+
+### Qué pasó en la prueba del 27 sep
+- Durante toda la Carrera 1 el emisor quedó en la clasificación anterior, así que
+  corrió en modo `libre`: la posición salió del **ranking por mejor vuelta** en
+  vez del orden de carrera, y `sostenerAzul` nunca llegó a llamarse
+- La columna `tandas.largada_at` no existía en la base — la migración
+  `docs/task-largada-migration.sql` nunca se corrió — así que el botón de
+  largada falló en silencio y la vuelta de formación contó como vuelta de carrera
+- Replayando la carrera completa con el modo corregido: **2.053 instantes con
+  alguien una vuelta abajo**, acercamiento máximo de **0,4 s** entre el doblador
+  y el doblado, y **48 instantes de bandera azul** que hoy nadie vio
+- El detector en sí funcionó bien: peor hueco de GPS de 1 s en casi todos los
+  teléfonos, precisión mediana de 3 m y ninguna vuelta perdida
+
+---
+
 ## [0.29.3] — 27 Septiembre 2026
 ### Agregado (El punto de GPS vuelve al modo conducción)
 - La vista vertical siempre mostró el punto rojo del piloto sobre el mapa, pero
