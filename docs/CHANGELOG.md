@@ -3,6 +3,27 @@
 
 ---
 
+## [0.29.2] — 26 Septiembre 2026
+### Agregado (Exportar una jornada completa para recrearla después)
+- `scripts/exportar-prueba.mjs` baja a disco todo lo que una fecha dejó grabado:
+  traza GPS cruda, vueltas, circuito con su trazado y geocercas, tandas,
+  sectores, categorías, log de acciones y ubicaciones. Más un `RESUMEN.md`
+  legible con lecturas y vueltas por piloto
+- Uso: `node scripts/exportar-prueba.mjs "prueba 1"`, o `--listar` para ver las
+  fechas disponibles
+- La traza es lo que permite volver a correr el detector con otros umbrales o
+  recalcular las diferencias entre autos con otro algoritmo, sin volver a pista
+
+### Detalle
+- Pagina de a 1000 filas: PostgREST corta ahí y una jornada son decenas de miles
+- Lo que **no** queda grabado son las diferencias y la bandera azul que el panel
+  repartió en vivo: viajan por broadcast efímero y no tocan la base. Se pueden
+  recalcular desde la traza, pero lo que el piloto vio en su pantalla solo existe
+  en la grabación de pantalla de su teléfono
+- Probado contra la fecha del 9 de agosto: 4.594 lecturas de GPS y 14 vueltas
+
+---
+
 ## [0.29.1] — 26 Septiembre 2026
 ### Corregido (El mapa de fondo dejó de verse)
 - **CARTO cerró su CDN gratuito de mapas** y empezó a devolver una imagen con la
