@@ -14,6 +14,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esVueltaDeCarrera, deadlineTanda, transcurridoTandaS, tandaEnPausa } from "@/lib/carrera";
+import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS } from "@/lib/gps";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { suscribirPosiciones, abrirEmisorEstado, type EstadoCarreraViva } from "@/lib/posiciones";
 import { calcularGaps, sostenerAzul, recorridoTotal, type EstadoPiloto, type Muestra, type EstadoAzul } from "@/lib/gaps";
@@ -53,16 +54,6 @@ interface PilotoInfo { nombre: string; numero: string | null; categoria: string 
 // no es un hipo de la red, es que dejamos de ver ese auto.
 const FRESCURA_POS_MS = 10_000;
 
-// Auto detenido o arrastrándose en pista. A ritmo de carrera, andar bajo 10
-// km/h durante cinco segundos seguidos ya no es ir despacio: es un auto con un
-// problema, y los demás tienen que saber dónde está.
-//
-// Dos umbrales y no uno: se marca bajo 10 pero recién se deja de marcar sobre
-// 13. Sin esa banda muerta, un auto arrastrándose justo en 10 haría parpadear
-// el punto una vez por segundo.
-const DETENIDO_KMH = 10;
-const REANUDA_KMH  = 13;
-const DETENIDO_MS  = 5_000;
 interface PosPiloto {
   lat: number; lng: number; ts: number; dentro: boolean | null;
   /** Metros recorridos sobre el trazado. Solo llega por broadcast. */

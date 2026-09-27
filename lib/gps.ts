@@ -17,6 +17,29 @@ export interface UbicacionPiloto {
   dentro_recinto?: boolean | null
 }
 
+// ── AUTO DETENIDO EN PISTA ────────────────────────────────────
+//
+// Un auto que se arrastra es tan peligroso como uno parado, y el criterio tiene
+// que ser el mismo en los dos lugares que lo usan: la amarilla automática por
+// sector y el punto amarillo en la pantalla del piloto. Por eso vive acá y no
+// repetido en cada componente.
+//
+// Se subió de 5 a 10 km/h el 27 sep 2026: en pista un piloto venía transitando
+// muy lento a 9 km/h y el sistema lo daba por circulando con normalidad.
+//
+// Dos umbrales y no uno: se marca bajo DETENIDO_KMH y recién se deja de marcar
+// sobre REANUDA_KMH. Sin esa banda muerta, un auto justo en el límite prende y
+// apaga la señal una vez por segundo.
+
+/** Bajo esta velocidad (km/h) el auto se considera detenido en pista. */
+export const DETENIDO_KMH = 10
+
+/** Sobre esta velocidad (km/h) se considera que volvió a circular. */
+export const REANUDA_KMH = 13
+
+/** Cuánto debe sostenerse la velocidad baja antes de marcar el punto (ms). */
+export const DETENIDO_MS = 5_000
+
 // ── SECTORES ──────────────────────────────────────────────────
 // Un sector con punto_inicio > punto_fin "cruza la línea de meta":
 // va desde inicio hasta el final del trazado y sigue desde 0 hasta fin.

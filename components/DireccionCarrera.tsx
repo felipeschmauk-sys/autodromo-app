@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-import { getTrazadoActivo, sectorContienePunto, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, sectorContienePunto, DETENIDO_KMH, REANUDA_KMH, type Coordenada } from "@/lib/gps";
 import { registrarLog } from "@/lib/log";
 
 const LeafletAdminMap = dynamic(() => import("@/components/LeafletAdminMap"), { ssr: false });
@@ -152,7 +152,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
     if (dentroGeocerca === false) { await revertAutoYellow(pilotoId); return; }
     if (dentroGeocerca !== true) return;
 
-    if (velocidad <= 5) {
+    if (velocidad <= DETENIDO_KMH) {
       // Detenido en pista → amarilla en su sector
       const sector = detectSectorByPos(lat, lng);
       if (sector && sector.bandera === "verde" && !autoYellowRef.current.has(sector.id)) {
@@ -165,9 +165,9 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
           descripcion: `🤖 Amarilla automática en ${sector.nombre} — auto detenido en pista`,
         });
       }
-    } else if (velocidad > 8) {
-      // Histéresis: recién sobre 8 km/h se considera "en movimiento" y se
-      // revierte. Entre 5 y 8 no se hace nada (banda muerta anti-parpadeo).
+    } else if (velocidad > REANUDA_KMH) {
+      // Histéresis: recién sobre REANUDA_KMH se considera "en movimiento" y se
+      // revierte. En la banda intermedia no se hace nada (anti-parpadeo).
       await revertAutoYellow(pilotoId);
     }
   }

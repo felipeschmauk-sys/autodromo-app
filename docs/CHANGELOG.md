@@ -3,6 +3,28 @@
 
 ---
 
+## [0.33.3] — 27 Septiembre 2026
+### Cambiado (La amarilla automática también sube a 10 km/h)
+- La **amarilla automática por sector** pasa a dispararse bajo **10 km/h**, en vez
+  de 5, y a revertirse sobre **13**. Antes un piloto transitando muy lento a
+  9 km/h contaba como circulando con normalidad y el sector no se marcaba
+- Ahora la bandera de sector y el punto amarillo en la pantalla del piloto usan
+  **el mismo criterio**. Antes hubieran quedado desalineados: el punto a 10 y la
+  bandera a 5
+
+### Detalle
+- Los umbrales viven en `lib/gps.ts` (`DETENIDO_KMH`, `REANUDA_KMH`,
+  `DETENIDO_MS`) y no repetidos en cada componente, que es como se habrían
+  desincronizado
+- La bandera de sector se levanta al instante; el punto en la pantalla del
+  piloto espera 5 segundos de confirmación. Así el sector avisa primero y el
+  punto aparece cuando ya no hay duda
+- Medido sobre la jornada del 27 sep: con 5/8 y con 10/13 se levantan las mismas
+  **13 amarillas** (12 quedaron en el log real). El umbral más alto solo las
+  toma un segundo antes y las sostiene un poco más — no agrega falsos positivos
+
+---
+
 ## [0.33.2] — 27 Septiembre 2026
 ### Cambiado (Auto detenido: el umbral sube a 10 km/h)
 - Un auto cuenta como detenido bajo **10 km/h** sostenidos 5 segundos, en vez de
