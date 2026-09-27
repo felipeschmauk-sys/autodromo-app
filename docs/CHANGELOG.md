@@ -3,6 +3,28 @@
 
 ---
 
+## [0.30.0] — 27 Septiembre 2026
+### Agregado (Fijar la línea de meta desde el editor de sectores)
+- La meta ya no se asume en el arranque del trazado. En **Config → Sectores**
+  aparece un marcador a cuadros **arrastrable sobre el mapa**, más botones `+` y
+  `−` para moverlo punto a punto
+- Es propiedad del **circuito**, no del primer sector: en cada autódromo la meta
+  está donde está, y no tiene por qué coincidir con una división de sectores
+- Se puede guardar aunque el circuito no tenga sectores divididos
+
+### Detalle
+- La columna `circuitos.meta_idx` ya existía desde la migración de cronometraje
+  y las tandas ya la copiaban al crearse; lo único que faltaba era la interfaz
+- **Las tandas ya creadas conservan su meta.** Se copia al iniciar la tanda, así
+  que cambiarla a mitad de un evento no mueve la meta de una carrera en curso
+- Verificado sobre la Carrera 5: mover la meta del punto 0 al 6 corre todos los
+  cruces 11 segundos —lo que el auto tarda en recorrer ese tramo— y el conteo de
+  vueltas se mantiene. La meta define dónde se corta la vuelta, no cuántas hay
+- El detector se arma entre 40% y 70% de la vuelta, y como ese porcentaje es
+  relativo a la meta, la zona de armado se mueve sola con ella
+
+---
+
 ## [0.29.8] — 27 Septiembre 2026
 ### Corregido (El texto desaparecía sobre la bandera a cuadros)
 - Con la bandera a cuadros desplegada, las letras blancas se perdían sobre los

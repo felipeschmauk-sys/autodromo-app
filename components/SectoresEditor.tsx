@@ -43,6 +43,9 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
   const [guardando, setGuardando] = useState(false);
   const [mensaje,   setMensaje]   = useState<{ texto: string; ok: boolean } | null>(null);
   const [cargando,  setCargando]  = useState(true);
+  // Punto del trazado donde está la línea de meta. Es propiedad del circuito,
+  // no del primer sector: en cada autódromo está donde está.
+  const [meta,      setMeta]      = useState(0);
 
   // ── Cargar trazado y sectores existentes ──────────────────
   // circuitoId como dep: cuando cambia el circuito activo, recarga el trazado
@@ -52,10 +55,11 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
       if (circuitoId) {
         const { data } = await supabase
           .from("circuitos")
-          .select("trazado_coords")
+          .select("trazado_coords, meta_idx")
           .eq("id", circuitoId)
           .single();
         coords = data?.trazado_coords ?? null;
+        setMeta((data as any)?.meta_idx ?? 0);
       } else if (circuitoId === undefined) {
         // Sin prop: comportamiento legado (trazado global)
         coords = await getTrazadoActivo();
@@ -169,9 +173,20 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
 
   // ── Guardar en Supabase ─────────────────────────────────────
   const guardarSectores = async () => {
-    if (!rangos.length || cantidad < 2) return;
     setGuardando(true);
     try {
+      // La meta se guarda siempre, aunque el circuito no tenga sectores
+      // divididos. Las tandas ya creadas conservan la que tenían: cambiarla a
+      // mitad de un evento no debe mover la meta de una carrera en curso.
+      if (circuitoId) {
+        const { error: eMeta } = await supabase
+          .from("circuitos").update({ meta_idx: meta }).eq("id", circuitoId);
+        if (eMeta) throw eMeta;
+      }
+      if (!rangos.length || cantidad < 2) {
+        setMensaje({ texto: "✅ Punto de meta guardado", ok: true });
+        return;
+      }
       // Eliminar sectores anteriores
       await supabase.from("sectores_pista").delete().gte("orden", 1);
 
@@ -187,7 +202,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
       const { error } = await supabase.from("sectores_pista").insert(rows);
       if (error) throw error;
 
-      setMensaje({ texto: `✅ ${rows.length} sectores guardados`, ok: true });
+      setMensaje({ texto: `✅ ${rows.length} sectores y punto de meta guardados`, ok: true });
     } catch (err: any) {
       console.error(err);
       setMensaje({ texto: `❌ Error: ${err?.message || "desconocido"}`, ok: false });
@@ -314,7 +329,37 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
               trazado={trazado}
               rangos={rangos}
               onBoundaryChange={handleBoundaryChange}
+              meta={meta}
+              onMetaChange={circuitoId ? setMeta : undefined}
             />
+            {/* ── Línea de meta ── */}
+            {circuitoId && trazado.length > 1 && (
+              <div className="flex items-center gap-2.5 mt-3 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5">
+                <span
+                  className="w-6 h-6 rounded flex-shrink-0 border-2 border-white"
+                  style={{
+                    background: "repeating-conic-gradient(#18181b 0% 25%, #fafafa 0% 50%) 50% / 8px 8px",
+                    boxShadow: "0 1px 6px rgba(0,0,0,.35)",
+                  }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-gray-700 leading-tight">Línea de meta</p>
+                  <p className="text-xs text-gray-400 leading-tight">
+                    Arrástrala en el mapa · punto {meta} de {trazado.length - 1}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setMeta(m => (m - 1 + trazado.length) % trazado.length)}
+                  className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center flex-shrink-0"
+                  title="Mover la meta un punto hacia atrás"
+                >−</button>
+                <button
+                  onClick={() => setMeta(m => (m + 1) % trazado.length)}
+                  className="w-8 h-8 rounded-lg bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-bold flex items-center justify-center flex-shrink-0"
+                  title="Mover la meta un punto hacia adelante"
+                >+</button>
+              </div>
+            )}
             {cantidad >= 2 && (
               <div className="flex items-center justify-center gap-2 mt-2.5">
                 <span className="inline-flex items-center gap-1.5 bg-gray-100 text-gray-500 text-xs px-3 py-1.5 rounded-full">
@@ -436,10 +481,12 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
       <div className="flex gap-3">
         <button
           onClick={guardarSectores}
-          disabled={guardando || cantidad < 2 || !trazado.length}
+          // Con un solo sector no hay división que guardar, pero la meta sí:
+          // es propiedad del circuito y tiene que poder fijarse igual
+          disabled={guardando || !trazado.length || (cantidad < 2 && !circuitoId)}
           className="flex-1 py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors"
         >
-          {guardando ? "Guardando..." : `Guardar ${cantidad} sectores`}
+          {guardando ? "Guardando..." : cantidad < 2 ? "Guardar punto de meta" : `Guardar ${cantidad} sectores y meta`}
         </button>
         <button
           onClick={resetearSectores}

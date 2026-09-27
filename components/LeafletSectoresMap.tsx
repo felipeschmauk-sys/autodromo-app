@@ -27,9 +27,12 @@ interface Props {
   trazado: Coordenada[];
   rangos:  Rango[];
   onBoundaryChange: (boundaryIdx: number, newFin: number) => void;
+  /** Punto del trazado donde está la línea de meta */
+  meta?: number;
+  onMetaChange?: (idx: number) => void;
 }
 
-export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }: Props) {
+export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange, meta = 0, onMetaChange }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef       = useRef<L.Map | null>(null);
   const layersRef    = useRef<L.Layer[]>([]);
@@ -100,15 +103,41 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
       // para identificar los sectores y no tapan el trazado
     });
 
-    // Marcador de largada
-    const start = trazado[0];
-    if (start) {
-      layersRef.current.push(
-        (L.circleMarker as any)([start.lat, start.lng], {
-          radius: 8, fillColor: "#22c55e",
-          color: "#fff", weight: 2, fillOpacity: 1,
-        }).addTo(map)
-      );
+    // ── Línea de meta, arrastrable ─────────────────────────
+    // No tiene por qué coincidir con el inicio del trazado ni con el primer
+    // sector: en cada autódromo la meta está donde está. Se arrastra libre por
+    // el trazado, sin las restricciones de los límites de sector.
+    const metaPt = trazado[Math.max(0, Math.min(meta, trazado.length - 1))];
+    if (metaPt) {
+      const metaIcon = L.divIcon({
+        html: `<div style="
+          width:30px;height:30px;border-radius:6px;
+          background:repeating-conic-gradient(#18181b 0% 25%, #fafafa 0% 50%) 50% / 10px 10px;
+          border:3px solid #fff;
+          box-shadow:0 2px 14px rgba(0,0,0,.9);
+          cursor:${onMetaChange ? "grab" : "default"};
+        "></div>`,
+        iconSize:   [30, 30],
+        iconAnchor: [15, 15],
+        className:  "",
+      });
+      const metaMarker = L.marker([metaPt.lat, metaPt.lng],
+        { draggable: !!onMetaChange, icon: metaIcon, zIndexOffset: 900 }).addTo(map);
+      metaMarker.bindTooltip("Meta", { direction: "top", offset: [0, -16] });
+
+      if (onMetaChange) {
+        metaMarker.on("drag", function (e: any) {
+          const latlng = e.target.getLatLng();
+          let minD = Infinity, nearest = meta;
+          trazado.forEach((c, j) => {
+            const d = (latlng.lat - c.lat) ** 2 + (latlng.lng - c.lng) ** 2;
+            if (d < minD) { minD = d; nearest = j; }
+          });
+          e.target.setLatLng([trazado[nearest].lat, trazado[nearest].lng]);
+          onMetaChange(nearest);
+        });
+      }
+      markersRef.current.push(metaMarker);
     }
 
     // ── Boundary markers arrastrables ──────────────────────
@@ -174,7 +203,7 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange }
 
     // Ajustar vista al trazado
     map.fitBounds(L.polyline(allLatlngs).getBounds(), { padding: [24, 24] });
-  }, [trazado, rangos, onBoundaryChange]);
+  }, [trazado, rangos, onBoundaryChange, meta, onMetaChange]);
 
   return (
     <div
