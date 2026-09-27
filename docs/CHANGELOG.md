@@ -3,6 +3,22 @@
 
 ---
 
+## [0.33.1] — 27 Septiembre 2026
+### Cambiado (El auto detenido se ve con cualquier bandera)
+- El punto del auto detenido ya no aparece solo con bandera roja: **se ve
+  siempre**. Que haya un auto parado en pista es una advertencia de seguridad y
+  no debería depender de qué bandera esté puesta
+- El punto pasó a tener tres aros: **amarillo al centro, anillo oscuro y borde
+  blanco**. Con un punto amarillo suelto, la bandera amarilla y la de rayas se
+  lo tragaban — el mismo problema que el texto sobre la bandera a cuadros
+- El halo pulsante se invierte a oscuro sobre los fondos claros o amarillentos
+  (amarilla, safety car, blanca, cuadros y rayas)
+
+### Detalle
+- Verificado sobre las seis banderas con el trazado real de Las Vizcachas
+
+---
+
 ## [0.33.0] — 27 Septiembre 2026
 ### Agregado (El auto detenido se ve con bandera roja)
 - Con bandera roja, la pantalla del piloto marca con un **punto amarillo

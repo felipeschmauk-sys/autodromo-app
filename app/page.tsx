@@ -385,16 +385,23 @@ function PizarraLandscape({
             con la roja, el punto rojo solo se perdería contra el fondo.
             Si el piloto está lejos del circuito el viewBox lo recorta solo, que
             es lo correcto — mejor sin punto que un punto pegado a un borde. */}
-        {/* Autos detenidos, solo con bandera roja. Van ANTES del punto propio
-            para que el suyo quede siempre arriba y nunca se confunda con uno
-            ajeno. Amarillo sobre el fondo rojo: es el color que ya significa
-            "precaución acá" en el resto del sistema. */}
-        {bandera === "roja" && detenidos?.map((d, i) => (
+        {/* Autos detenidos. Se ven SIEMPRE, con cualquier bandera: que haya un
+            auto parado en pista es una advertencia de seguridad y no depende de
+            qué bandera esté puesta.
+            Van ANTES del punto propio para que el suyo quede siempre arriba y
+            nunca se confunda con uno ajeno.
+            El punto es amarillo —el color que ya significa "precaución acá"—
+            pero lleva anillo oscuro y borde blanco: sobre la bandera amarilla o
+            la de rayas, un punto amarillo suelto se perdería. Los tres aros
+            garantizan que se vea sobre cualquier fondo. */}
+        {detenidos?.map((d, i) => (
           <g key={i}>
-            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={34} fill="rgba(250,204,21,0.35)">
+            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={34}
+              fill={fondoClaro ? "rgba(28,25,23,0.3)" : "rgba(250,204,21,0.35)"}>
               <animate attributeName="r" values="26;38;26" dur="1.6s" repeatCount="indefinite" />
             </circle>
-            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={17} fill="#facc15" stroke="#1c1917" strokeWidth={6} />
+            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={22} fill="none" stroke="#ffffff" strokeWidth={4} />
+            <circle cx={toX(d.lng)} cy={toY(d.lat)} r={17} fill="#facc15" stroke="#1c1917" strokeWidth={7} />
           </g>
         ))}
         {posicion && (
@@ -430,6 +437,10 @@ function PizarraLandscape({
   // letra es un contorno nítido. `paintOrder: stroke` lo dibuja DEBAJO del
   // relleno, así que engorda la letra por fuera en vez de comérsela por dentro.
   const fondoMixto = bandera === "cuadros" || bandera === "negra_blanco" || bandera === "rayas";
+  // Fondos claros o amarillentos: sobre ellos el halo amarillo del auto
+  // detenido no se distingue, así que el halo se invierte a oscuro
+  const fondoClaro = bandera === "amarilla" || bandera === "amarilla_doble"
+    || bandera === "safety_car" || bandera === "blanca" || fondoMixto;
   const haloDato = fondoMixto
     ? "0 0 6px rgba(0,0,0,0.95), 0 0 14px rgba(0,0,0,0.85), 0 3px 6px rgba(0,0,0,0.8)"
     : "none";
