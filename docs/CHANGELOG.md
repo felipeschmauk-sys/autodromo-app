@@ -3,6 +3,26 @@
 
 ---
 
+## [0.31.1] — 27 Septiembre 2026
+### Corregido (El reloj de Dirección seguía contando con la roja puesta)
+- Con bandera roja el cronómetro de la pestaña **Crono** se detenía bien, pero el
+  de **Dirección** seguía descontando. No eran dos relojes distintos: era el
+  mismo dato, leído de una copia vieja
+- Cronometraje relee las tandas cada 10 s; el panel de Dirección solo las
+  recargaba al iniciar o finalizar una, así que su copia quedaba congelada desde
+  antes de la pausa
+- **Lo grave no era el display.** El cierre automático de la tanda usa esa misma
+  copia, así que la tanda se habría finalizado sola en el horario original pese a
+  estar detenida, y el tiempo recuperado se perdía igual
+- Ahora la revisión que corre cada 5 s relee el estado de pausa desde la base, y
+  al poner la bandera el cambio se refleja de inmediato sin esperar ese ciclo
+
+### Detalle
+- Se relee de la base y no solo del estado local porque la bandera puede venir de
+  otro dispositivo: quien la pone no es necesariamente quien mira la pantalla
+
+---
+
 ## [0.31.0] — 27 Septiembre 2026
 ### Agregado (El cronómetro se detiene con bandera roja)
 - Con bandera roja **el tiempo de la tanda se congela**, y vuelve a correr con la

@@ -503,9 +503,27 @@ export default function AdminPage() {
     const revisar = async () => {
       if (finalizandoRef.current) return;
       let terminar = false;
-      const inicioMs = new Date(t.inicio).getTime();
+
+      // La pausa por bandera roja la escribe esta misma pantalla, pero también
+      // podría venir de otro dispositivo, y la copia local se queda vieja. Se
+      // relee acá: si no, el reloj de Dirección sigue descontando con la roja
+      // puesta y —peor— la tanda se cierra sola en el horario original.
+      let vigente = t;
+      try {
+        const { data: fresca } = await supabase
+          .from("tandas").select("pausado_ms, pausa_desde").eq("id", t.id).maybeSingle();
+        if (fresca) {
+          const pd = (fresca as any).pausa_desde ?? null;
+          const pm = (fresca as any).pausado_ms ?? 0;
+          vigente = { ...t, pausa_desde: pd, pausado_ms: pm };
+          if ((t.pausa_desde ?? null) !== pd || (t.pausado_ms ?? 0) !== pm) {
+            setTandaActivaUi(prev => (prev && prev.id === t.id ? { ...prev, pausa_desde: pd, pausado_ms: pm } : prev));
+          }
+        }
+      } catch { /* migración sin correr: sigue como antes */ }
+
       // "Libre" corre sin reglas de término; el resto por tiempo/vueltas
-      const dl = deadlineTanda(t);
+      const dl = deadlineTanda(vigente);
       if (t.tipo !== "libre" && dl && Date.now() >= dl) terminar = true;
       try {
         const desde = desdeLargadaMs(t.largada_at ? new Date(t.largada_at).getTime() : null);
@@ -883,12 +901,17 @@ export default function AdminPage() {
         if (abierta) return;                       // ya estaba detenida
         await supabase.from("tandas")
           .update({ pausa_desde: new Date().toISOString() }).eq("id", tid);
+        // Reflejarlo de inmediato en pantalla, sin esperar la próxima lectura
+        setTandaActivaUi(prev => (prev && prev.id === tid
+          ? { ...prev, pausa_desde: new Date().toISOString() } : prev));
       } else {
         if (!abierta) return;                      // no había pausa que cerrar
         const suma = ((data as any).pausado_ms ?? 0) +
           Math.max(0, Date.now() - new Date(abierta).getTime());
         await supabase.from("tandas")
           .update({ pausado_ms: Math.round(suma), pausa_desde: null }).eq("id", tid);
+        setTandaActivaUi(prev => (prev && prev.id === tid
+          ? { ...prev, pausa_desde: null, pausado_ms: Math.round(suma) } : prev));
       }
     } catch { /* migración sin correr: el reloj sigue como antes */ }
   }, [tandaActiva]);
