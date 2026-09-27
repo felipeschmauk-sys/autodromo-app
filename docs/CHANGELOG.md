@@ -3,6 +3,31 @@
 
 ---
 
+## [0.32.0] — 27 Septiembre 2026
+### Cambiado (El cronometraje vive debajo del mapa y ya no se apaga)
+- El cronometraje aparece ahora **debajo del mapa en la pestaña Dirección**:
+  se sube para ver el mapa y se baja para ver los tiempos, sin cambiar de
+  pestaña. En Dirección además queda más ancho que antes
+- **Lo importante es lo que esto arregla, no la comodidad.** El cronometraje
+  vivía dentro de su pestaña, así que mirar el mapa lo desmontaba: se cortaba
+  el reparto de posiciones y de bandera azul a todos los pilotos, y se perdía
+  el estado de llegada de la carrera en curso
+- Es el bloqueante que estaba anotado desde el primer día del checklist de
+  pruebas: "con una sola ventana siempre te falta una de las dos mitades".
+  Ya no hace falta abrir dos ventanas del navegador
+
+### Detalle
+- Se monta **una sola instancia**, siempre viva, y solo se esconde con `display`
+  cuando la pestaña activa no es Dirección ni Crono. Una sola, para que nunca
+  haya dos emisores mandando estado a los pilotos a la vez
+- La pestaña Crono sigue existiendo y muestra la misma instancia a pantalla
+  completa
+- Queda fuera el mapa de Dirección en sí: si se cambia a otra pestaña, la
+  amarilla automática deja de correr. Con el cronometraje ya resuelto, operar
+  desde Dirección deja las dos cosas vivas a la vez
+
+---
+
 ## [0.31.1] — 27 Septiembre 2026
 ### Corregido (El reloj de Dirección seguía contando con la roja puesta)
 - Con bandera roja el cronómetro de la pestaña **Crono** se detenía bien, pero el

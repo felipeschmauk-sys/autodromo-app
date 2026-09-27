@@ -1381,16 +1381,8 @@ export default function AdminPage() {
         )}
 
         {/* ── CRONOMETRAJE ────────────────────────────────────────────── */}
-        {tab === "crono" && !!contexto.fechaId && (
-          <Cronometraje
-            fechaId={contexto.fechaId}
-            tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
-            onSeleccionarTanda={(id) => setTandaSel(id)}
-            tandaActivaId={tandaActiva?.id ?? null}
-            onIniciarTanda={iniciarTanda}
-            onFinalizarTanda={finalizarTanda}
-          />
-        )}
+        {/* El cronometraje se monta ACÁ ABAJO, una sola vez y siempre vivo —
+            ver el bloque al final del main. */}
         {tab === "crono" && !contexto.fechaId && (
           <div className="rounded-2xl bg-gray-50 border border-gray-200 px-6 py-14 text-center">
             <p className="text-4xl mb-4">⏱</p>
@@ -2300,6 +2292,37 @@ export default function AdminPage() {
               </div>
             </div>
 
+          </div>
+        )}
+
+        {/* ══ CRONOMETRAJE — montado una sola vez y SIEMPRE vivo ══════════
+            Antes vivía dentro de su pestaña, así que mirar el mapa lo
+            desmontaba: se cortaba el reparto de posiciones y de bandera azul
+            a todos los pilotos, y se perdía el estado de llegada. Ahora está
+            siempre montado y solo se esconde: en Dirección aparece debajo del
+            mapa —basta con bajar— y en Crono ocupa la pantalla completa.
+
+            Una sola instancia, para que nunca haya dos emisores hablando a la
+            vez. Por eso se esconde con display en vez de desmontarse. */}
+        {!!contexto.fechaId && (
+          <div
+            style={{ display: tab === "direccion" || tab === "crono" ? undefined : "none" }}
+            className={tab === "direccion" ? "pt-2" : undefined}
+          >
+            {tab === "direccion" && (
+              <div className="flex items-center gap-2.5 mb-3 mt-1">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Cronometraje</span>
+                <span className="h-px flex-1 bg-gray-200" />
+              </div>
+            )}
+            <Cronometraje
+              fechaId={contexto.fechaId}
+              tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
+              onSeleccionarTanda={(id) => setTandaSel(id)}
+              tandaActivaId={tandaActiva?.id ?? null}
+              onIniciarTanda={iniciarTanda}
+              onFinalizarTanda={finalizarTanda}
+            />
           </div>
         )}
       </main>
