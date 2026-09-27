@@ -80,7 +80,9 @@ async function pedirTodo(tabla, query, etiqueta) {
 const args = process.argv.slice(2);
 const iSalida = args.indexOf("--salida");
 const salidaArg = iSalida >= 0 ? args[iSalida + 1] : null;
-const nombreBuscado = args.filter((a, i) => !a.startsWith("--") && i !== iSalida + 1)[0];
+// Ojo: sin --salida, iSalida es -1 y iSalida+1 da 0, que es el índice del
+// nombre. Por eso la comparación solo vale cuando la opción está presente.
+const nombreBuscado = args.filter((a, i) => !a.startsWith("--") && !(iSalida >= 0 && i === iSalida + 1))[0];
 
 const fechas = await pedir("fechas_evento?select=id,nombre,fecha_evento,estado,circuito_id,campeonato_id&order=fecha_evento.desc&limit=50");
 
