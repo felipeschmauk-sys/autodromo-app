@@ -2510,8 +2510,15 @@ export default function Home() {
   // y se apaga sola según el cálculo de gaps (se apaga cuando lo adelantaron).
   const azulAutomatica = misGaps?.azul ? "azul" : null;
 
+  // En carrera la bandera a cuadros NO cae para todos al mismo tiempo: cae para
+  // cada piloto cuando ÉL cruza la meta. Cuando pasa el primero, los demás
+  // siguen girando y recién terminan en su propio cruce. Por eso esta es una
+  // bandera personal y no la global que pone el director: le dice a este piloto
+  // que su carrera terminó, no que terminó la carrera.
+  const cuadrosPropia = misGaps?.fin === true;
+
   const banderaEfectiva =
-    estadoPista.bandera === "cuadros" ? "cuadros"
+    estadoPista.bandera === "cuadros" || cuadrosPropia ? "cuadros"
     : estadoPista.bandera === "roja"  ? "roja"
     : banderaPersonal                 ? banderaPersonal
     : azulAutomatica                  ? azulAutomatica

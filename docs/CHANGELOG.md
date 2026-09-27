@@ -3,6 +3,36 @@
 
 ---
 
+## [0.29.5] — 27 Septiembre 2026
+### Corregido (El cierre de carrera: cada piloto termina en SU cruce)
+- **La bandera a cuadros ahora cae por piloto.** Cuando cruza el primero, los
+  demás siguen girando y recién terminan al pasar ellos por meta: ahí, y no
+  antes, su pantalla se pone a cuadros. Antes solo cambiaba el texto a `FINAL` y
+  el fondo seguía en verde, así que el piloto no tenía señal clara de que su
+  carrera había terminado
+- Es una bandera **personal**, distinta de la de cuadros global que pone el
+  director al cerrar la tanda. Le dice a ese piloto que su carrera terminó, no
+  que terminó la carrera
+- **El resultado oficial ya no se mueve después de la llegada.** Entre dos
+  pilotos con las mismas vueltas, el desempate ahora es quién cruzó primero.
+  Antes se usaba la posición en pista, así que el que seguía girando tras la
+  bandera le pasaba por delante al que ya se había detenido
+
+### Medido sobre la Carrera 4 del 27 sep
+- `cup` terminó 13:05:04 y `ang` 13:05:08: **4,7 segundos de diferencia** en los
+  que cada uno debe ver su propia bandera, no los dos a la vez
+- Los dos quedaron estacionados con 80,8% de vuelta recorrida, así que el
+  resultado salió correcto **por casualidad**: con dos metros de diferencia
+  entre dónde pararon, el orden oficial se habría invertido
+
+### Límite conocido
+- El congelado necesita `vueltas_programadas`. Un piloto que nunca vuelve a
+  cruzar después de que termina el líder no recibe su bandera propia, y queda
+  cubierto por la de cuadros global al cerrarse la tanda. Pasó con `rik` y
+  `Andres werner` en las Carreras 3 y 4
+
+---
+
 ## [0.29.4] — 27 Septiembre 2026
 ### Corregido (Los pilotos veían la posición de la tanda equivocada)
 - **El emisor de posiciones a los pilotos quedaba congelado en la tanda que

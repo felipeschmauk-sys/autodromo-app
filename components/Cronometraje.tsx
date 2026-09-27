@@ -541,10 +541,20 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
 
     const lista = Array.from(por.values());
     const esCarrera = tandaSel.tipo === "carrera";
+    // Desde que cruza el primero, la carrera se resuelve por orden de llegada:
+    // el resultado de quien ya terminó lo fija SU cruce y no se mueve más.
+    // Antes el desempate entre dos con las mismas vueltas usaba la posición en
+    // pista, así que el que seguía girando después de la bandera le pasaba por
+    // delante al que se había detenido — el que había llegado primero.
+    const programadas = tandaSel.vueltas_programadas ?? null;
+    const termino = (s: { completadas: number }) =>
+      programadas != null && s.completadas >= programadas;
     if (esCarrera) {
       lista.sort((a, b) =>
         b.completadas - a.completadas ||
-        progreso(b.pid) - progreso(a.pid) ||
+        (termino(a) && termino(b)
+          ? (a.lastCruce || Infinity) - (b.lastCruce || Infinity)  // ya llegaron
+          : progreso(b.pid) - progreso(a.pid)) ||                  // aún girando
         (a.lastCruce || Infinity) - (b.lastCruce || Infinity)
       );
     } else {
