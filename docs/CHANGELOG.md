@@ -3,6 +3,27 @@
 
 ---
 
+## [0.29.3] — 27 Septiembre 2026
+### Agregado (El punto de GPS vuelve al modo conducción)
+- La vista vertical siempre mostró el punto rojo del piloto sobre el mapa, pero
+  la pantalla completa no: dibuja su propio SVG del trazado y ahí el punto nunca
+  se había agregado
+- Ahora aparece también en modo conducción. **Solo la posición del propio
+  piloto**: en pista no se muestran los demás autos
+
+### Detalle
+- La posición sale de `posPiloto`, que el componente de velocidad ya venía
+  guardando y que sigue montado en modo conducción, así que no hace falta un
+  segundo `watchPosition` — el modo conducción no consume más batería que antes
+- El punto usa las mismas funciones de proyección que dibujan el trazado, así que
+  cae exactamente sobre la línea
+- Anillo blanco alrededor del punto rojo: sin él se perdería contra el fondo de
+  la bandera roja, donde el trazado también es rojo
+- Si el piloto está lejos del circuito, el viewBox lo recorta solo. Es lo
+  correcto: mejor sin punto que un punto pegado a un borde
+
+---
+
 ## [0.29.2] — 26 Septiembre 2026
 ### Agregado (Exportar una jornada completa para recrearla después)
 - `scripts/exportar-prueba.mjs` baja a disco todo lo que una fecha dejó grabado:

@@ -246,6 +246,7 @@ function PizarraLandscape({
   bandera,
   esPersonal,
   gaps,
+  posicion,
   onSalir,
 }: {
   trazado: Coordenada[];
@@ -254,6 +255,11 @@ function PizarraLandscape({
   esPersonal: boolean;
   /** Datos de carrera: posición, vuelta y diferencias con los rivales */
   gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
+  /**
+   * Posición GPS del PROPIO piloto, para el punto rojo sobre el trazado.
+   * Solo la suya: en modo conducción no se muestran los demás autos.
+   */
+  posicion?: { lat: number; lng: number } | null;
   /** Salir del modo conducción (se dispara con pulsación larga) */
   onSalir?: () => void;
 }) {
@@ -365,6 +371,25 @@ function PizarraLandscape({
             />
           );
         })}
+        {/* Punto del propio piloto, el mismo que muestra el mapa de la vista
+            vertical. Va último para quedar encima del trazado y los sectores.
+            El anillo blanco es lo que lo hace visible sobre cualquier bandera:
+            con la roja, el punto rojo solo se perdería contra el fondo.
+            Si el piloto está lejos del circuito el viewBox lo recorta solo, que
+            es lo correcto — mejor sin punto que un punto pegado a un borde. */}
+        {posicion && (
+          <g>
+            <circle cx={toX(posicion.lng)} cy={toY(posicion.lat)} r={30} fill="rgba(239,68,68,0.3)" />
+            <circle
+              cx={toX(posicion.lng)}
+              cy={toY(posicion.lat)}
+              r={16}
+              fill="#ef4444"
+              stroke="#ffffff"
+              strokeWidth={7}
+            />
+          </g>
+        )}
       </svg>
     );
   }
@@ -3147,6 +3172,7 @@ export default function Home() {
               sectores={sectores}
               bandera={banderaEfectiva}
               gaps={misGaps}
+              posicion={posPiloto}
               onSalir={() => setModoFijo(false)}
               esPersonal={flagEsPersonal}
             />
