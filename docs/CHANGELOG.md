@@ -3,6 +3,41 @@
 
 ---
 
+## [0.36.0] — 27 Septiembre 2026
+### Agregado (La pantalla se apaga sola cuando el auto está detenido)
+- En **modo conducción**, tras **5 minutos** sin superar los **5 km/h**, la
+  pantalla se cubre de negro. Vuelve sola apenas el auto se mueve, o con un
+  toque
+- El teléfono **no se bloquea en ningún momento**: la pantalla sigue encendida
+  mostrando negro. El piloto no tiene que tocar nada en todo el día
+- Mientras duerme, la posición se emite **cada 5 s en vez de cada segundo**: el
+  auto está detenido y repetir la misma posición solo gasta radio. Quedan
+  holgados los 20 s con que el panel marca "sin señal", así que desde control de
+  carrera se sigue viendo qué teléfonos están encendidos
+
+### Por qué funciona
+- En OLED —iPhone X en adelante y casi todo Android moderno— **un píxel negro
+  está apagado de verdad**. La pizarra a pantalla completa con fondo de bandera
+  y brillo alto es el peor caso para ese tipo de pantalla, así que el contraste
+  es grande
+- El **bloqueo de pantalla se mantiene**. Si se soltara, el sistema apagaría la
+  pantalla, el teléfono se bloquearía, la app quedaría suspendida y el GPS se
+  detendría: no habría forma de despertar. El GPS tampoco baja su ritmo, porque
+  es lo que detecta que el auto arrancó
+
+### Detalle
+- Solo en modo conducción. Al salir despierta siempre
+- El toque que despierta **no** dispara la pulsación larga que sale del modo
+  conducción
+- Simulado sobre la jornada del 27 sep: 11% del tiempo **grabado**. Pero la
+  traza solo se graba en tanda o dentro de la pista, y cada teléfono grabó ~1,8 h
+  de una jornada de casi 6: las horas de box, traslado y espera —donde la
+  pantalla estaría negra casi siempre— no están en esos datos
+- Requisito que no cambia: **modo de bajo consumo apagado** en el teléfono. iOS
+  bloquea la pantalla a los 30 s por encima de cualquier cosa que haga la app
+
+---
+
 ## [0.35.2] — 27 Septiembre 2026
 ### Corregido (El mapa se dibujaba sobre las pestañas y sobraba espacio)
 - **El mapa se montaba encima de la barra de pestañas al hacer scroll.** Los

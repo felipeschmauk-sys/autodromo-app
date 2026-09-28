@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
 import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
@@ -251,6 +251,8 @@ function PizarraLandscape({
   gaps,
   posicion,
   detenidos,
+  dormida,
+  onDespertar,
   onSalir,
 }: {
   trazado: Coordenada[];
@@ -271,6 +273,10 @@ function PizarraLandscape({
    * dónde pasar con cuidado.
    */
   detenidos?: { lat: number; lng: number }[];
+  /** Pantalla en reposo: el auto lleva rato detenido */
+  dormida?: boolean;
+  /** Sacar el reposo (toque del piloto) */
+  onDespertar?: () => void;
   /** Salir del modo conducción (se dispara con pulsación larga) */
   onSalir?: () => void;
 }) {
@@ -537,6 +543,23 @@ function PizarraLandscape({
         userSelect: "none", WebkitUserSelect: "none", WebkitTouchCallout: "none",
       } as React.CSSProperties}
     >
+    {/* ── Reposo: la pantalla parece apagada ─────────────────────
+        Negro sólido por encima de todo. En OLED un píxel negro está apagado,
+        así que el ahorro es real y no cosmético. El teléfono NO se bloquea: la
+        pantalla sigue encendida y el GPS sigue corriendo, que es lo que permite
+        despertar sola al moverse.
+
+        El toque se detiene acá y no llega al pizarrón: despertar no debe
+        arrancar por accidente la pulsación larga que sale del modo conducción. */}
+    {dormida && (
+      <div
+        onPointerDown={(e) => { e.stopPropagation(); onDespertar?.(); }}
+        style={{
+          position: "fixed", inset: 0, zIndex: 3000,
+          background: "#000000", touchAction: "none",
+        }}
+      />
+    )}
     <div
       className="flex flex-col"
       style={{
@@ -1026,6 +1049,22 @@ function vaciarPilaDeshacer() {
 // Ancho del corredor alrededor del trazado dentro del cual un cruce de meta
 // cuenta, en metros. Los autos de la carrera del 9 ago iban hasta 28 m del eje,
 // así que 45 da margen sin llegar a tomar el pit lane como pista.
+// ── Ahorro de batería en modo conducción ─────────────────────
+// Los teléfonos los monta la organización y quedan encendidos todo el día. Una
+// pantalla a brillo alto con fondo de bandera a pantalla completa es el peor
+// caso para una OLED, así que tras un rato detenido se cubre con negro: en OLED
+// un píxel negro está apagado de verdad.
+//
+// NO se suelta el bloqueo de pantalla: si el sistema apagara la pantalla, el
+// teléfono se bloquearía, la app quedaría suspendida y el GPS se detendría. No
+// habría forma de despertar. La pantalla sigue encendida mostrando negro.
+const DESPERTAR_KMH = 5;
+const REPOSO_MS = 5 * 60_000;
+// Mientras duerme el auto está detenido y su posición no cambia: emitirla una
+// vez por segundo es gastar radio sin informar nada. Se baja a 5 s, que queda
+// holgado bajo los 20 s con que el panel marca "sin señal".
+const EMISION_DORMIDO_MS = 5_000;
+
 const CORREDOR_META_M = 45;
 
 // ── Hora de una lectura del GPS, saneada ──────────────────────
@@ -1160,6 +1199,20 @@ export default function Home() {
   // Carrera iniciada pero sin largada marcada: los autos están dando la vuelta
   // de formación detrás del pace car. La pista NO está libre todavía.
   const [enFormacion, setEnFormacion] = useState(false);
+
+  // ── Pantalla en reposo (solo modo conducción) ──────────────
+  // El auto lleva rato detenido: se cubre la pantalla con negro para ahorrar
+  // batería. Despierta sola al moverse, o con un toque.
+  const [pantallaDormida, setPantallaDormida] = useState(false);
+  const dormidaRef     = useRef(false);
+  const conduccionRef  = useRef(false);
+  const ultimoMovRef   = useRef(Date.now());
+  useEffect(() => { dormidaRef.current = pantallaDormida; }, [pantallaDormida]);
+  const despertarPantalla = useCallback(() => {
+    ultimoMovRef.current = Date.now();
+    dormidaRef.current = false;
+    setPantallaDormida(false);
+  }, []);
   const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
 
   // ── Prueba de conocimientos POR CAMPEONATO ─────────────────────
@@ -2023,12 +2076,17 @@ export default function Home() {
         });
       };
 
+      let ultimaEmisionMs = 0;
       const emitirPosicion = (
         pos: GeolocationPosition,
         p: { prog: number | null; recorrido?: number | null },
       ) => {
         const em = asegurarEmisor();
         if (!em) return;
+        // Dormido: el auto no se mueve, así que repetir la misma posición cada
+        // segundo solo gasta radio
+        if (dormidaRef.current && Date.now() - ultimaEmisionMs < EMISION_DORMIDO_MS) return;
+        ultimaEmisionMs = Date.now();
         const gc = geocercaGpsRef.current;
         const lat = pos.coords.latitude, lng = pos.coords.longitude;
         const tanda = tandaPilotoRef.current;
@@ -2053,6 +2111,20 @@ export default function Home() {
           detectarCruceMeta(pos, p);
           bufferTraza(pos, p);
           emitirPosicion(pos, p);
+
+          // Reposo de pantalla. El GPS nunca baja su ritmo: es lo que detecta
+          // que el auto arrancó, y de él depende despertar a tiempo.
+          const kmh = pos.coords.speed != null ? pos.coords.speed * 3.6 : 0;
+          if (kmh > DESPERTAR_KMH) {
+            ultimoMovRef.current = Date.now();
+            if (dormidaRef.current) { dormidaRef.current = false; setPantallaDormida(false); }
+          } else if (
+            conduccionRef.current && !dormidaRef.current &&
+            Date.now() - ultimoMovRef.current > REPOSO_MS
+          ) {
+            dormidaRef.current = true;
+            setPantallaDormida(true);
+          }
         },
         null,
         { enableHighAccuracy: true, maximumAge: 1000 }
@@ -2202,6 +2274,12 @@ export default function Home() {
   // lo cierra: el acelerómetro no distingue la gravedad de la fuerza lateral,
   // así que en curva creía que el teléfono se había girado.
   const enConduccion = modoFijo;
+  // El reposo solo aplica al modo conducción. Al salir se despierta siempre:
+  // si el piloto está mirando la vista vertical, no tiene sentido taparla.
+  useEffect(() => {
+    conduccionRef.current = enConduccion;
+    if (!enConduccion) { dormidaRef.current = false; setPantallaDormida(false); }
+  }, [enConduccion]);
 
   // ── Handlers existentes (sin cambios) ──
   const agregarAuto = () => setAutos([...autos, { id: Date.now(), marca: "", modelo: "" }]);
@@ -3264,6 +3342,8 @@ export default function Home() {
               gaps={misGaps}
               posicion={posPiloto}
               detenidos={detenidos}
+              dormida={pantallaDormida}
+              onDespertar={despertarPantalla}
               onSalir={() => setModoFijo(false)}
               esPersonal={flagEsPersonal}
             />
