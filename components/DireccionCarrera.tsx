@@ -67,13 +67,15 @@ const COLORES = [
 interface DireccionCarreraProps {
   fechaId?: string | null;
   mapHeight?: number;
+  /** Diferencia con el auto de adelante, por piloto. La misma que ve él. */
+  gaps?: Record<string, { ad: number | null }>;
   /** ID del circuito activo para este evento. Cuando se provee, lee trazado
    *  directamente de la tabla `circuitos` en lugar de la tabla global `trazado_pista`.
    *  Cambiar este prop dispara un re-fetch inmediato sin depender de Realtime. */
   circuitoId?: string | null;
 }
 
-export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId }: DireccionCarreraProps = {}) {
+export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId, gaps }: DireccionCarreraProps = {}) {
   const [trazado,     setTrazado]     = useState<Coordenada[]>([]);
   const [pilotos,     setPilotos]     = useState<Map<string, PilotoEnPista>>(new Map());
   const [bandera,     setBandera]     = useState("verde");
@@ -361,7 +363,12 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
   }, []);
 
   // ── Datos derivados ────────────────────────────────────────────────────────
-  const pilotosList  = Array.from(pilotos.values());
+  // Se adjunta la diferencia con el auto de adelante, tal como se la reparte a
+  // cada piloto: el cartel del mapa y su pantalla muestran el MISMO número
+  const pilotosList  = Array.from(pilotos.values()).map(p => ({
+    ...p,
+    gapAdelante: gaps?.[p.piloto_id]?.ad ?? null,
+  }));
   const chipBandera  = globalFlagChip(bandera);
 
   const SESSION_LABEL: Record<SessionType, string> = {

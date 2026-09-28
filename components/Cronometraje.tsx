@@ -30,6 +30,8 @@ interface Props {
   onSeleccionarTanda?: (id: string) => void;
   // Control de tandas compartido con el Log (iniciar/finalizar desde Crono)
   tandaActivaId?: string | null;
+  /** Reporta el estado que se reparte a los pilotos, para que el panel muestre el MISMO dato */
+  onEstado?: (pilotos: EstadoCarreraViva["pilotos"]) => void;
   onIniciarTanda?: (tipo: string, duracionMin: number | null, vueltas: number | null) => void;
   onFinalizarTanda?: () => void;
 }
@@ -102,7 +104,7 @@ function fmtReloj(totalS: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda, tandaActivaId, onIniciarTanda, onFinalizarTanda }: Props) {
+export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda, tandaActivaId, onIniciarTanda, onFinalizarTanda, onEstado }: Props) {
   // Configuración local para iniciar una tanda desde Crono
   const [cfgTipo, setCfgTipo]       = useState<string | null>(null);
   const [cfgDur, setCfgDur]         = useState("15");
@@ -227,6 +229,10 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // Desde cuándo viene lento cada auto, para no marcar como detenido al que
   // solo está pasando despacio por una curva
   const lentoDesdeRef = useRef<Map<string, number>>(new Map());
+  // Por ref: el emisor vive en un setInterval de larga vida y no debe
+  // reiniciarse porque el padre pase una función nueva en cada render
+  const onEstadoRef = useRef(onEstado);
+  useEffect(() => { onEstadoRef.current = onEstado; }, [onEstado]);
   useEffect(() => {
     congeladosRef.current = new Map();
     alTerminarRef.current = new Map();
@@ -579,6 +585,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       });
 
       emisor.enviar({ t: ahora, pilotos, det: detenidos.length ? detenidos : undefined });
+      // El mapa del panel muestra la MISMA diferencia que ve el piloto: si
+      // saliera de otro cálculo dejaría de servir como verificación
+      onEstadoRef.current?.(pilotos);
     }, 1000);
 
     return () => { clearInterval(id); emisor.cerrar(); };

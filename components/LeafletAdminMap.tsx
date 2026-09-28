@@ -32,6 +32,8 @@ interface Piloto {
   lat: number | null;
   lng: number | null;
   velocidad: number;
+  /** Segundos hasta el auto de adelante. null = va puntero o sin dato */
+  gapAdelante?: number | null;
   color: string;
   dentro_geocerca: boolean | null;
   offline?: boolean;
@@ -307,12 +309,22 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
         return;
       }
 
-      // Online + en pista (o sin geocerca configurada) → dot de color con velocidad
+      // Online + en pista → punto de color con la diferencia al auto de adelante.
+      // Antes iba la velocidad; la diferencia sirve más porque es EL MISMO
+      // número que el piloto ve abajo a la izquierda de su pantalla, así que
+      // desde el panel se puede confirmar que la referencia se está leyendo bien.
       const stopped  = p.velocidad <= 2;
       const dotColor = stopped ? "#f59e0b" : p.color;
-      const spdColor = p.velocidad > 80 ? "#ef4444"
-                     : p.velocidad > 40 ? "#f59e0b"
-                     : "#22c55e";
+      const gap      = p.gapAdelante;
+      const hayGap   = gap != null && Number.isFinite(gap);
+      // Pegado: verde. Lejos: apagado. Es lectura rápida, no precisión.
+      const gapColor = !hayGap ? "#71717a"
+                     : Math.abs(gap!) < 2  ? "#22c55e"
+                     : Math.abs(gap!) < 10 ? "#eab308"
+                     : "#a1a1aa";
+      const gapTxt   = hayGap
+        ? `+${Math.abs(gap!).toFixed(1).replace(".", ",")} s`
+        : "--";
 
       const icon = L.divIcon({
         html: `
@@ -331,12 +343,12 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
                 letter-spacing:.5px
               ">${p.nombre.split(" ")[0].toUpperCase()}</span>
             </div>
-            ${p.velocidad > 0
+            ${!stopped
               ? `<div style="
                   margin-left:18px;background:rgba(5,5,15,.88);
                   border-radius:3px;padding:0 5px;
-                  font-size:10px;font-weight:700;color:${spdColor};font-family:monospace
-                ">${p.velocidad} km/h</div>`
+                  font-size:10px;font-weight:700;color:${gapColor};font-family:monospace
+                ">${gapTxt}</div>`
               : stopped
               ? `<div style="
                   margin-left:18px;background:#f59e0b;color:#000;

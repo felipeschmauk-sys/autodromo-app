@@ -3,6 +3,29 @@
 
 ---
 
+## [0.37.0] — 27 Septiembre 2026
+### Cambiado (El mapa del panel muestra la diferencia, no la velocidad)
+- El cartel de cada auto en el mapa de Dirección muestra ahora la **diferencia
+  de tiempo con el auto de adelante** en vez de su velocidad
+- El puntero queda con `--`: no tiene contra quién medirse
+- **Es el mismo número que ese piloto ve abajo a la izquierda de su pantalla.**
+  Ese es el punto: desde el panel se puede confirmar que el sistema está leyendo
+  bien la referencia con el auto de adelante, sin depender de que el piloto lo
+  reporte por radio
+- Color por cercanía: verde bajo 2 s, amarillo bajo 10 s, gris más lejos. El
+  aviso de auto detenido se mantiene igual
+
+### Detalle
+- El dato **no se recalcula** para el mapa: `Cronometraje` reporta hacia arriba
+  el mismo objeto que emite a los pilotos, y el panel lo pasa al mapa. Si
+  saliera de otro cálculo dejaría de servir como verificación, que es todo el
+  sentido del cambio
+- El reporte viaja por ref, para que el emisor —que vive en un `setInterval` de
+  larga vida— no se reinicie porque el padre pase una función nueva en cada
+  render
+
+---
+
 ## [0.36.0] — 27 Septiembre 2026
 ### Agregado (La pantalla se apaga sola cuando el auto está detenido)
 - En **modo conducción**, tras **5 minutos** sin superar los **5 km/h**, la

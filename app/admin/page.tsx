@@ -547,6 +547,9 @@ export default function AdminPage() {
   // del detector en el teléfono.
   const finalizandoRef = useRef(false);
   const [crucesTanda, setCrucesTanda] = useState(0); // cruces del líder (display en Dirección)
+  // Diferencias que el cronometraje reparte a los pilotos. El mapa muestra la
+  // MISMA que ve cada piloto abajo a la izquierda: sirve de verificación.
+  const [gapsPilotos, setGapsPilotos] = useState<Record<string, { ad: number | null }>>({});
   useEffect(() => {
     if (!autenticado || !tandaActiva || tandaActiva.fin) { setCrucesTanda(0); return; }
     const t = tandaActiva;
@@ -1518,7 +1521,7 @@ export default function AdminPage() {
           {/* ════ COLUMNA IZQUIERDA, FILA 1: MAPA ════ */}
           {tab === "direccion" && (
           <div className="order-2 lg:order-1 lg:col-start-1 lg:row-start-1">
-            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} circuitoId={circuitoIdActivo} />
+            <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} circuitoId={circuitoIdActivo} gaps={gapsPilotos} />
           </div>
           )}
 
@@ -1944,6 +1947,7 @@ export default function AdminPage() {
               tandaActivaId={tandaActiva?.id ?? null}
               onIniciarTanda={iniciarTanda}
               onFinalizarTanda={finalizarTanda}
+              onEstado={setGapsPilotos}
             />
           </div>
 
