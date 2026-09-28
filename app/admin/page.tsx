@@ -1417,7 +1417,7 @@ export default function AdminPage() {
         ))}
       </nav>
 
-      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" ? "max-w-7xl" : tab === "config" ? "max-w-5xl" : "max-w-3xl"}`}>
+      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" || tab === "crono" ? "max-w-7xl" : tab === "config" ? "max-w-5xl" : "max-w-3xl"}`}>
 
         {/* ── BANNER: sin evento activo ──────────────────────────────── */}
         {!contexto.fechaId && tab !== "eventos" && tab !== "config" && (
@@ -1498,16 +1498,33 @@ export default function AdminPage() {
           </div>
         )}
 
-        {tab === "direccion" && !!contexto.fechaId && (
-          <div className="lg:grid lg:grid-cols-[1fr_380px] lg:gap-5 lg:items-start space-y-4 lg:space-y-0">
+        {/* ══ DIRECCIÓN + CRONOMETRAJE ═══════════════════════════════════
+            La grilla se renderiza SIEMPRE y solo se esconde: el cronometraje
+            vive dentro de ella y no puede desmontarse al cambiar de pestaña,
+            porque es quien reparte posiciones y bandera azul a los pilotos.
 
-          {/* ════ COLUMNA IZQUIERDA: MAPA (desktop) ════ */}
-          <div className="lg:sticky lg:top-[116px] order-2 lg:order-1">
+            El crono va en la MISMA columna que el mapa, debajo. Antes colgaba
+            a lo ancho por fuera de la grilla, y como el mapa estaba fijo había
+            que terminar de scrollear la columna derecha antes de llegar a él.
+            Sin `sticky`, mapa y crono bajan juntos. */}
+        {!!contexto.fechaId && (
+          <div
+            style={{ display: tab === "direccion" || tab === "crono" ? undefined : "none" }}
+            className={tab === "direccion"
+              ? "lg:grid lg:grid-cols-[1fr_380px] lg:gap-5 lg:items-start space-y-4 lg:space-y-0"
+              : undefined}
+          >
+
+          {/* ════ COLUMNA IZQUIERDA, FILA 1: MAPA ════ */}
+          {tab === "direccion" && (
+          <div className="order-2 lg:order-1 lg:col-start-1 lg:row-start-1">
             <DireccionCarrera fechaId={contexto.fechaId} mapHeight={560} circuitoId={circuitoIdActivo} />
           </div>
+          )}
 
           {/* ════ COLUMNA DERECHA: CONTROLES ════ */}
-          <div className="space-y-4 order-1 lg:order-2">
+          {tab === "direccion" && (
+          <div className="space-y-4 order-1 lg:order-2 lg:col-start-2 lg:row-start-1 lg:row-span-2">
 
             {/* ── Tanda en curso: tipo + tiempo/vueltas ── */}
             {tandaActiva && !tandaActiva.fin && (
@@ -1907,6 +1924,27 @@ export default function AdminPage() {
               </div>
             </div>
 
+          </div>
+          )}
+
+          {/* ════ COLUMNA IZQUIERDA, FILA 2: CRONOMETRAJE ════ */}
+          <div className={tab === "direccion"
+            ? "order-3 lg:col-start-1 lg:row-start-2 lg:pt-1"
+            : undefined}>
+            {tab === "direccion" && (
+              <div className="flex items-center gap-2.5 mb-3">
+                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Cronometraje</span>
+                <span className="h-px flex-1 bg-gray-200" />
+              </div>
+            )}
+            <Cronometraje
+              fechaId={contexto.fechaId}
+              tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
+              onSeleccionarTanda={(id) => setTandaSel(id)}
+              tandaActivaId={tandaActiva?.id ?? null}
+              onIniciarTanda={iniciarTanda}
+              onFinalizarTanda={finalizarTanda}
+            />
           </div>
 
           </div>
@@ -2411,37 +2449,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ══ CRONOMETRAJE — montado una sola vez y SIEMPRE vivo ══════════
-            Antes vivía dentro de su pestaña, así que mirar el mapa lo
-            desmontaba: se cortaba el reparto de posiciones y de bandera azul
-            a todos los pilotos, y se perdía el estado de llegada. Ahora está
-            siempre montado y solo se esconde: en Dirección aparece debajo del
-            mapa —basta con bajar— y en Crono ocupa la pantalla completa.
-
-            Una sola instancia, para que nunca haya dos emisores hablando a la
-            vez. Por eso se esconde con display en vez de desmontarse. */}
-        {!!contexto.fechaId && (
-          <div
-            style={{ display: tab === "direccion" || tab === "crono" ? undefined : "none" }}
-            className={tab === "direccion" ? "pt-2" : undefined}
-          >
-            {tab === "direccion" && (
-              <div className="flex items-center gap-2.5 mb-3 mt-1">
-                <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Cronometraje</span>
-                <span className="h-px flex-1 bg-gray-200" />
-              </div>
-            )}
-            <Cronometraje
-              fechaId={contexto.fechaId}
-              tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
-              onSeleccionarTanda={(id) => setTandaSel(id)}
-              tandaActivaId={tandaActiva?.id ?? null}
-              onIniciarTanda={iniciarTanda}
-              onFinalizarTanda={finalizarTanda}
-            />
-          </div>
-        )}
-      </main>
+              </main>
 
       {/* ── MODAL: EXPERIENCIA DEL PILOTO ─────────────────────────── */}
       {resumenPiloto && (

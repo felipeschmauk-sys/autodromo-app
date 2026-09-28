@@ -3,6 +3,27 @@
 
 ---
 
+## [0.35.1] — 27 Septiembre 2026
+### Corregido (El cronometraje se alinea con el mapa y bajan juntos)
+- El cronometraje pasa a la **misma columna que el mapa, justo debajo**. Antes
+  colgaba a lo ancho por fuera de la grilla y no calzaba con nada
+- **Se quitó el `sticky` del mapa.** Con el mapa fijo había que terminar de
+  scrollear toda la columna derecha —banderas, sectores, pilotos, log— antes de
+  que la página avanzara hasta el crono. Ahora mapa y cronometraje bajan juntos
+  desde el primer movimiento de la rueda
+- La columna de controles pasa a ocupar las dos filas, así que mantiene su alto
+  sin empujar nada
+
+### Detalle
+- La grilla ahora se renderiza **siempre** y solo se esconde, porque el
+  cronometraje vive dentro de ella y no puede desmontarse al cambiar de pestaña:
+  es quien reparte posiciones y bandera azul a los pilotos
+- Sigue habiendo **una sola instancia**, para que nunca haya dos emisores
+- La pestaña Crono pasa al mismo ancho que Dirección: la tabla tiene muchas
+  columnas y en `max-w-3xl` quedaba apretada
+
+---
+
 ## [0.35.0] — 27 Septiembre 2026
 ### Agregado (Orden de relargada tras bandera roja)
 - Al caer la roja en una carrera, el panel **congela y muestra la fila que
