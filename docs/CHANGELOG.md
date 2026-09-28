@@ -3,6 +3,48 @@
 
 ---
 
+## [0.35.0] — 27 Septiembre 2026
+### Agregado (Orden de relargada tras bandera roja)
+- Al caer la roja en una carrera, el panel **congela y muestra la fila que
+  corresponde**: por el último paso por meta de cada piloto, no por el orden
+  físico en que quedaron detenidos. Quien adelantó después de cruzar la meta
+  devuelve esa posición
+- Los autos **doblados por el líder de su propia categoría recuperan una
+  vuelta**, y se reincorporan al final de su bloque
+- La fila se arma por **bloques de categoría**. Ser doblado por una categoría
+  más rápida no cuesta nada: cada categoría se clasifica por separado
+- Al dar verde, el sistema compara el **orden de los primeros cruces de meta**
+  contra la fila congelada y deja constancia en el log de quien relargó
+  adelantado, con la diferencia de tiempo medida
+- **El sistema nunca bloquea.** Solo notifica y deja que todo siga fluyendo:
+  la evaluación y la eventual sanción son de los comisarios
+
+### Fundamento
+- Reglamento Deportivo de F1 de la FIA, edición 2025, **art. 57.3**: el orden se
+  toma en el último punto en que fue posible determinar la posición de todos
+- **Art. 58.4**: los autos doblados por el líder al momento de la suspensión
+  completan una vuelta adicional antes de reanudar. Es **una** vuelta: quien
+  venía dos abajo, queda una abajo
+- El reglamento de F1 es monocategoría y no cubre el doblaje entre clases
+  distintas. Se aplica el criterio multiclase —cada clase se clasifica por
+  separado—, así que el líder que define el doblaje es el de la propia categoría
+
+### Detalle
+- Migración: `docs/task-relargada-migration.sql` (`orden_relargada`,
+  `relargada_desde` en `tandas`)
+- **La comparación se hace en la línea de meta, no al dar verde.** El verde
+  significa que la carrera se relanza en el siguiente paso por meta, así que la
+  medición usa el detector de cruces —error de centésimas— en vez de comparar
+  posiciones GPS de autos en fila india, que sería adivinar
+- La fila la ve **solo el director**: es para coordinar por radio, no para que
+  el piloto la interprete manejando
+- El orden de la fila sale de las vueltas **originales**, no de las recuperadas.
+  Ordenar por las recuperadas metía al doblado delante de los de la vuelta del
+  líder, porque su último cruce es de una vuelta anterior y esas horas no son
+  comparables
+
+---
+
 ## [0.34.0] — 27 Septiembre 2026
 ### Agregado (La vuelta de formación se ve distinta del verde)
 - En carrera, entre el inicio de la tanda y la largada, la pantalla del piloto

@@ -15,6 +15,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esVueltaDeCarrera, deadlineTanda, transcurridoTandaS, tandaEnPausa } from "@/lib/carrera";
 import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS } from "@/lib/gps";
+import { registrarLog } from "@/lib/log";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { suscribirPosiciones, abrirEmisorEstado, type EstadoCarreraViva } from "@/lib/posiciones";
 import { calcularGaps, sostenerAzul, recorridoTotal, type EstadoPiloto, type Muestra, type EstadoAzul } from "@/lib/gaps";
@@ -148,6 +149,68 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   useEffect(() => {
     tandaVivaRef.current = tandas.find(t => t.id === tandaActivaId) ?? null;
   }, [tandas, tandaActivaId]);
+
+  // ── Verificación de la relargada ────────────────────────────
+  // Tras una roja, el verde significa que la carrera se relanza en el siguiente
+  // paso por meta: es la línea la que marca el momento, no la bandera. Así que
+  // el orden real de relargada son los PRIMEROS CRUCES posteriores al verde.
+  //
+  // Medirlo en la meta y no por GPS es lo que hace esto confiable: el detector
+  // de cruces tiene error de centésimas, mientras que comparar posiciones GPS
+  // de autos en fila india sería adivinar.
+  //
+  // El sistema no bloquea nada. Solo deja constancia en el log para que los
+  // comisarios evalúen, con la diferencia de tiempo medida para que puedan
+  // distinguir un roce de una ventaja real.
+  const relargadaRevisadaRef = useRef<string | null>(null);
+  useEffect(() => {
+    const t = tandaVivaRef.current;
+    const desde = (t as any)?.relargada_desde as string | undefined;
+    const fila = (t as any)?.orden_relargada as
+      { pid: string; pos: number }[] | undefined;
+    if (!t || !desde || !fila?.length) return;
+    if (relargadaRevisadaRef.current === `${t.id}:${desde}`) return;
+
+    const desdeMs = new Date(desde).getTime();
+    // Primer cruce de cada piloto después del verde
+    const primeros = new Map<string, number>();
+    for (const v of vueltas) {
+      const ms = new Date(v.cruce_at).getTime();
+      if (ms <= desdeMs || primeros.has(v.piloto_id)) continue;
+      primeros.set(v.piloto_id, ms);
+    }
+    // Se espera a que crucen todos los que estaban en la fila
+    if (fila.some(p => !primeros.has(p.pid))) return;
+    relargadaRevisadaRef.current = `${t.id}:${desde}`;
+
+    const real = [...primeros.entries()].sort((a, b) => a[1] - b[1]);
+    const posReal = new Map(real.map(([pid], i) => [pid, i + 1]));
+    const nombreDe = (pid: string) =>
+      pilotosInfo.get(pid)?.numero || pilotosInfo.get(pid)?.nombre || pid.slice(0, 6);
+
+    for (const p of fila) {
+      const obtenida = posReal.get(p.pid)!;
+      if (obtenida >= p.pos) continue;   // largó donde le tocaba, o más atrás
+      // A quién le pasó por delante, y por cuánto
+      const debioIrDetras = fila
+        .filter(q => q.pos < p.pos && posReal.get(q.pid)! > obtenida)
+        .map(q => nombreDe(q.pid));
+      const miTiempo = primeros.get(p.pid)!;
+      const peor = fila
+        .filter(q => q.pos < p.pos && posReal.get(q.pid)! > obtenida)
+        .reduce((m, q) => Math.max(m, primeros.get(q.pid)! - miTiempo), 0);
+      registrarLog({
+        fecha_id: fechaId,
+        piloto_id: p.pid,
+        tanda_id: t.id,
+        tipo: "relargada",
+        descripcion:
+          `⚖️ ${nombreDe(p.pid)} relargó ${p.pos - obtenida}° adelante de lo que correspondía ` +
+          `(le tocaba ${p.pos}°, cruzó ${obtenida}°). Pasó a ${debioIrDetras.join(", ")} ` +
+          `por ${(peor / 1000).toFixed(2)} s. Para evaluación de los comisarios.`,
+      });
+    }
+  }, [vueltas, pilotosInfo, fechaId]);
 
   // ── Llegada: estado que NO puede perderse a mitad de carrera ──
   // Quién ya terminó, en qué posición llegó, y con cuántas vueltas venía cada

@@ -83,3 +83,112 @@ export function deadlineTanda(t: RelojTanda, ahora: number = Date.now()): number
 export function transcurridoTandaS(t: RelojTanda, ahora: number = Date.now()): number {
   return Math.max(0, Math.floor((ahora - inicioMs(t) - pausaAcumuladaMs(t, ahora)) / 1000))
 }
+
+// ── Orden de relargada tras una bandera roja ──────────────────
+//
+// Reglamento Deportivo de F1 de la FIA, edición 2025:
+//
+//  · Art. 57.3 — el orden se toma en el último punto en que fue posible
+//    determinar la posición de todos los autos. O sea el último paso por meta,
+//    NO el orden físico en que quedaron al detenerse. Un auto que adelantó
+//    después de cruzar la meta devuelve esa posición.
+//
+//  · Art. 58.4 — los autos que habían sido doblados por el líder al momento de
+//    la suspensión completan una vuelta adicional antes de reanudar. Esa vuelta
+//    extra es la recuperación de la vuelta perdida. Es UNA vuelta: quien venía
+//    dos abajo, queda una abajo.
+//
+// Lo que el reglamento de F1 no cubre, por ser monocategoría: qué pasa cuando
+// te dobla el líder de OTRA categoría. Se aplica el criterio de las carreras
+// multiclase —cada clase se clasifica por separado—, así que el "líder" que
+// define el doblaje es el de la propia categoría. Ser doblado por una categoría
+// más rápida no cuesta nada ni hay nada que recuperar.
+//
+// La fila se arma por bloques de categoría, en el orden configurado.
+
+export interface CruceRelargada {
+  pid: string
+  categoria: string | null
+  /** Vueltas de carrera completadas al momento de la roja */
+  vueltas: number
+  /** Instante de su último paso por meta (ms) */
+  ultimoCruce: number | null
+}
+
+export interface PuestoRelargada {
+  pid: string
+  /** Lugar en la fila india, global */
+  pos: number
+  categoria: string | null
+  /** Posición dentro de su categoría */
+  posCategoria: number
+  /** Vueltas ya con la recuperación aplicada */
+  vueltas: number
+  /** Recuperó una vuelta por el art. 58.4 */
+  recuperoVuelta: boolean
+}
+
+/**
+ * Arma la fila de relargada a partir del último paso por meta de cada piloto.
+ * `ordenCategoria` da el lugar del bloque de cada categoría (menor va primero);
+ * los pilotos sin categoría van al final.
+ */
+export function ordenDeRelargada(
+  pilotos: CruceRelargada[],
+  ordenCategoria: (cat: string | null) => number = () => 0,
+): PuestoRelargada[] {
+  const bloques = new Map<string, CruceRelargada[]>()
+  for (const p of pilotos) {
+    const clave = p.categoria ?? '￿' // sin categoría: al final
+    if (!bloques.has(clave)) bloques.set(clave, [])
+    bloques.get(clave)!.push(p)
+  }
+
+  const clavesOrdenadas = [...bloques.keys()].sort((a, b) => {
+    const ca = a === '￿' ? null : a
+    const cb = b === '￿' ? null : b
+    return ordenCategoria(ca) - ordenCategoria(cb) || a.localeCompare(b)
+  })
+
+  const salida: PuestoRelargada[] = []
+  let pos = 0
+
+  for (const clave of clavesOrdenadas) {
+    const grupo = bloques.get(clave)!
+    // El líder de ESTA categoría define quién está doblado
+    const lider = Math.max(...grupo.map(p => p.vueltas))
+    const conVuelta = grupo.map(p => {
+      const doblado = p.vueltas < lider
+      return {
+        ...p,
+        vueltasFinal: doblado ? p.vueltas + 1 : p.vueltas,   // art. 58.4
+        recuperoVuelta: doblado,
+      }
+    })
+    // El orden de la fila sale de las vueltas ORIGINALES, no de las
+    // recuperadas: el art. 58.4 devuelve la vuelta pero los reincorpora
+    // DETRÁS, no en la posición que tenían antes de ser doblados.
+    //
+    // Ordenar por las recuperadas metería al doblado delante de los de la
+    // vuelta del líder, porque su último cruce es más antiguo —es de una vuelta
+    // anterior— y las horas de cruce de vueltas distintas no son comparables.
+    //
+    // Quien nunca cruzó va al final de su bloque.
+    conVuelta.sort((a, b) =>
+      b.vueltas - a.vueltas ||
+      (a.ultimoCruce ?? Infinity) - (b.ultimoCruce ?? Infinity))
+
+    conVuelta.forEach((p, i) => {
+      pos += 1
+      salida.push({
+        pid: p.pid,
+        pos,
+        categoria: p.categoria,
+        posCategoria: i + 1,
+        vueltas: p.vueltasFinal,
+        recuperoVuelta: p.recuperoVuelta,
+      })
+    })
+  }
+  return salida
+}

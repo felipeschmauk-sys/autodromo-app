@@ -9,7 +9,7 @@ import {
   cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { desdeLargadaMs, transcurridoTandaS, deadlineTanda, tandaEnPausa } from "@/lib/carrera";
+import { desdeLargadaMs, transcurridoTandaS, deadlineTanda, tandaEnPausa, esVueltaDeCarrera, ordenDeRelargada, type PuestoRelargada } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 const CategoriasPilotos = dynamic(() => import('@/components/CategoriasPilotos'), { ssr: false })
@@ -175,6 +175,55 @@ function TandaStatusCard({
           {restante != null ? <>Restan {fmt(restante)}</> : <>⏱ {fmt(transcurrido)}</>}
         </p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Fila de relargada tras una bandera roja. Solo la ve el director: es para
+ * coordinar por radio, no para que el piloto la interprete manejando.
+ *
+ * El sistema mide por GPS y no puede obligar a un auto físicamente adelante a
+ * ponerse atrás. Lo que hace es decir cuál es el orden que corresponde según el
+ * reglamento, para que el director lo ordene.
+ */
+function FilaRelargada({ fila, nombreDe }: {
+  fila: PuestoRelargada[];
+  nombreDe: (pid: string) => string;
+}) {
+  if (!fila.length) return null;
+  const recuperan = fila.filter(p => p.recuperoVuelta);
+  return (
+    <div className="rounded-2xl border-2 border-amber-300 bg-amber-50 px-5 py-4">
+      <div className="flex items-baseline gap-2 mb-1">
+        <p className="text-sm font-bold text-amber-900">Orden de relargada</p>
+        <span className="text-xs text-amber-700">art. 57.3 FIA</span>
+      </div>
+      <p className="text-xs text-amber-800 leading-snug mb-3">
+        Según el último paso por meta, no el orden en que quedaron detenidos.
+        Coordinar por radio: el sistema no puede imponerlo.
+      </p>
+      <ol className="space-y-1">
+        {fila.map(p => (
+          <li key={p.pid} className="flex items-center gap-2.5 text-sm">
+            <span className="w-6 text-right font-bold text-amber-900 tabular-nums">{p.pos}</span>
+            <span className="font-semibold text-gray-900 flex-1 min-w-0 truncate">{nombreDe(p.pid)}</span>
+            <span className="text-xs text-gray-500 tabular-nums">{p.vueltas} v</span>
+            {p.recuperoVuelta && (
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900 whitespace-nowrap">
+                +1 vuelta
+              </span>
+            )}
+          </li>
+        ))}
+      </ol>
+      {recuperan.length > 0 && (
+        <p className="text-xs text-amber-800 mt-3 pt-3 border-t border-amber-200 leading-snug">
+          {recuperan.length === 1 ? "Un auto recupera" : `${recuperan.length} autos recuperan`} la
+          vuelta perdida (art. 58.4): {recuperan.map(p => nombreDe(p.pid)).join(", ")}.
+          Se reincorporan al final de su bloque.
+        </p>
+      )}
     </div>
   );
 }
@@ -396,6 +445,7 @@ export default function AdminPage() {
     id: string; tipo: string; nombre: string; inicio: string; fin: string | null;
     duracion_min?: number | null; vueltas_programadas?: number | null; largada_at?: string | null;
     pausado_ms?: number | null; pausa_desde?: string | null;
+    orden_relargada?: PuestoRelargada[] | null; relargada_desde?: string | null;
   }
   const TIPO_TANDA_LABEL: Record<string, string> = {
     libre: "Libre", entrenamiento: "Entrenamiento", clasificacion: "Clasificación", carrera: "Carrera",
@@ -916,6 +966,60 @@ export default function AdminPage() {
     } catch { /* migración sin correr: el reloj sigue como antes */ }
   }, [tandaActiva]);
 
+  // ── Orden de relargada tras bandera roja ────────────────────
+  // Al caer la roja se congela la fila que corresponde (art. 57.3 y 58.4 del
+  // Reglamento Deportivo de F1); al dar verde se marca desde cuándo mirar los
+  // cruces para saber con qué orden se relargó de verdad.
+  const congelarRelargada = useCallback(async (nuevaBandera: string) => {
+    const t = tandaActiva;
+    if (!t || t.fin || t.tipo !== "carrera") return;
+    try {
+      if (nuevaBandera === "roja") {
+        const { data: vs } = await supabase
+          .from("vueltas").select("piloto_id, cruce_at").eq("tanda_id", t.id).order("cruce_at");
+        const { data: ps } = await supabase.from("pilotos").select("id, categoria_id");
+        if (!vs || !ps) return;
+
+        const largadaMs = (t as any).largada_at ? new Date((t as any).largada_at).getTime() : null;
+        const porPiloto = new Map<string, { vueltas: number; ultimoCruce: number | null }>();
+        ps.forEach((p: any) => porPiloto.set(p.id, { vueltas: 0, ultimoCruce: null }));
+        for (const v of vs as any[]) {
+          const ms = new Date(v.cruce_at).getTime();
+          const e = porPiloto.get(v.piloto_id);
+          if (!e) continue;
+          e.ultimoCruce = ms;
+          if (esVueltaDeCarrera(ms, largadaMs)) e.vueltas += 1;
+        }
+        // Solo los que estuvieron en pista en esta tanda
+        const enTanda = new Set((vs as any[]).map(v => v.piloto_id));
+        const cat = new Map((ps as any[]).map(p => [p.id, p.categoria_id ?? null]));
+        // La fila se arma por bloques de categoría, en el orden configurado
+        const { data: cats } = await supabase.from("categorias").select("id, orden").order("orden");
+        const ordenCat = new Map(((cats ?? []) as any[]).map((c, i) => [c.id, c.orden ?? i]));
+
+        const fila = ordenDeRelargada(
+          [...enTanda].map(pid => ({
+            pid,
+            categoria: cat.get(pid) ?? null,
+            vueltas: porPiloto.get(pid)?.vueltas ?? 0,
+            ultimoCruce: porPiloto.get(pid)?.ultimoCruce ?? null,
+          })),
+          (c) => (c && ordenCat.has(c) ? ordenCat.get(c)! : 999),
+        );
+        await supabase.from("tandas")
+          .update({ orden_relargada: fila, relargada_desde: null }).eq("id", t.id);
+        setTandaActivaUi(prev => (prev && prev.id === t.id
+          ? { ...prev, orden_relargada: fila, relargada_desde: null } : prev));
+      } else if (nuevaBandera === "verde" && (t as any).orden_relargada) {
+        // Verde tras una roja: desde acá se mide con qué orden se relargó
+        const ahora = new Date().toISOString();
+        await supabase.from("tandas").update({ relargada_desde: ahora }).eq("id", t.id);
+        setTandaActivaUi(prev => (prev && prev.id === t.id
+          ? { ...prev, relargada_desde: ahora } : prev));
+      }
+    } catch { /* migración sin correr: no pasa nada */ }
+  }, [tandaActiva]);
+
   const aplicarBandera = useCallback(async (nuevaBandera: string) => {
     setCargandoBandera(true);
     setBandera(nuevaBandera); // optimistic
@@ -935,11 +1039,12 @@ export default function AdminPage() {
           descripcion: `Bandera global: ${NOMBRE_BANDERA[nuevaBandera] || nuevaBandera}`,
         });
         await ajustarPausa(nuevaBandera);
+        await congelarRelargada(nuevaBandera);
       }
     } finally {
       setCargandoBandera(false);
     }
-  }, [cargarBandera, contexto.fechaId, ajustarPausa]);
+  }, [cargarBandera, contexto.fechaId, ajustarPausa, congelarRelargada]);
 
   useEffect(() => {
     if (!autenticado) return;
@@ -1407,6 +1512,17 @@ export default function AdminPage() {
             {/* ── Tanda en curso: tipo + tiempo/vueltas ── */}
             {tandaActiva && !tandaActiva.fin && (
               <TandaStatusCard tanda={tandaActiva} cruces={crucesTanda} />
+            )}
+
+            {/* ── Fila de relargada, solo para el director ── */}
+            {tandaActiva && !tandaActiva.fin && bandera === "roja" && tandaActiva.orden_relargada && (
+              <FilaRelargada
+                fila={tandaActiva.orden_relargada}
+                nombreDe={(pid) => {
+                  const p = pilotosEvento.find(x => x.piloto_id === pid);
+                  return p ? (p.numero || p.nombre) : pid.slice(0, 6);
+                }}
+              />
             )}
 
             {/* ── Estado de pista + control de banderas ── */}
