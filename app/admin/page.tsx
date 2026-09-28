@@ -1511,7 +1511,7 @@ export default function AdminPage() {
           <div
             style={{ display: tab === "direccion" || tab === "crono" ? undefined : "none" }}
             className={tab === "direccion"
-              ? "lg:grid lg:grid-cols-[1fr_380px] lg:gap-5 lg:items-start space-y-4 lg:space-y-0"
+              ? "lg:grid lg:grid-cols-[1fr_380px] lg:gap-x-5 lg:gap-y-2 lg:items-start space-y-4 lg:space-y-0"
               : undefined}
           >
 
@@ -1929,10 +1929,10 @@ export default function AdminPage() {
 
           {/* ════ COLUMNA IZQUIERDA, FILA 2: CRONOMETRAJE ════ */}
           <div className={tab === "direccion"
-            ? "order-3 lg:col-start-1 lg:row-start-2 lg:pt-1"
+            ? "order-3 lg:col-start-1 lg:row-start-2"
             : undefined}>
             {tab === "direccion" && (
-              <div className="flex items-center gap-2.5 mb-3">
+              <div className="flex items-center gap-2.5 mb-1.5">
                 <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Cronometraje</span>
                 <span className="h-px flex-1 bg-gray-200" />
               </div>

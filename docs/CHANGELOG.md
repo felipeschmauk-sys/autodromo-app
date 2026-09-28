@@ -13,6 +13,9 @@
   desde el primer movimiento de la rueda
 - La columna de controles pasa a ocupar las dos filas, así que mantiene su alto
   sin empujar nada
+- Separación vertical entre el mapa y el cronometraje reducida a 8 px. Se separó
+  el espacio entre columnas del espacio entre filas: los 20 px que separan el
+  mapa de los controles no tienen por qué separar también el mapa del crono
 
 ### Detalle
 - La grilla ahora se renderiza **siempre** y solo se esconde, porque el
