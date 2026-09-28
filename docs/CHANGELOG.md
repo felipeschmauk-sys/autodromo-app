@@ -12,7 +12,14 @@
   Ese es el punto: desde el panel se puede confirmar que el sistema está leyendo
   bien la referencia con el auto de adelante, sin depender de que el piloto lo
   reporte por radio
-- Color por cercanía: verde bajo 2 s, amarillo bajo 10 s, gris más lejos. El
+- **El color dice si se acerca o se aleja**, no a qué distancia está: verde
+  cuando la diferencia baja, rojo cuando sube. La distancia ya se ve en el mapa,
+  así que colorearla por cercanía no agregaba nada
+- Es el mismo criterio del triángulo que ve el piloto, y usa **la misma
+  función** (`tendenciaGap` en `lib/gaps.ts`, que antes vivía suelta dentro de
+  la app del piloto). Las dos pantallas tienen que coincidir siempre; si no
+  coinciden, es señal de que algo se está leyendo mal
+- Gris solo si la décima exhibida no se movió, que en pista casi no ocurre. El
   aviso de auto detenido se mantiene igual
 
 ### Detalle

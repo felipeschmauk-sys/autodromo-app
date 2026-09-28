@@ -6,6 +6,7 @@ import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
 import { vueltasDeCarrera, desdeLargadaMs, deadlineTanda } from "@/lib/carrera";
 import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
 import { abrirEmisorPosiciones, suscribirEstado, type GapsPiloto } from "@/lib/posiciones";
+import { tendenciaGap } from "@/lib/gaps";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -1578,16 +1579,8 @@ export default function Home() {
       const mio = e.pilotos[pid];
       if (!mio) { setMisGaps(null); return; }
       const r = tendRef.current;
-      const tend = (nuevo: number | null, viejo: number | null, previa: number) => {
-        if (nuevo == null || viejo == null) return 0;
-        const a = Math.round(Math.abs(nuevo) * 10);   // décimas exhibidas
-        const b = Math.round(Math.abs(viejo) * 10);
-        if (a > b) return 1;   // el número subió → se aleja
-        if (a < b) return -1;  // el número bajó  → se acerca
-        return previa;         // mismo número en pantalla: misma flecha
-      };
-      const fAd = tend(mio.ad, r.ad, r.fAd);
-      const fAt = tend(mio.at, r.at, r.fAt);
+      const fAd = tendenciaGap(mio.ad, r.ad, r.fAd);
+      const fAt = tendenciaGap(mio.at, r.at, r.fAt);
       tendRef.current = { ad: mio.ad, at: mio.at, fAd, fAt };
       setMisGaps({ ...mio, tendAd: fAd, tendAt: fAt });
     });

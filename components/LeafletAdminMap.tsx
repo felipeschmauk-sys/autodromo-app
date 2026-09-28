@@ -34,6 +34,8 @@ interface Piloto {
   velocidad: number;
   /** Segundos hasta el auto de adelante. null = va puntero o sin dato */
   gapAdelante?: number | null;
+  /** -1 se acerca · +1 se aleja · 0 sin cambio. Igual que el triángulo del piloto */
+  gapTend?: number;
   color: string;
   dentro_geocerca: boolean | null;
   offline?: boolean;
@@ -317,10 +319,13 @@ export default function LeafletAdminMap({ trazado, sectores, bandera, pilotos }:
       const dotColor = stopped ? "#f59e0b" : p.color;
       const gap      = p.gapAdelante;
       const hayGap   = gap != null && Number.isFinite(gap);
-      // Pegado: verde. Lejos: apagado. Es lectura rápida, no precisión.
+      // El color dice si se ACERCA o se ALEJA del de adelante, no a qué
+      // distancia está: la distancia ya se ve en el mapa. Es el mismo criterio
+      // del triángulo que ve el piloto, así que las dos pantallas tienen que
+      // coincidir. Gris solo si la décima no se movió, que en pista casi no pasa.
       const gapColor = !hayGap ? "#71717a"
-                     : Math.abs(gap!) < 2  ? "#22c55e"
-                     : Math.abs(gap!) < 10 ? "#eab308"
+                     : p.gapTend! < 0 ? "#22c55e"   // se acerca
+                     : p.gapTend! > 0 ? "#ef4444"   // se aleja
                      : "#a1a1aa";
       const gapTxt   = hayGap
         ? `+${Math.abs(gap!).toFixed(1).replace(".", ",")} s`

@@ -275,6 +275,33 @@ export function calcularGaps(
   return salida
 }
 
+// ── Tendencia de la diferencia ────────────────────────────────
+//
+// Compara la décima EXHIBIDA, no el valor crudo: el piloto ve un número
+// redondeado, y la flecha tiene que responder a lo que él está viendo. Si el
+// dígito en pantalla no se movió, se conserva la tendencia anterior en vez de
+// inventar una dirección con ruido que ni siquiera se está mostrando.
+//
+// Lo usan el teléfono del piloto (triángulo) y el mapa del panel (color del
+// cartel). Tiene que ser la MISMA función en los dos: es lo que permite
+// contrastar una pantalla contra la otra y detectar si algo se lee mal.
+//
+//   -1  la diferencia baja  → se está acercando
+//   +1  la diferencia sube  → se está alejando
+//    0  sin dato
+export function tendenciaGap(
+  nuevo: number | null,
+  viejo: number | null,
+  previa: number,
+): number {
+  if (nuevo == null || viejo == null) return 0
+  const a = Math.round(Math.abs(nuevo) * 10)
+  const b = Math.round(Math.abs(viejo) * 10)
+  if (a > b) return 1
+  if (a < b) return -1
+  return previa
+}
+
 // ── Histéresis de la bandera azul ─────────────────────────────
 // El gap oscila alrededor del umbral y basta una lectura perdida para que la
 // condición deje de cumplirse un segundo. Al piloto hay que mostrarle una

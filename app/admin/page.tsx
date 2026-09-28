@@ -9,6 +9,7 @@ import {
   cerrarSesionAdmin,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
+import { tendenciaGap } from "@/lib/gaps";
 import { desdeLargadaMs, transcurridoTandaS, deadlineTanda, tandaEnPausa, esVueltaDeCarrera, ordenDeRelargada, type PuestoRelargada } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
@@ -549,7 +550,20 @@ export default function AdminPage() {
   const [crucesTanda, setCrucesTanda] = useState(0); // cruces del líder (display en Dirección)
   // Diferencias que el cronometraje reparte a los pilotos. El mapa muestra la
   // MISMA que ve cada piloto abajo a la izquierda: sirve de verificación.
-  const [gapsPilotos, setGapsPilotos] = useState<Record<string, { ad: number | null }>>({});
+  const [gapsPilotos, setGapsPilotos] = useState<Record<string, { ad: number | null; tend: number }>>({});
+  // La tendencia se calcula con la MISMA función que el triángulo del piloto.
+  // Así el color del cartel y su flecha tienen que coincidir siempre, y si no
+  // coinciden es señal de que algo se está leyendo mal.
+  const recibirEstado = useCallback((pilotos: Record<string, { ad: number | null }>) => {
+    setGapsPilotos(prev => {
+      const next: Record<string, { ad: number | null; tend: number }> = {};
+      for (const [pid, p] of Object.entries(pilotos)) {
+        const ant = prev[pid];
+        next[pid] = { ad: p.ad, tend: tendenciaGap(p.ad, ant?.ad ?? null, ant?.tend ?? 0) };
+      }
+      return next;
+    });
+  }, []);
   useEffect(() => {
     if (!autenticado || !tandaActiva || tandaActiva.fin) { setCrucesTanda(0); return; }
     const t = tandaActiva;
@@ -1947,7 +1961,7 @@ export default function AdminPage() {
               tandaActivaId={tandaActiva?.id ?? null}
               onIniciarTanda={iniciarTanda}
               onFinalizarTanda={finalizarTanda}
-              onEstado={setGapsPilotos}
+              onEstado={recibirEstado}
             />
           </div>
 
