@@ -405,7 +405,10 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId 
         </div>
       )}
 
-      <div style={{ height: mapHeight, position: "relative", minHeight: 200 }}>
+      {/* `isolation` crea un contexto de apilado propio: los panes de Leaflet
+          usan z-index de 400 a 700 y sin esto se dibujan por encima de la barra
+          de pestañas al hacer scroll. Mismo patrón que LeafletSectoresMap. */}
+      <div style={{ height: mapHeight, position: "relative", minHeight: 200, isolation: "isolate", zIndex: 0 }}>
         {trazado.length > 0 ? (
           <LeafletAdminMap
             trazado={trazado}

@@ -3,6 +3,24 @@
 
 ---
 
+## [0.35.2] — 27 Septiembre 2026
+### Corregido (El mapa se dibujaba sobre las pestañas y sobraba espacio)
+- **El mapa se montaba encima de la barra de pestañas al hacer scroll.** Los
+  panes de Leaflet usan z-index de 400 a 700 y el contenedor no creaba contexto
+  de apilado propio, así que esos valores se escapaban hacia afuera. Con el mapa
+  fijo no se notaba porque nunca llegaba a tapar la barra; al quitarle el
+  `sticky` quedó a la vista. Se aplica `isolation: isolate`, el mismo patrón que
+  ya usaba `LeafletSectoresMap`
+- **Seguía quedando mucho espacio entre el mapa y el cronometraje**, pese a
+  bajar el gap a 8 px. La causa era otra: la columna de controles es bastante
+  más alta que mapa + crono juntos, y al abarcar solo dos filas la grilla
+  repartía ese exceso **entre** las dos, estirando la del mapa
+- Se agregó una tercera fila `1fr` que absorbe el sobrante, y los controles
+  pasan a abarcar las tres. El crono queda pegado al mapa y la columna derecha
+  conserva su alto
+
+---
+
 ## [0.35.1] — 27 Septiembre 2026
 ### Corregido (El cronometraje se alinea con el mapa y bajan juntos)
 - El cronometraje pasa a la **misma columna que el mapa, justo debajo**. Antes

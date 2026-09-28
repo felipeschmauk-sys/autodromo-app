@@ -1511,7 +1511,7 @@ export default function AdminPage() {
           <div
             style={{ display: tab === "direccion" || tab === "crono" ? undefined : "none" }}
             className={tab === "direccion"
-              ? "lg:grid lg:grid-cols-[1fr_380px] lg:gap-x-5 lg:gap-y-2 lg:items-start space-y-4 lg:space-y-0"
+              ? "lg:grid lg:grid-cols-[1fr_380px] lg:grid-rows-[auto_auto_1fr] lg:gap-x-5 lg:gap-y-2 lg:items-start space-y-4 lg:space-y-0"
               : undefined}
           >
 
@@ -1524,7 +1524,7 @@ export default function AdminPage() {
 
           {/* ════ COLUMNA DERECHA: CONTROLES ════ */}
           {tab === "direccion" && (
-          <div className="space-y-4 order-1 lg:order-2 lg:col-start-2 lg:row-start-1 lg:row-span-2">
+          <div className="space-y-4 order-1 lg:order-2 lg:col-start-2 lg:row-start-1 lg:row-span-3">
 
             {/* ── Tanda en curso: tipo + tiempo/vueltas ── */}
             {tandaActiva && !tandaActiva.fin && (
