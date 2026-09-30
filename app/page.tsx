@@ -1066,6 +1066,18 @@ const REPOSO_MS = 5 * 60_000;
 // holgado bajo los 20 s con que el panel marca "sin señal".
 const EMISION_DORMIDO_MS = 5_000;
 
+// ── Marcha blanca: trámites de ingreso ocultos ───────────────
+// Los términos y condiciones y la prueba de conocimientos son buenas ideas y se
+// van a usar, pero para las pruebas en pista solo estorban: crear una cuenta
+// tiene que tomar segundos, no pasos.
+//
+// Con esto en false se ocultan los dos pasos y se da todo por aceptado. El
+// código de ambos queda entero y sin tocar: volver a exigirlos es poner true.
+//
+// A propósito NO se marca la prueba como aprobada en la base. Nadie la rindió,
+// y si quedara escrita, al reactivar esto los pilotos de hoy nunca la verían.
+const TRAMITES_INGRESO = false;
+
 const CORREDOR_META_M = 45;
 
 // ── Hora de una lectura del GPS, saneada ──────────────────────
@@ -1360,7 +1372,7 @@ export default function Home() {
     getPiloto().then((data) => {
       if (data) {
         setPilotoData(data);
-        setEstadoPiloto(data.prueba_aprobada ? "habilitado" : "deshabilitado");
+        setEstadoPiloto(!TRAMITES_INGRESO || data.prueba_aprobada ? "habilitado" : "deshabilitado");
         // Si no aprobó la prueba va directo a prueba; si sí aprobó va a seleccionar evento
         // Directo a eventos: Perfil y Reglas disponibles sin evento;
         // la prueba se rinde al entrar a un campeonato por primera vez
@@ -1441,7 +1453,7 @@ export default function Home() {
   const entrarAlEvento = (insc: InscripcionItem, fecha: FechaItem, campNombre: string) => {
     // Prueba POR CAMPEONATO: si este campeonato aún no está aprobado,
     // rendir la prueba primero y luego continuar automáticamente al evento
-    if (fecha.campeonato_id && !pruebasCampeonato.has(fecha.campeonato_id)) {
+    if (TRAMITES_INGRESO && fecha.campeonato_id && !pruebasCampeonato.has(fecha.campeonato_id)) {
       setPendingEvento({ insc, fecha, campNombre });
       setStage("prueba");
       return;
@@ -2579,7 +2591,7 @@ export default function Home() {
     if (result.error) { setError(result.error); setLoading(false); return; }
     const data = await getPiloto();
     setPilotoData(data);
-    setEstadoPiloto(data?.prueba_aprobada ? "habilitado" : "deshabilitado");
+    setEstadoPiloto(!TRAMITES_INGRESO || data?.prueba_aprobada ? "habilitado" : "deshabilitado");
     // Directo a eventos: la prueba se rinde al entrar a cada campeonato
     cargarCampeonatos();
     if (data?.id) { cargarMisInscripciones(data.id); cargarPruebasCampeonato(data.id); }
@@ -2597,7 +2609,7 @@ export default function Home() {
       for (const auto of autos) { if (auto.marca && auto.modelo) await agregarVehiculo(piloto.id, auto.marca, auto.modelo); }
     }
     // Registro directo a eventos: la prueba se rinde al entrar a cada campeonato
-    setEstadoPiloto("deshabilitado");
+    setEstadoPiloto(TRAMITES_INGRESO ? "deshabilitado" : "habilitado");
     cargarCampeonatos();
     if (piloto?.id) { cargarMisInscripciones(piloto.id); cargarPruebasCampeonato(piloto.id); }
     setStage("eventos"); setLoading(false);
@@ -2621,7 +2633,7 @@ export default function Home() {
 
   // ── Valores derivados ──
   const incorrectas  = evaluado ? PREGUNTAS.filter((p, i) => respuestas[i] !== p.correcta).length : 0;
-  const todosChecks  = checks.every(Boolean);
+  const todosChecks  = TRAMITES_INGRESO ? checks.every(Boolean) : true;
   const nombreMostrar = pilotoData?.nombre || "Piloto";
   const iniciales    = nombreMostrar.split(" ").map((n: string) => n[0]).join("").slice(0, 2).toUpperCase();
   const vehiculoMostrar = pilotoData?.vehiculos?.[0]
@@ -2794,13 +2806,19 @@ export default function Home() {
                   </div>
                   <div className="flex gap-2 pt-2">
                     <button onClick={() => { setStage("login"); setError(""); }} className="border rounded-xl px-4 py-2.5 text-sm font-medium hover:bg-gray-50 transition">← Volver</button>
-                    <button onClick={() => setRegPaso(2)} className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 transition">Continuar →</button>
+                    <button
+                      onClick={() => (TRAMITES_INGRESO ? setRegPaso(2) : handleRegistro())}
+                      disabled={loading}
+                      className="flex-1 bg-indigo-600 text-white rounded-xl py-2.5 text-sm font-semibold hover:bg-indigo-700 transition disabled:opacity-60"
+                    >
+                      {TRAMITES_INGRESO ? "Continuar →" : loading ? "Creando cuenta..." : "Crear cuenta ✓"}
+                    </button>
                   </div>
                 </div>
               )}
 
               {/* ─ REGISTRO PASO 2 ─ */}
-              {stage === "registro" && regPaso === 2 && (
+              {TRAMITES_INGRESO && stage === "registro" && regPaso === 2 && (
                 <div className="space-y-4">
                   <div className="text-sm font-semibold text-gray-700">Términos y condiciones</div>
                   <div className="bg-gray-50 rounded-xl p-4 text-xs text-gray-600 leading-relaxed border">

@@ -3,6 +3,28 @@
 
 ---
 
+## [0.38.0] — 30 Septiembre 2026
+### Cambiado (Trámites de ingreso ocultos, provisionalmente)
+- Crear una cuenta ahora es **un solo paso**: se llenan los datos y el botón
+  crea la cuenta. Se ocultaron los términos y condiciones y la prueba de
+  conocimientos, y todo queda por aceptado
+- El piloto entra **habilitado** de entrada, sin el candado de "cuenta no
+  habilitada" ni el botón que llevaba a la prueba
+- Es para poder crear usuarios rápido en las pruebas en pista. Los dos pasos son
+  buenas ideas y se van a usar; hoy solo estorban
+
+### Detalle
+- Todo depende de **una sola constante**, `TRAMITES_INGRESO` en `app/page.tsx`.
+  Ponerla en `true` devuelve el comportamiento anterior completo
+- El código de los dos pasos queda **entero y sin tocar**: solo dejó de
+  renderizarse. No se borró nada
+- A propósito **no se marca la prueba como aprobada en la base**. Nadie la
+  rindió, y si quedara escrita, al reactivar esto los pilotos creados hoy nunca
+  la verían. `prueba_aprobada` sigue en false; lo que cambia es solo el estado
+  de pantalla
+
+---
+
 ## [0.37.0] — 27 Septiembre 2026
 ### Cambiado (El mapa del panel muestra la diferencia, no la velocidad)
 - El cartel de cada auto en el mapa de Dirección muestra ahora la **diferencia
