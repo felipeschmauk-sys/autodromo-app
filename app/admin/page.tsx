@@ -229,6 +229,13 @@ function FilaRelargada({ fila, nombreDe }: {
   );
 }
 
+// ── Marcha blanca: acceso a pista sin QR ─────────────────────
+// El QR es la vía normal —el piloto lo genera, el admin lo escanea— y el
+// sistema queda entero. Pero para las pruebas en pista es un paso de más:
+// con esto en false, el admin mete a cada piloto directo desde la lista.
+// Poner en true para volver a exigir el escaneo.
+const ACCESO_QR = false;
+
 const MAX_PILOTOS_DEFAULT = 10;
 const MIN_SALDO_DEFAULT = 5;
 const AUTODROMO_OPTIONS = [
@@ -1206,6 +1213,15 @@ export default function AdminPage() {
       .from("sesiones")
       .insert({ piloto_id: pilotoId, estado: "activa", inicio: new Date().toISOString() });
     if (!error) {
+      const nombre = pilotosEvento.find(x => x.piloto_id === pilotoId)?.nombre ?? "Piloto";
+      registrarLog({
+        fecha_id: contexto.fechaId,
+        piloto_id: pilotoId,
+        tipo: "ingreso",
+        descripcion: ACCESO_QR
+          ? `${nombre} — ingreso manual (el QR falló)`
+          : `${nombre} — ingreso directo a pista, sin QR`,
+      });
       setIngresoManualOkId(pilotoId);
       await cargarSesiones();
       if (contexto.fechaId) await cargarPilotosEvento(contexto.fechaId);
@@ -2150,7 +2166,7 @@ export default function AdminPage() {
                           );
                         })}
                       </div>
-                      <p className="text-xs text-gray-400">Solo usar si el QR falla. Queda registrado en el log.</p>
+                      <p className="text-xs text-gray-400">{ACCESO_QR ? "Solo usar si el QR falla." : "El QR está desactivado: este es el camino normal por ahora."} Queda registrado en el log.</p>
                     </div>
                   )}
                 </div>
@@ -2362,10 +2378,19 @@ export default function AdminPage() {
                                   {b.label}
                                 </span>
                               );
-                            })() : (
+                            })() : ACCESO_QR ? (
                               <span className="text-xs bg-gray-100 text-gray-500 px-2.5 py-1 rounded-full">
                                 Listo · QR pendiente
                               </span>
+                            ) : (
+                              <button
+                                onClick={() => handleIngresoManual(p.piloto_id)}
+                                disabled={ingresandoManualId === p.piloto_id || sesiones.length >= maxPilotos}
+                                title="Abrir su sesión de pista sin pasar por el QR"
+                                className="text-xs font-semibold bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-full transition-colors"
+                              >
+                                {ingresandoManualId === p.piloto_id ? "…" : "▶ Ingresar a pista"}
+                              </button>
                             )}
                             <button
                               onClick={() => expulsarPiloto(p.piloto_id, p.inscripcion_id)}

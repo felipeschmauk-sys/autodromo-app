@@ -3,6 +3,26 @@
 
 ---
 
+## [0.38.1] — 1 Octubre 2026
+### Cambiado (Ingreso a pista sin QR, provisionalmente)
+- En la pestaña **Pilotos**, cada piloto confirmado tiene ahora un botón
+  **"Ingresar a pista"** que abre su sesión directamente. Antes ahí solo decía
+  "Listo · QR pendiente" y había que ir a la pestaña del escáner
+- **El sistema de QR queda entero**: la pestaña, el escáner y la validación
+  siguen funcionando igual. Lo que se quitó es el requisito
+- Todo depende de **una sola constante**, `ACCESO_QR` en `app/admin/page.tsx`.
+  Ponerla en `true` vuelve a exigir el escaneo
+
+### Detalle
+- Reutiliza el ingreso manual que ya existía dentro de la pestaña QR, rotulado
+  como recurso de emergencia. Lo que cambia es que ahora está donde el admin
+  está mirando y deja de ser la excepción
+- **Se agregó registro en el log**, que el ingreso manual no tenía y el del QR
+  sí. Queda escrito si el piloto entró por QR o directo: sin eso no habría forma
+  de saber después cómo entró cada uno
+
+---
+
 ## [0.38.0] — 30 Septiembre 2026
 ### Cambiado (Trámites de ingreso ocultos, provisionalmente)
 - Crear una cuenta ahora es **un solo paso**: se llenan los datos y el botón
