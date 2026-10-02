@@ -1207,7 +1207,10 @@ export default function AdminPage() {
     }
   };
   const handleIngresoManual = async (pilotoId: string) => {
-    if (sesiones.length >= maxPilotos) return;
+    // El tope de autos en pista es una regla del ingreso por QR: el piloto
+    // escanea y el sistema le dice si cabe. Con el QR desactivado es el admin
+    // quien decide, y un número de configuración no debe frenarle la mano.
+    if (ACCESO_QR && sesiones.length >= maxPilotos) return;
     setIngresandoManualId(pilotoId);
     const { error } = await supabase
       .from("sesiones")
@@ -2156,7 +2159,7 @@ export default function AdminPage() {
                               ) : (
                                 <button
                                   onClick={() => handleIngresoManual(p.piloto_id)}
-                                  disabled={cargando || sesiones.length >= maxPilotos}
+                                  disabled={cargando || (ACCESO_QR && sesiones.length >= maxPilotos)}
                                   className="flex-shrink-0 bg-gray-900 hover:bg-gray-700 disabled:opacity-50 text-white text-xs font-semibold px-3 py-2 rounded-lg transition-colors"
                                 >
                                   {cargando ? "…" : "▶ Agregar"}
@@ -2385,7 +2388,7 @@ export default function AdminPage() {
                             ) : (
                               <button
                                 onClick={() => handleIngresoManual(p.piloto_id)}
-                                disabled={ingresandoManualId === p.piloto_id || sesiones.length >= maxPilotos}
+                                disabled={ingresandoManualId === p.piloto_id}
                                 title="Abrir su sesión de pista sin pasar por el QR"
                                 className="text-xs font-semibold bg-gray-900 hover:bg-gray-700 disabled:opacity-40 text-white px-3 py-1.5 rounded-full transition-colors"
                               >

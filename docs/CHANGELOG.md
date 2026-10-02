@@ -3,6 +3,27 @@
 
 ---
 
+## [0.38.2] — 1 Octubre 2026
+### Corregido (La pista se "llenaba" con sesiones fantasma)
+- Las sesiones abiertas en pruebas de días anteriores **nunca se cerraban** y
+  seguían contando como autos en pista. El 1 de octubre había **20 marcadas como
+  activas contra un tope de 20**: el panel no dejaba ingresar a nadie más, y 8 de
+  esas eran de jornadas pasadas
+- Ahora solo cuentan las sesiones **iniciadas en las últimas 6 horas**. Una
+  sesión abierta hace un día no es un auto en pista
+- De paso deja de mostrar como "en pista" a pilotos que no estaban
+
+### Cambiado (Sin tope de autos al ingresar sin QR)
+- El tope de autos en pista es una regla del **ingreso por QR**: el piloto
+  escanea y el sistema le dice si cabe o no. Mientras el QR está desactivado es
+  el admin quien decide, así que el botón de ingreso directo ya no lo consulta
+- Al reactivar `ACCESO_QR` el tope vuelve a aplicarse, en el punto que le
+  corresponde
+- No hay límite de pilotos **inscritos**: `cupos_max` es solo informativo y
+  nunca bloqueó nada
+
+---
+
 ## [0.38.1] — 1 Octubre 2026
 ### Cambiado (Ingreso a pista sin QR, provisionalmente)
 - En la pestaña **Pilotos**, cada piloto confirmado tiene ahora un botón

@@ -309,11 +309,19 @@ export async function confirmarIngreso(qr_id: string, piloto_id: string) {
   return { ok: !error, sesion: data, error: error?.message }
 }
 
+// Una sesión abierta hace horas no es un auto en pista: es basura que quedó de
+// una prueba anterior y que nadie cerró. Contarlas llenaba la capacidad con
+// fantasmas —el 1 oct 2026 había 20 "activas" contra un tope de 15, y el panel
+// no dejaba ingresar a nadie—, y además las mostraba como pilotos en pista.
+export const SESION_VIGENTE_H = 6
+
 export async function getPilotosEnSesion() {
+  const desde = new Date(Date.now() - SESION_VIGENTE_H * 3600_000).toISOString()
   let { data, error } = await supabase
     .from('sesiones')
     .select('*, pilotos(nombre, rut, numero, saldo_minutos, bloqueado, prueba_aprobada, vehiculos!vehiculos_piloto_id_fkey(marca, modelo))')
     .eq('estado', 'activa')
+    .gte('inicio', desde)
     .order('inicio', { ascending: false })
 
   // Compatibilidad: si la columna numero aún no está migrada, reintenta sin ella
@@ -322,6 +330,7 @@ export async function getPilotosEnSesion() {
       .from('sesiones')
       .select('*, pilotos(nombre, rut, saldo_minutos, bloqueado, prueba_aprobada, vehiculos!vehiculos_piloto_id_fkey(marca, modelo))')
       .eq('estado', 'activa')
+      .gte('inicio', desde)
       .order('inicio', { ascending: false }))
   }
 
