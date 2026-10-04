@@ -3,6 +3,41 @@
 
 ---
 
+## [0.38.3] — 4 Octubre 2026
+### Corregido (Todos los autos perdían el GPS a la vez tras una amarilla automática)
+- En la jornada del 4 de octubre el sistema se cayó tres veces, siempre poco
+  después de una bandera amarilla automática por auto detenido. En cada caída
+  **todos los teléfonos dejaban de reportar en el mismo segundo** y no se
+  recuperaban: había que reiniciar el proyecto de Supabase
+- La causa no era Supabase. El teléfono consultaba cada 8 s si su sesión seguía
+  abierta y **descartaba el error de la consulta**: si la consulta fallaba,
+  llegaba `null`, igual que cuando no hay sesión, y el teléfono lo tomaba como
+  "me cerraron la sesión" y apagaba el GPS
+- La ráfaga que hacía fallar la consulta era la propia amarilla: al cambiar un
+  sector, **los doce teléfonos pedían la tabla `sectores_pista` completa en el
+  mismo milisegundo**, encima de un pelotón ya escribiendo ~250 filas por minuto
+- Quedó probado en los datos: `traza_gps` registra 46 filas de 11 sesiones
+  volcadas en el segundo 12:13:12 —la huella de `detenerGPS()`— y después
+  silencio. La amarilla fue a las 12:13:04, ocho segundos antes
+
+### Cambiado
+- La consulta de sesión ahora **mira el error**: si la base no responde, no se
+  toca nada y el GPS sigue corriendo. Y aunque responda bien, hacen falta 3
+  respuestas seguidas sin sesión activa (`CONFIRMACIONES_CIERRE`) para apagar
+- **Un cambio de sector ya no cuesta ninguna consulta**: el evento de tiempo
+  real trae la fila y se aplica sobre la lista que el teléfono tiene en memoria.
+  La recarga completa queda solo como red de seguridad
+- El intervalo de consulta pasa de 8 s fijos a **8–12 s con azar**, para que los
+  teléfonos no pregunten todos alineados
+
+### Detalle
+- El análisis completo, con las hipótesis descartadas y las mediciones, está en
+  `docs/INCIDENTE_2026-10-04.md`
+- Mientras no se confirme en pista: las banderas viajan por el mismo canal, así
+  que si el sistema cayera los pilotos no las ven. Avisarlas también por radio
+
+---
+
 ## [0.38.2] — 1 Octubre 2026
 ### Corregido (La pista se "llenaba" con sesiones fantasma)
 - Las sesiones abiertas en pruebas de días anteriores **nunca se cerraban** y

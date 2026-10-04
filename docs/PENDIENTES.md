@@ -114,6 +114,25 @@ acoplado a React es de dónde salen las categorías.
 
 ---
 
+## Secuelas del incidente del 4 de octubre
+
+El análisis está en `docs/INCIDENTE_2026-10-04.md` y los tres arreglos ya están
+aplicados. Quedan tres cabos:
+
+- **Confirmar en pista.** Falta una jornada con pelotón completo donde una
+  amarilla automática no corte nada. Hasta entonces, las banderas se avisan
+  también por radio: viajan por el mismo canal de tiempo real
+- **El panel todavía recarga la tabla entera de sectores** en cada cambio
+  (`components/DireccionCarrera.tsx` y `app/admin/page.tsx`). Son dos clientes
+  en el PC, no doce teléfonos, así que hoy no hace daño — pero si el panel
+  alguna vez corre en la nube con varios puestos, hay que aplicarle lo mismo que
+  al teléfono
+- **Buscar el mismo patrón en el resto del proyecto:** consultas que leen solo
+  `data` y descartan el `error`, tratando un fallo como un dato válido. Esa fue
+  la causa raíz y no hay razón para suponer que aparece una sola vez
+
+---
+
 ## Antes de publicar en las tiendas
 
 - **Borrado de cuenta dentro de la app.** Es obligatorio y hoy no existe: rechazo

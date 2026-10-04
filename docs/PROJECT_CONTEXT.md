@@ -853,6 +853,7 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 ## 17. Bugs Conocidos y Consideraciones Técnicas
 
 ### Resueltos
+- ✅ **Todos los autos perdían el GPS a la vez tras una amarilla automática** → la consulta de sesión activa descartaba el `error` y leía un fallo como "sesión cerrada", apagando el GPS. La ráfaga que la hacía fallar era que los doce teléfonos pedían `sectores_pista` completa al mismo tiempo. Ahora el error se mira, hacen falta 3 confirmaciones para apagar, el evento de sector se aplica sin consultar y el intervalo lleva azar. Análisis completo en `docs/INCIDENTE_2026-10-04.md` (Octubre 2026)
 - ✅ GPS nunca conectaba en teléfonos nuevos → el permiso se pedía al montar (sin gesto) y una denegación quedaba silenciosa para siempre. Ahora: overlay que pide ubicación con botón, detección de estado via Permissions API, pantalla de recuperación si está denegado (Julio 2026)
 - ✅ Auto-yellow disparándose desde fuera del autódromo → `dentroGeocerca !== true` guard
 - ✅ max_pilotos perdido entre recargas → `estado_pista.max_pilotos` en DB
@@ -878,6 +879,9 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 
 | Decisión | Razón | Cuándo se tomó |
 |---|---|---|
+| Una consulta que falla **nunca** se trata como un dato válido | Leer solo `data` y descartar `error` hace que un fallo de red sea indistinguible de "no hay nada". El 4-10-2026 eso dejó a doce autos sin GPS en el mismo segundo. Siempre recoger `error` y, ante la duda, **no cambiar nada** | 4 octubre 2026 |
+| Apagar el GPS de un piloto exige varias confirmaciones seguidas | Dejar a un piloto sin cronometraje a mitad de tanda es peor que medir unos segundos de más | 4 octubre 2026 |
+| Un cambio de bandera de sector no puede costar consultas a la base | Con N teléfonos, re-consultar la tabla en cada evento genera una ráfaga de N consultas simultáneas. El evento ya trae la fila: se aplica en memoria | 4 octubre 2026 |
 | `time_attack` → `track_day` en todo el sistema | "Time Attack" es marca registrada con derechos | Sesión junio 2026 |
 | max_pilotos en DB (`estado_pista.max_pilotos`) | Era solo estado React, se perdía en recarga. DB es fuente de verdad. | Sesión mayo 2026 |
 | Panel de Dirección es solo lectura + control de banderas | "El panel de dirección es para visualizar y controlar, no para ajustar configuraciones." | Sesión mayo 2026 |

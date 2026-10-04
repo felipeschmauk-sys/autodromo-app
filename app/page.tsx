@@ -1080,6 +1080,16 @@ const TRAMITES_INGRESO = false;
 
 const CORREDOR_META_M = 45;
 
+// ── Consulta de sesión activa: cada cuánto y cuándo rendirse ──
+// El teléfono pregunta cada tanto si su sesión sigue abierta. El intervalo
+// lleva un azar encima para que los teléfonos NO pregunten todos en el mismo
+// instante: alineados, un solo tropiezo de la base los golpea a todos juntos.
+const POLL_SESION_MS = 8_000;
+const POLL_SESION_AZAR_MS = 4_000;   // queda entre 8 y 12 s
+// Respuestas válidas y seguidas sin sesión activa que hacen falta para apagar
+// el GPS. Una sola respuesta rara no puede dejar a un piloto sin cronometraje.
+const CONFIRMACIONES_CIERRE = 3;
+
 // ── Hora de una lectura del GPS, saneada ──────────────────────
 // pos.timestamp no es confiable en todos los aparatos: algunos reportan el
 // tiempo desde que arrancó el teléfono en vez de la hora real. Con un valor así
@@ -1531,11 +1541,14 @@ export default function Home() {
       if (!data) return;
       setSectores(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
     };
-    supabase
-      .from("sectores_pista")
-      .select("*")
-      .order("orden")
-      .then(({ data }) => aplicarSectores(data as Sector[] | null));
+    const recargarSectores = () =>
+      supabase
+        .from("sectores_pista")
+        .select("*")
+        .order("orden")
+        .then(({ data }) => aplicarSectores(data as Sector[] | null));
+
+    recargarSectores();
 
     // Canales SEPARADOS para bandera global y sectores — si comparten canal,
     // los eventos pueden cruzarse y la bandera global "parpadea" con los
@@ -1558,12 +1571,26 @@ export default function Home() {
 
     const chSectores = supabase
       .channel("flag-sectores")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" }, () => {
-        supabase
-          .from("sectores_pista")
-          .select("*")
-          .order("orden")
-          .then(({ data }) => aplicarSectores(data as Sector[] | null));
+      .on("postgres_changes", { event: "*", schema: "public", table: "sectores_pista" }, (payload) => {
+        // El evento YA trae la fila que cambió: se aplica sobre la lista que el
+        // teléfono tiene en memoria y no se vuelve a consultar la tabla.
+        //
+        // Antes cada cambio de sector hacía que los doce teléfonos pidieran la
+        // tabla completa en el mismo milisegundo. Esa ráfaga, encima de un
+        // pelotón entero escribiendo posiciones, es lo que hacía fallar otras
+        // consultas y tumbó la prueba del 4-10-2026 con cada amarilla
+        // automática. Una bandera de sector tiene que costar cero consultas.
+        // En un DELETE la fila viene en `old` (y `new` llega vacío, no nulo).
+        const borrado = payload.eventType === "DELETE";
+        const fila = (borrado ? payload.old : payload.new) as Partial<Sector> | null;
+        if (!fila?.id) { recargarSectores(); return; }   // payload raro: red de seguridad
+        setSectores(prev => {
+          const sin = prev.filter(s => s.id !== fila.id);
+          const next = borrado
+            ? sin
+            : [...sin, payload.new as Sector].sort((a, b) => a.orden - b.orden);
+          return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+        });
       })
       .subscribe();
 
@@ -2182,22 +2209,49 @@ export default function Home() {
     };
 
     // ── Función central: consultar sesión activa ──────────────
+    // Una consulta que FALLA no es una sesión cerrada.
+    //
+    // Antes acá se leía solo `data`. Si la consulta se caía —la base ocupada,
+    // un tropiezo de red, dos filas donde maybeSingle espera una— llegaba
+    // `null`, exactamente igual que cuando no hay sesión, y el teléfono lo
+    // tomaba como "me cerraron la sesión" y apagaba el GPS.
+    //
+    // El 4-10-2026 eso tumbó la prueba dos veces. Al encenderse una amarilla
+    // automática los doce teléfonos consultaban la base en el mismo
+    // milisegundo; la consulta de sesión que venía en camino fallaba para
+    // todos a la vez y los doce autos se quedaban sin GPS en el mismo segundo.
+    // Quedó registrado en traza_gps: 46 filas de 11 sesiones volcadas en un
+    // segundo —la huella de detenerGPS()— y después silencio.
+    //
+    // Ahora el error se mira. Si la base no respondió, no se toca nada: el GPS
+    // sigue corriendo y se vuelve a preguntar en el siguiente turno.
+    let sinSesionSeguidas = 0;
     const checkSession = async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("sesiones")
         .select("id, estado, bandera_piloto")
         .eq("piloto_id", pilotoId)
         .eq("estado", "activa")
         .maybeSingle();
+
+      // La base no respondió. No sabemos nada nuevo, así que no cambiamos nada.
+      if (error) return;
+
       if (data?.id) {
+        sinSesionSeguidas = 0;
         iniciarGPS(data.id);
         // Task #58: bandera personal asignada por el director
         setBanderaPersonal(data.bandera_piloto ?? null);
-      } else if (!data) {
-        // sesión cerrada remotamente
-        if (sesionId) detenerGPS();
-        setBanderaPersonal(null);
+        return;
       }
+
+      // Respuesta buena y sin sesión activa. Aun así se exigen varias seguidas
+      // antes de apagar: dejar a un piloto sin cronometraje a mitad de tanda es
+      // mucho peor que seguir midiendo unos segundos de más.
+      sinSesionSeguidas++;
+      if (sinSesionSeguidas < CONFIRMACIONES_CIERRE) return;
+      if (sesionId) detenerGPS();
+      setBanderaPersonal(null);
     };
 
     // ── Desfase de reloj contra el servidor ───────────────────
@@ -2210,9 +2264,23 @@ export default function Home() {
     // 1. Verificar sesión activa al montar (inmediato)
     checkSession();
 
-    // 2. Polling cada 8s como backup — garantiza arranque aunque
-    //    Realtime falle o sesiones no esté en la publicación.
-    const pollInterval = setInterval(checkSession, 8000);
+    // 2. Consulta de respaldo cada 8–12 s — garantiza el arranque aunque
+    //    Realtime falle o `sesiones` no esté en la publicación.
+    //    El azar del intervalo es a propósito: con setInterval fijo los
+    //    teléfonos terminaban preguntando todos en el mismo instante y una
+    //    sola mala racha de la base los afectaba a todos juntos. Desfasados,
+    //    las consultas se reparten en el tiempo.
+    //    `pollCancelado` evita que una consulta en vuelo al desmontar vuelva a
+    //    agendarse y deje un temporizador huérfano preguntando para siempre.
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let pollCancelado = false;
+    const programarPoll = () => {
+      if (pollCancelado) return;
+      pollTimer = setTimeout(() => {
+        checkSession().finally(programarPoll);
+      }, POLL_SESION_MS + Math.random() * POLL_SESION_AZAR_MS);
+    };
+    programarPoll();
 
     // 3. Suscripción Realtime (arranque instantáneo cuando sesiones
     //    está habilitado en supabase_realtime).
@@ -2245,7 +2313,9 @@ export default function Home() {
       .subscribe();
 
     return () => {
-      clearInterval(pollInterval);
+      pollCancelado = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      pollTimer = null;
       clearInterval(relojInterval);
       detenerGPS();
       supabase.removeChannel(ch);
