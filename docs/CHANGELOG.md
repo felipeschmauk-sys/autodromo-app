@@ -3,6 +3,48 @@
 
 ---
 
+## [0.38.4] — 4 Octubre 2026
+### Corregido ("Cronometraje sin configurar" con la migración corrida hacía meses)
+- En plena jornada el panel mostró **"Cronometraje sin configurar — falta correr
+  la migración"**. La migración estaba corrida: la tabla `tandas` existe,
+  responde y tiene todas sus columnas
+- La causa: en `components/Cronometraje.tsx` **cualquier** error de la consulta
+  de tandas levantaba ese cartel. Un timeout o la base ocupada un segundo
+  bastaban. Y como el estado nunca volvía a `true`, el cartel se quedaba hasta
+  recargar la página aunque las siguientes consultas salieran bien
+- Ahora solo el error real de "la tabla no existe" (`42P01`) levanta el cartel,
+  y una consulta buena lo baja
+
+### Corregido (Revisión completa: fallos tratados como datos)
+Buscando el mismo patrón en todo el proyecto —el cabo suelto que dejó el
+incidente de esta mañana— aparecieron 28 consultas que descartan el `error`. La
+mayoría es inofensiva porque ya protege el resultado con un `if (data)`. Las que
+no, se corrigieron:
+
+- **Contador de vueltas del director** (`app/admin/page.tsx`): una consulta
+  caída ponía la vuelta en **0** en pantalla, justo el número con el que se
+  decide cuándo sacar la bandera a cuadros. No podía provocar un final falso
+  —las comparaciones fallan del lado seguro— pero mostraba un número falso
+- **Editor de sectores** (`components/SectoresEditor.tsx`): un fallo vaciaba el
+  trazado y devolvía la **meta a 0**. Guardar desde ahí habría borrado el punto
+  de meta real del circuito. Era el único caso capaz de destruir algo
+- **Vista del piloto** (`app/page.tsx`): un fallo vaciaba sus campeonatos,
+  fechas e inscripciones — el piloto veía que no estaba inscrito en nada
+- **Selectores y listas del panel** (`app/admin/page.tsx`,
+  `components/AdminEventos.tsx`): un fallo vaciaba campeonatos, fechas, el
+  evento del día y la lista de inscritos
+- **Exportar el log**: un fallo se veía igual que "no hay nada que exportar" —
+  el botón no hacía nada y sin aviso. Ahora avisa
+- `pruebaVigenteHoy()` devolvía `false` ante un error, lo que obligaría a rendir
+  la prueba de nuevo por un tropiezo de red. Ahora devuelve `boolean | null`
+
+### Detalle
+- Quedan a propósito sin cambiar `getPiloto()` y `getTodosLosPilotos()` en
+  `lib/auth.ts`: devuelven `null` / `[]` y cambiar su contrato toca los flujos
+  de ingreso. Anotadas en `docs/PENDIENTES.md`
+
+---
+
 ## [0.38.3] — 4 Octubre 2026
 ### Corregido (Todos los autos perdían el GPS a la vez tras una amarilla automática)
 - En la jornada del 4 de octubre el sistema se cayó tres veces, siempre poco

@@ -53,11 +53,15 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
     const init = async () => {
       let coords: Coordenada[] | null = null;
       if (circuitoId) {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("circuitos")
           .select("trazado_coords, meta_idx")
           .eq("id", circuitoId)
           .single();
+        // Si la consulta falla, salir sin tocar nada. Antes se vaciaba el
+        // trazado y la meta volvía a 0: el editor quedaba en blanco y guardar
+        // desde ahí habría borrado el punto de meta real del circuito.
+        if (error) { setCargando(false); return; }
         coords = data?.trazado_coords ?? null;
         setMeta((data as any)?.meta_idx ?? 0);
       } else if (circuitoId === undefined) {

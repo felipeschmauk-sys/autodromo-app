@@ -83,13 +83,19 @@ export async function aprobarPrueba(piloto_id: string) {
   return { error: error?.message }
 }
 
-export async function pruebaVigenteHoy(piloto_id: string) {
+export async function pruebaVigenteHoy(piloto_id: string): Promise<boolean | null> {
   const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0]
-  const { data } = await supabase
+  // Devuelve null cuando NO SE SABE: si la consulta falla, responder false
+  // obligaría al piloto a rendir la prueba de nuevo por un tropiezo de red.
+  // El tipo `boolean | null` obliga a quien la use a distinguir los tres casos.
+  // (Hoy esta función no tiene llamadores; queda lista para cuando se
+  // reactiven los trámites de ingreso.)
+  const { data, error } = await supabase
     .from('pilotos')
     .select('prueba_aprobada, prueba_fecha')
     .eq('id', piloto_id)
     .single()
+  if (error) return null
   if (!data) return false
   return data.prueba_aprobada && data.prueba_fecha === hoy
 }

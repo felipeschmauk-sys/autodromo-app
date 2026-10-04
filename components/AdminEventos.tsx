@@ -123,16 +123,18 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
 
   // ── Loaders ────────────────────────────────────────────────
   const loadCampeonatos = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("campeonatos").select("*").order("created_at", { ascending: false });
+    if (error) return;   // un fallo no es "no hay campeonatos"
     setCampeonatos(data || []);
   }, []);
 
   const loadFechas = useCallback(async (campId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("fechas_evento").select("*")
       .eq("campeonato_id", campId)
       .order("fecha_evento");
+    if (error) return;   // un fallo no es "este campeonato no tiene fechas"
 
     const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0]; // "YYYY-MM-DD"
 
@@ -147,22 +149,23 @@ export default function AdminEventos({ contextoFechaId, onContextoCambia, onOper
         )
       );
       // Recargar con estados actualizados
-      const { data: refresh } = await supabase
+      const { data: refresh, error: errRefresh } = await supabase
         .from("fechas_evento").select("*")
         .eq("campeonato_id", campId)
         .order("fecha_evento");
-      setFechas(refresh || []);
+      if (!errRefresh) setFechas(refresh || []);
     } else {
       setFechas(data || []);
     }
   }, []);
 
   const loadInscripciones = useCallback(async (fechaId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("inscripciones")
       .select("*, pilotos(nombre, telefono)")
       .eq("fecha_id", fechaId)
       .order("created_at");
+    if (error) return;   // vaciar la lista haría parecer que nadie se inscribió
     setInscripciones((data || []) as Inscripcion[]);
   }, []);
 

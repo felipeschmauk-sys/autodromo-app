@@ -1407,10 +1407,15 @@ export default function Home() {
   }, [stage, pilotoData?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Carga campeonatos y inscripciones del piloto ───────────────
+  // En todas estas cargas: una consulta que falla NO significa "no hay nada".
+  // Si se vacía la lista, el piloto ve que no hay campeonatos o que no está
+  // inscrito en ninguna fecha, que es mentira y lo manda a inscribirse de
+  // nuevo. Ante un error se deja lo que ya estaba en pantalla.
   const cargarCampeonatos = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("campeonatos").select("id, nombre, temporada, descripcion")
       .eq("activo", true).order("temporada", { ascending: false });
+    if (error) return;
     setCampeonatosDisp(data || []);
   };
 
@@ -1427,16 +1432,18 @@ export default function Home() {
     // recargar sin esa columna para no dejar al piloto sin fechas
     let { data, error } = await query(`${cols}, inscripcion_libre`);
     if (error && /inscripcion_libre/i.test(error.message)) {
-      ({ data } = await query(cols));
+      ({ data, error } = await query(cols));
     }
+    if (error) return;
     setFechasDisp((data || []) as unknown as FechaItem[]);
   };
 
   const cargarMisInscripciones = async (pilotoId: string) => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("inscripciones")
       .select("id, fecha_id, estado, pago_estado")
       .eq("piloto_id", pilotoId);
+    if (error) return;
     setMisInscripciones(data || []);
   };
 

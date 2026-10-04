@@ -380,23 +380,27 @@ export default function AdminPage() {
 
   // ── Contexto: carga campeonatos y fechas ─────────────────────────────────
   const cargarCampeonatos = useCallback(async () => {
-    const { data } = await supabase
+    // Una consulta caída no es "no hay campeonatos": vaciar el selector deja
+    // al director sin contexto en pleno evento. Ante un error, no se toca.
+    const { data, error } = await supabase
       .from("campeonatos")
       .select("id, nombre, temporada")
       .eq("activo", true)
       .order("temporada", { ascending: false });
+    if (error) return;
     setCampeonatosOpt(data || []);
   }, []);
 
   const cargarFechasDeContexto = useCallback(async (campeonatoId: string) => {
     const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0]; // "YYYY-MM-DD"
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("fechas_evento")
       .select("id, nombre, tipo, estado, fecha_evento")
       .eq("campeonato_id", campeonatoId)
       .in("estado", ["borrador", "abierto"])   // solo fechas no finalizadas
       .gte("fecha_evento", hoy)                // solo hoy o futuras
       .order("fecha_evento");
+    if (error) return;
     setFechasOpt((data || []) as FechaOpt[]);
   }, []);
 
@@ -603,34 +607,44 @@ export default function AdminPage() {
         const desde = desdeLargadaMs(t.largada_at ? new Date(t.largada_at).getTime() : null);
         if (desde == null) {
           // Sin largada marcada: el máximo número de cruce, como siempre
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from("vueltas")
             .select("numero")
             .eq("tanda_id", t.id)
             .order("numero", { ascending: false })
             .limit(1);
-          const maxCruces = (data?.[0] as any)?.numero || 0;
-          setCrucesTanda(maxCruces);
-          if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && maxCruces - 1 >= t.vueltas_programadas) {
-            terminar = true;
+          // Una consulta caída no es "cero vueltas". Antes el contador del
+          // director saltaba a 0 cuando la base tropezaba, justo el número con
+          // el que decide cuándo sacar la bandera a cuadros. Se deja como está
+          // y se reintenta en el próximo tick (5 s).
+          if (!error) {
+            const maxCruces = (data?.[0] as any)?.numero || 0;
+            setCrucesTanda(maxCruces);
+            if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && maxCruces - 1 >= t.vueltas_programadas) {
+              terminar = true;
+            }
           }
         } else {
           // Con largada marcada: contar por piloto solo los cruces posteriores.
           // crucesTanda se deja en (vueltas del líder + 1) para que la pantalla,
           // que muestra "cruces - 1", siga marcando la vuelta correcta.
-          const { data } = await supabase
+          const { data, error } = await supabase
             .from("vueltas")
             .select("piloto_id")
             .eq("tanda_id", t.id)
             .gt("cruce_at", new Date(desde).toISOString());
-          const cuenta = new Map<string, number>();
-          for (const v of (data ?? []) as { piloto_id: string }[]) {
-            cuenta.set(v.piloto_id, (cuenta.get(v.piloto_id) ?? 0) + 1);
-          }
-          const lider = cuenta.size ? Math.max(...cuenta.values()) : 0;
-          setCrucesTanda(lider + 1);
-          if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && lider >= t.vueltas_programadas) {
-            terminar = true;
+          // Igual que arriba: si la consulta falló no sabemos cuántas vueltas
+          // lleva el líder, así que no se toca el contador.
+          if (!error) {
+            const cuenta = new Map<string, number>();
+            for (const v of (data ?? []) as { piloto_id: string }[]) {
+              cuenta.set(v.piloto_id, (cuenta.get(v.piloto_id) ?? 0) + 1);
+            }
+            const lider = cuenta.size ? Math.max(...cuenta.values()) : 0;
+            setCrucesTanda(lider + 1);
+            if (!terminar && t.tipo === "carrera" && t.vueltas_programadas && lider >= t.vueltas_programadas) {
+              terminar = true;
+            }
           }
         }
       } catch { /* vueltas sin migrar */ }
@@ -685,7 +699,10 @@ export default function AdminPage() {
       .eq("fecha_id", contexto.fechaId)
       .order("creado_at", { ascending: true });
     if (tandaSel !== "todas") q = q.eq("tanda_id", tandaSel);
-    const { data } = await q;
+    const { data, error } = await q;
+    // Antes un fallo se veía igual que "no hay nada que exportar": el botón no
+    // hacía nada y el director no sabía si el log estaba vacío o si falló.
+    if (error) { alert("No se pudo leer el log para exportarlo. Intenta de nuevo."); return; }
     const rows = data || [];
     if (!rows.length) return;
     const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
@@ -815,11 +832,13 @@ export default function AdminPage() {
     if (!autenticado) return;
     const cargar = async () => {
       const hoy = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().split("T")[0];
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("fechas_evento")
         .select("id, nombre, tipo, campeonato_id, campeonatos(nombre)")
         .eq("fecha_evento", hoy)
         .in("estado", ["borrador", "abierto"]);
+      // Vaciar esto borraría de la portada el evento que se está corriendo
+      if (error) return;
       setFechasHoy((data || []).map((f: any) => ({
         id: f.id,
         nombre: f.nombre,

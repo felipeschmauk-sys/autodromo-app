@@ -255,7 +255,19 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       const { data, error } = await supabase
         .from("tandas").select("*").eq("fecha_id", fechaId).order("inicio");
       if (!vivo) return;
-      if (error) { setMigracionOk(false); return; }
+      if (error) {
+        // Solo el error "la tabla no existe" (42P01) significa de verdad que
+        // falta correr la migración. Cualquier otro —timeout, red, la base
+        // ocupada un segundo— es un tropiezo pasajero y no se toca nada.
+        //
+        // Antes acá cualquier error levantaba el cartel "Cronometraje sin
+        // configurar", y como nunca volvía a bajar, una sola consulta lenta
+        // dejaba al director sin cronómetro hasta recargar la página. Pasó el
+        // 4-10-2026 en plena jornada, con la migración corrida hacía meses.
+        if (error.code === "42P01") setMigracionOk(false);
+        return;
+      }
+      setMigracionOk(true);   // una consulta buena repone el estado
       const lista = (data || []) as Tanda[];
       setTandas(lista);
       if (!tandaSelRef.current || !lista.some(t => t.id === tandaSelRef.current)) {

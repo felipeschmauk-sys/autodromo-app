@@ -127,9 +127,15 @@ aplicados. Quedan tres cabos:
   en el PC, no doce teléfonos, así que hoy no hace daño — pero si el panel
   alguna vez corre en la nube con varios puestos, hay que aplicarle lo mismo que
   al teléfono
-- **Buscar el mismo patrón en el resto del proyecto:** consultas que leen solo
-  `data` y descartan el `error`, tratando un fallo como un dato válido. Esa fue
-  la causa raíz y no hay razón para suponer que aparece una sola vez
+- ~~Buscar el mismo patrón en el resto del proyecto~~ **Hecho el 4-10-2026.** Se
+  revisaron las 28 consultas que descartan el `error`. Las peligrosas están
+  corregidas (ver `[0.38.4]` en el CHANGELOG). Quedan dos a propósito:
+  `getPiloto()` y `getTodosLosPilotos()` en `lib/auth.ts` devuelven `null` / `[]`
+  tanto si falla la consulta como si no hay nada. Cambiar su contrato obliga a
+  revisar los flujos de ingreso y registro, que no se quiso tocar en medio de
+  una jornada. **Regla para código nuevo:** si una consulta puede fallar, el
+  fallo no se trata como un dato — o se recoge el `error`, o el resultado se
+  protege con `if (data)`
 
 ---
 
