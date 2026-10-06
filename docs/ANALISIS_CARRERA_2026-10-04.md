@@ -51,6 +51,10 @@ Martin Vargas" a las 14:54:55.
 
 ## 2. Por qué Iván vio una azul yendo segundo
 
+> **Resuelto el 6-10-2026.** Ver la causa real más abajo, en la sección 2 bis:
+> lo que sigue en esta sección es el segundo camino al mismo síntoma, también
+> corregido. La causa principal fue el desacuerdo de conteo en la largada.
+
 La lógica es correcta, pero el **número de vueltas que su teléfono transmitía**
 no lo era.
 
@@ -117,6 +121,63 @@ dispara con cualquier reinicio del detector, no solo con un corte de señal.
 
 ---
 
+## 2 bis. La causa principal: dos reglas de conteo al mismo tiempo
+
+Felipe aportó el dato que faltaba: la azul aparecía **en las primeras vueltas**,
+y podía ser cualquiera de las dos carreras. Eso llevó al momento exacto de la
+largada.
+
+`vueltasDeCarrera` tenía dos caminos:
+
+```js
+if (largadaMs == null) return Math.max(0, cruces.length - 1)   // no sé cuándo largaron
+return cruces.filter(t => t > largadaMs + 10_000).length        // sí sé
+```
+
+Cada auto cruza la meta **dos veces antes de que empiece a contar la carrera**:
+una en la vuelta de formación y otra al recibir el verde. Verificado sobre la
+traza: les pasó a **los 14 autos, en las dos carreras**. Con esos dos cruces:
+
+| Teléfono | Cuenta |
+|---|---|
+| Que todavía no recibió la marca de largada | `2 - 1` = **1** |
+| Que ya la recibió | cruces posteriores al verde = **0** |
+
+La consulta de tanda del teléfono corre cada 10 segundos, así que durante esa
+ventana hay autos informando 1 y autos informando 0 — **y el que informa 0 es el
+que está bien**.
+
+La condición de la bandera azul es una línea:
+
+```js
+if (otro.vueltas <= yo.vueltas) continue   // no me está doblando
+```
+
+Con 0 vueltas, **los doce autos de la pista lo estaban doblando**.
+
+Por qué le tocó a él: su teléfono fue el único que se cortó y reconectó (4
+cortes, `recuperó señal` tres veces). Cada reconexión lo hacía releer la tanda y
+quedar del lado correcto antes que los demás — el lado que recibe la bandera.
+
+Y la histéresis lo amplificaba: no había ningún retardo para encender y, una vez
+encendida, el mínimo la sostenía 5 segundos. Un desacuerdo de un segundo le
+costaba al piloto cinco segundos de bandera azul.
+
+### Lo que se cambió
+
+1. Un teléfono que no sabe cuándo largaron **responde `null`** en vez de
+   adivinar (`vueltasComparables`). Sin vueltas conocidas no hay clasificación
+   ni bandera azul para ese piloto, en ninguna de las dos direcciones.
+2. La azul exige **2 segundos de condición sostenida** antes de encenderse.
+3. Al reiniciarse el detector se reponen **todos** los cruces desde la base.
+4. Queda **registro de la bandera que cada teléfono muestra** (`bandera_vista`).
+
+Comprobado con `scripts/prueba-banderas.mjs` (16 verificaciones con los números
+reales de esa carrera) y con `replay-carrera.mjs`, que da los mismos 3351
+instantes de azul legítima antes y después: sin regresión.
+
+---
+
 ## 3. La carrera se cerró 104 segundos antes de tiempo
 
 | Hora | Qué pasó |
@@ -144,9 +205,11 @@ La vuelta existe en la traza de cada teléfono — el cruce n°13 de Iván está
 guardado a las 14:59:49. Lo que falta es que el sistema la contara, porque para
 él la carrera ya había terminado.
 
-**Decisión pendiente de Felipe:** el reloj de carrera debe correr desde la
-largada, no desde la apertura de la tanda. Es una regla deportiva, no un detalle
-técnico, y la define él.
+**Decidido por Felipe el 6-10-2026: el reloj corre desde la largada.**
+Aplicado en `deadlineTanda` y `transcurridoTandaS` (`lib/carrera.ts`), vía una
+referencia que usa `largada_at` cuando existe. Sin largada marcada
+—entrenamiento, clasificación— la referencia sigue siendo la apertura de la
+tanda, así que esas tandas no cambian.
 
 ---
 

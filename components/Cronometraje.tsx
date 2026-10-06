@@ -65,8 +65,13 @@ interface PosPiloto {
   p?: number | null;
   /** Velocidad en m/s */
   v?: number | null;
-  /** Vueltas de carrera completadas según el propio teléfono */
-  vu?: number;
+  /**
+   * Vueltas de carrera completadas según el propio teléfono, o null si ese
+   * teléfono todavía no sabe cuándo largaron y no puede dar un número
+   * comparable con el de los demás. Sin vueltas no hay clasificación ni
+   * bandera azul para ese piloto: ver `vueltasComparables` en lib/carrera.ts.
+   */
+  vu?: number | null;
   /** Instante de la lectura en hora de servidor */
   t?: number;
   /** true si vino por broadcast (1 Hz) y no de la tabla (3 s) */
@@ -381,7 +386,10 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // Historial para los gaps (se guarda ~5 min y se descarta lo viejo)
       // Sin el largo del circuito el recorrido saldría en unidades falsas y
       // envenenaría el historial: mejor no guardar nada hasta tenerlo
-      if (b.p != null && largoCircuito > 0) {
+      // Sin vueltas conocidas el recorrido total no se puede calcular, así que
+      // ese instante no entra al historial. Vuelve a entrar en cuanto el
+      // teléfono recibe la marca de largada.
+      if (b.p != null && b.vu != null && largoCircuito > 0) {
         const h = historiaRef.current.get(b.pid) ?? [];
         const rec = (b.vu + b.p) * largoCircuito;
         if (!h.length || h[h.length - 1].t < b.t) h.push({ t: b.t, recorrido: rec });

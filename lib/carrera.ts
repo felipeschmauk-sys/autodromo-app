@@ -37,6 +37,36 @@ export function vueltasDeCarrera(cruces: number[], largadaMs: number | null): nu
   return cruces.filter((t) => esVueltaDeCarrera(t, largadaMs)).length
 }
 
+/**
+ * Vueltas que SE PUEDEN COMPARAR CONTRA OTRO PILOTO, o null si no se sabe.
+ *
+ * `vueltasDeCarrera` tiene dos reglas distintas según si se conoce la largada:
+ * sin ella descuenta una vuelta a ojo, con ella cuenta solo lo posterior al
+ * verde. Las dos son razonables por separado, pero **dan números distintos para
+ * el mismo auto**, y el panel compara ese número entre teléfonos para decidir
+ * quién está doblando a quién.
+ *
+ * Eso rompió la carrera del 4-10-2026. Cada auto cruza la meta dos veces antes
+ * de que empiece a contar la carrera (formación + largada). En esa ventana:
+ *   · el teléfono que todavía no recibió la marca de largada decía  2 - 1 = 1
+ *   · el que ya la recibió decía                                          0
+ * El que estaba BIEN quedaba con menos vueltas que todos los demás, así que el
+ * panel concluía que la pista entera lo estaba doblando y le mandaba bandera
+ * azul. Le tocó a Iván del Pino yendo segundo, sin haber sido doblado nunca.
+ *
+ * La consulta de tanda del teléfono corre cada 10 s, así que la ventana puede
+ * durar eso. La salida no es adivinar mejor: es admitir que no se sabe. Un
+ * piloto con vueltas desconocidas queda fuera de la clasificación por unos
+ * segundos —ve guiones— y, sobre todo, ni recibe ni provoca bandera azul.
+ */
+export function vueltasComparables(
+  cruces: number[],
+  tanda: { tipo?: string | null; largadaMs?: number | null } | null | undefined,
+): number | null {
+  if (tanda?.tipo === 'carrera' && tanda.largadaMs == null) return null
+  return vueltasDeCarrera(cruces, tanda?.largadaMs ?? null)
+}
+
 // ── Reloj de la tanda, con las pausas por bandera roja ────────
 //
 // Con bandera roja nadie corre, así que el tiempo de la tanda se detiene y
@@ -56,10 +86,29 @@ export interface RelojTanda {
   duracion_min?: number | null
   pausado_ms?: number | null
   pausa_desde?: string | null
+  /** Instante del verde. Cuando existe, el reloj corre desde acá. */
+  largada_at?: string | null
 }
 
 const inicioMs = (t: RelojTanda) =>
   typeof t.inicio === 'number' ? t.inicio : new Date(t.inicio).getTime()
+
+/**
+ * Instante desde el cual corre el reloj de la tanda.
+ *
+ * En una carrera es la LARGADA, no la apertura de la tanda. El tiempo de
+ * grilla y la vuelta de formación no son carrera, y descontarlos no es un
+ * detalle: en la Carrera 2 del 4-10-2026 pasaron 4 minutos 26 segundos entre
+ * abrir la tanda y dar el verde, así que los 15 minutos se acabaron a las
+ * 14:58:10 cuando la carrera recién terminó a las 14:59:54. El sistema tiró la
+ * bandera a cuadros solo, 104 segundos antes, y a casi todos les quedó una
+ * vuelta menos que en el acta oficial.
+ *
+ * Sin largada marcada —entrenamiento, clasificación, o una carrera que todavía
+ * no largó— la referencia sigue siendo la apertura de la tanda.
+ */
+const referenciaMs = (t: RelojTanda) =>
+  t.largada_at ? new Date(t.largada_at).getTime() : inicioMs(t)
 
 /** Milisegundos que la tanda estuvo detenida, incluida una pausa en curso. */
 export function pausaAcumuladaMs(t: RelojTanda, ahora: number = Date.now()): number {
@@ -76,12 +125,12 @@ export function tandaEnPausa(t: RelojTanda): boolean {
 /** Instante en que se acaba el tiempo de la tanda, corrido por las pausas. */
 export function deadlineTanda(t: RelojTanda, ahora: number = Date.now()): number | null {
   if (!t.duracion_min) return null
-  return inicioMs(t) + t.duracion_min * 60000 + pausaAcumuladaMs(t, ahora)
+  return referenciaMs(t) + t.duracion_min * 60000 + pausaAcumuladaMs(t, ahora)
 }
 
 /** Segundos de tanda efectivamente corridos, descontando las pausas. */
 export function transcurridoTandaS(t: RelojTanda, ahora: number = Date.now()): number {
-  return Math.max(0, Math.floor((ahora - inicioMs(t) - pausaAcumuladaMs(t, ahora)) / 1000))
+  return Math.max(0, Math.floor((ahora - referenciaMs(t) - pausaAcumuladaMs(t, ahora)) / 1000))
 }
 
 // ── Orden de relargada tras una bandera roja ──────────────────

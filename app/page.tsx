@@ -3,7 +3,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
 import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
-import { vueltasDeCarrera, desdeLargadaMs, deadlineTanda } from "@/lib/carrera";
+import { vueltasDeCarrera, vueltasComparables, desdeLargadaMs, deadlineTanda } from "@/lib/carrera";
+import { registrarLog } from "@/lib/log";
 import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
 import { abrirEmisorPosiciones, suscribirEstado, type GapsPiloto } from "@/lib/posiciones";
 import { tendenciaGap } from "@/lib/gaps";
@@ -1790,19 +1791,34 @@ export default function Home() {
         // Tanda nueva: reiniciar el detector y retomar la cuenta si la app
         // se recargó a mitad de tanda
         cronoRef.current = { progAnt: null, tAnt: 0, armado: false, ultimoCruceMs: 0, numero: 0, cruces: [], cerrado: false, liderTermino: false };
+        // Se reponen TODOS los cruces, no solo el último.
+        //
+        // `cruces` es el arreglo del que sale el número de vueltas que este
+        // teléfono le transmite al panel. Antes acá se reponían `numero` y
+        // `ultimoCruceMs` pero el arreglo quedaba vacío para siempre, así que
+        // el teléfono informaba CERO vueltas mientras el resto iba en la 7. Y
+        // cero vueltas significa, para el panel, que toda la pista lo está
+        // doblando: bandera azul permanente sobre un auto que va puntero.
+        //
+        // Se dispara con cualquier reinicio del detector — un corte de señal,
+        // una recarga de la app, el efecto volviendo a montarse— así que no es
+        // un caso raro.
         supabase
           .from("vueltas")
           .select("numero, cruce_at")
           .eq("tanda_id", t.id)
           .eq("piloto_id", pid)
-          .order("numero", { ascending: false })
-          .limit(1)
-          .then(({ data }) => {
-            const u = data?.[0] as any;
-            if (u && tandaPilotoRef.current?.id === t.id) {
-              cronoRef.current.numero        = u.numero;
-              cronoRef.current.ultimoCruceMs = new Date(u.cruce_at).getTime();
-            }
+          .order("numero", { ascending: true })
+          .then(({ data, error }) => {
+            // Si la consulta falla no se repone nada y el detector arranca de
+            // cero, que es lo que había antes: no empeora, pero tampoco se
+            // toma el fallo por "este piloto no tiene vueltas".
+            if (error || !data?.length) return;
+            if (tandaPilotoRef.current?.id !== t.id) return;
+            const filas = data as { numero: number; cruce_at: string }[];
+            cronoRef.current.cruces        = filas.map(f => new Date(f.cruce_at).getTime());
+            cronoRef.current.numero        = filas[filas.length - 1].numero;
+            cronoRef.current.ultimoCruceMs = new Date(filas[filas.length - 1].cruce_at).getTime();
           });
       }
       const inicioMs = new Date(t.inicio).getTime();
@@ -2138,7 +2154,7 @@ export default function Home() {
           d:     p.recorrido ?? null,
           p:     p.prog,
           v:     pos.coords.speed ?? null,
-          vu:    vueltasDeCarrera(cronoRef.current.cruces, tanda?.largadaMs ?? null),
+          vu:    vueltasComparables(cronoRef.current.cruces, tanda),
           pista: geocercaDefinida(gc) ? puntoEnGeocerca({ lat, lng }, gc) : null,
         });
       };
@@ -2767,6 +2783,35 @@ export default function Home() {
     : azulAutomatica                  ? azulAutomatica
     : banderaSector                   ? banderaSector
     : baseGlobal;
+
+  // ── Registro de la bandera que este teléfono realmente muestra ──
+  // Hasta el 4-10-2026 no quedaba rastro de lo que veía el piloto. Cuando Iván
+  // del Pino reportó una bandera azul yendo segundo hubo que deducir la causa
+  // cruzando trazas, y la respuesta tardó dos días. Con esto, la próxima vez se
+  // lee en el log de Dirección.
+  //
+  // Solo se escribe en los CAMBIOS, no cada segundo: en una tanda entera son
+  // unas pocas decenas de filas por piloto.
+  const banderaLogRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (stage !== "app" || !pilotoData?.id || !eventoActivo?.fechaId) return;
+    const previa = banderaLogRef.current;
+    if (previa === banderaEfectiva) return;
+    banderaLogRef.current = banderaEfectiva;
+    if (previa === null) return;   // primera lectura: no es un cambio
+    const motivo =
+      cuadrosPropia && banderaEfectiva === "cuadros" ? "su propia meta"
+      : banderaPersonal === banderaEfectiva ? "personal del director"
+      : azulAutomatica === banderaEfectiva  ? "automática: lo están doblando"
+      : banderaSector === banderaEfectiva   ? "sector"
+      : "global";
+    registrarLog({
+      fecha_id:  eventoActivo.fechaId,
+      piloto_id: pilotoData.id,
+      tipo:      "bandera_vista",
+      descripcion: `📱 ${nombreMostrar} ve ${banderaEfectiva.toUpperCase()} (${motivo})`,
+    });
+  }, [banderaEfectiva]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flagEsPersonal = !!banderaPersonal && banderaEfectiva === banderaPersonal;
   const flag = FLAG_CONFIG[banderaEfectiva] || FLAG_CONFIG.verde;

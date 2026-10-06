@@ -312,6 +312,11 @@ export function tendenciaGap(
 //    huecos de una o dos lecturas sin apagar una bandera que sigue vigente.
 //  · minimoMs: lo mínimo que se muestra una vez encendida, para que un cruce
 //    fugaz del umbral no produzca un destello ilegible.
+//  · confirmarMs: cuánto debe sostenerse la condición ANTES de encender. No
+//    había ninguno: la bandera prendía en el primer instante en que se cumplía
+//    y después el mínimo la sostenía 5 segundos. Bastaba un desacuerdo de un
+//    segundo entre dos teléfonos para que el piloto viera azul cinco segundos.
+//    Así fue como el 4-10-2026 le salió azul al segundo de la carrera.
 export interface EstadoAzul {
   activa: boolean
   pid: string | null
@@ -319,15 +324,24 @@ export interface EstadoAzul {
   ultimoOk: number
   /** pid → instante hasta el cual no puede volver a encender la bandera */
   bloqueados?: Record<string, number>
+  /** Candidato a encender y desde cuándo se viene cumpliendo, sin prender aún */
+  candidatoPid?: string | null
+  candidatoDesde?: number
 }
 
 export function sostenerAzul(
   previo: EstadoAzul | undefined,
   azul: GapPiloto['azul'],
   ahora: number,
-  opciones: { soltarMs?: number; minimoMs?: number; pasaronPor?: string[]; bloqueoMs?: number } = {},
+  opciones: {
+    soltarMs?: number; minimoMs?: number; pasaronPor?: string[];
+    bloqueoMs?: number; confirmarMs?: number;
+  } = {},
 ): EstadoAzul {
-  const { soltarMs = 3000, minimoMs = 5000, pasaronPor = [], bloqueoMs = 20000 } = opciones
+  const {
+    soltarMs = 3000, minimoMs = 5000, pasaronPor = [],
+    bloqueoMs = 20000, confirmarMs = 2000,
+  } = opciones
   const est: EstadoAzul = previo ?? { activa: false, pid: null, desde: 0, ultimoOk: 0, bloqueados: {} }
   const bloqueados = { ...(est.bloqueados ?? {}) }
 
@@ -342,16 +356,23 @@ export function sostenerAzul(
 
   const vigente = azul && !(bloqueados[azul.pid] > ahora) ? azul : null
   if (vigente) {
-    return {
-      activa: true,
-      pid: vigente.pid,
-      desde: est.activa ? est.desde : ahora,
-      ultimoOk: ahora,
-      bloqueados,
+    // Ya encendida: se sostiene y se refresca.
+    if (est.activa) {
+      return { ...est, activa: true, pid: vigente.pid, ultimoOk: ahora, bloqueados }
     }
+    // Todavía apagada: la condición tiene que sostenerse confirmarMs sobre el
+    // MISMO doblador. Si cambia de candidato, el reloj vuelve a empezar.
+    const candidatoDesde = est.candidatoPid === vigente.pid ? (est.candidatoDesde ?? ahora) : ahora
+    if (ahora - candidatoDesde < confirmarMs) {
+      return { ...est, activa: false, pid: null, bloqueados,
+               candidatoPid: vigente.pid, candidatoDesde }
+    }
+    return { activa: true, pid: vigente.pid, desde: ahora, ultimoOk: ahora, bloqueados,
+             candidatoPid: vigente.pid, candidatoDesde }
   }
-  if (!est.activa) return { ...est, bloqueados }
+  if (!est.activa) return { ...est, bloqueados, candidatoPid: null, candidatoDesde: 0 }
   if (ahora - est.ultimoOk < soltarMs) return { ...est, bloqueados }  // hueco corto: sigue
   if (ahora - est.desde < minimoMs) return { ...est, bloqueados }     // recién encendida: sigue
-  return { activa: false, pid: null, desde: 0, ultimoOk: 0, bloqueados }
+  return { activa: false, pid: null, desde: 0, ultimoOk: 0, bloqueados,
+           candidatoPid: null, candidatoDesde: 0 }
 }

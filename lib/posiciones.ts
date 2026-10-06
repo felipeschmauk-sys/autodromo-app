@@ -33,8 +33,13 @@ export interface PosicionViva {
   p: number | null
   /** Velocidad en m/s, para poder extrapolar mientras no llega el próximo dato */
   v: number | null
-  /** Vueltas de carrera completadas */
-  vu: number
+  /**
+   * Vueltas de carrera completadas, o **null cuando el teléfono todavía no
+   * sabe cuándo largaron** y por lo tanto no puede dar un número que sea
+   * comparable con el de los demás. Ver `vueltasComparables` en lib/carrera.ts:
+   * adivinar acá le costó una bandera azul al segundo de la carrera.
+   */
+  vu: number | null
   /** true = dentro de la geocerca de pista */
   pista: boolean | null
 }

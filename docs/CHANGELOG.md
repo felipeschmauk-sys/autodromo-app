@@ -3,6 +3,68 @@
 
 ---
 
+## [0.39.0] — 6 Octubre 2026
+### Corregido (Bandera azul sobre un auto que iba segundo y nunca fue doblado)
+- En la carrera del 4 de octubre a Iván del Pino le apareció **bandera azul
+  yendo segundo**, en las primeras vueltas. Nunca lo doblaron
+- La lógica de `lib/gaps.ts` estaba bien — el replay confirma que la azul solo
+  se encendió sobre los cuatro autos realmente doblados. Lo que estaba mal era
+  **el número de vueltas que cada teléfono transmitía**
+- `vueltasDeCarrera` tenía **dos reglas distintas**: sin conocer la largada
+  descontaba una vuelta a ojo (`cruces - 1`), conociéndola contaba solo los
+  cruces posteriores al verde. Cada auto cruza la meta **dos veces antes de que
+  cuente la carrera** (formación + largada), así que en esa ventana el teléfono
+  que no se había enterado decía **1 vuelta** y el que sí decía **0**
+- El teléfono que estaba BIEN quedaba con menos vueltas que todos los demás, y
+  la condición de la azul es `otro.vueltas > yo.vueltas`: para el panel, la
+  pista entera lo estaba doblando. Le tocó a Iván porque su teléfono fue el
+  único que se cortó y reconectó, releyendo la tanda antes que el resto
+- Verificado sobre los datos: le pasó a **los 14 autos, en las dos carreras**
+
+### Cambiado
+- **Un teléfono que no sabe cuándo largaron ahora dice "no sé"** en vez de
+  adivinar (`vueltasComparables`). Un piloto con vueltas desconocidas queda
+  fuera de la clasificación unos segundos —ve guiones— y ni recibe ni provoca
+  bandera azul. Entrenamiento y clasificación no cambian
+- **La bandera azul exige 2 segundos de condición sostenida antes de
+  encenderse.** Antes prendía en el primer instante y el mínimo la sostenía 5
+  segundos: un desacuerdo de un segundo le costaba al piloto cinco de azul
+- **Al reiniciarse el detector se reponen TODOS los cruces desde la base**, no
+  solo el último. Antes se reponía `numero` pero el arreglo `cruces` —del que
+  sale el número de vueltas que se transmite— quedaba vacío para siempre, así
+  que el teléfono informaba cero vueltas: el mismo síntoma, pero durando toda
+  la carrera en vez de segundos
+- **Queda registro de la bandera que cada teléfono muestra** (`bandera_vista`
+  en el log de Dirección), con el motivo. Esta vez hubo que deducirla cruzando
+  trazas y tardó dos días
+
+### Corregido (La carrera se cerraba antes de tiempo)
+- El reloj de la tanda corría **desde que se abría la tanda**, no desde la
+  largada. En la Carrera 2 pasaron 4 minutos 27 segundos de grilla y formación,
+  así que los 15 minutos se acabaron a las 14:58:10 cuando la carrera recién
+  terminó a las 14:59:54: el sistema tiró la bandera a cuadros solo, **104
+  segundos antes**
+- Consecuencia: a casi todos les quedó **una vuelta menos** que en el acta
+  oficial (10 donde el acta dice 11). La vuelta estaba en los datos — el cruce
+  final de Iván quedó guardado a las 14:59:49 — pero el sistema ya había dado
+  la carrera por terminada
+- Ahora el reloj corre desde la largada. Sin largada marcada (entrenamiento,
+  clasificación) la referencia sigue siendo la apertura de la tanda
+
+### Agregado
+- `scripts/prueba-banderas.mjs`: prueba de regresión con los números reales de
+  esa carrera. 16 verificaciones. Complementa a `replay-carrera.mjs` — el
+  replay dice si las azules legítimas siguen saliendo, esto dice si las falsas
+  siguen sin salir
+
+### Detalle
+- El análisis completo, con la validación contra el acta oficial de
+  cronometraje, está en `docs/ANALISIS_CARRERA_2026-10-04.md`
+- El replay de la Carrera 2 da los mismos 3351 instantes de azul legítima antes
+  y después del cambio: sin regresión
+
+---
+
 ## [0.38.4] — 4 Octubre 2026
 ### Corregido ("Cronometraje sin configurar" con la migración corrida hacía meses)
 - En plena jornada el panel mostró **"Cronometraje sin configurar — falta correr
