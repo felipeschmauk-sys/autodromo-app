@@ -527,6 +527,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           ad:   sinCat ? null : g.adelante,
           at:   sinCat ? null : g.atras,
           azul: est.activa,
+          azulDe: est.activa ? est.pid : null,
         };
       });
 

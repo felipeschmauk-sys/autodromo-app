@@ -42,6 +42,16 @@ export interface PosicionViva {
   vu: number | null
   /** true = dentro de la geocerca de pista */
   pista: boolean | null
+  /**
+   * Lo que este teléfono está MOSTRANDO en pantalla ahora mismo: la bandera ya
+   * resuelta por su jerarquía (cuadros > roja > personal > azul > sector >
+   * global). No es lo que el panel cree que debería ver, es lo que ve.
+   */
+  bd?: string | null
+  /** Batería 0..100, o null si el aparato no la informa */
+  bat?: number | null
+  /** false = la app dejó de estar al frente (llamada entrante, otra app) */
+  foco?: boolean | null
 }
 
 const canalFecha = (fechaId: string) => `pos-${fechaId}`
@@ -105,6 +115,8 @@ export interface GapsPiloto {
   at: number | null
   /** Bandera azul activa: lo están por doblar */
   azul: boolean
+  /** Quién lo está doblando, cuando hay azul. Para poder nombrarlo */
+  azulDe?: string | null
   /**
    * Ya cruzó su meta final: el dato queda congelado con la diferencia con la
    * que terminó. La carrera termina cuando cruza el primero, pero cada piloto

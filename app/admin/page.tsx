@@ -10,6 +10,8 @@ import {
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { tendenciaGap } from "@/lib/gaps";
+import { suscribirPosiciones, type EstadoCarreraViva, type PosicionViva } from "@/lib/posiciones";
+import PantallasPilotos from "@/components/PantallasPilotos";
 import { desdeLargadaMs, transcurridoTandaS, deadlineTanda, tandaEnPausa, esVueltaDeCarrera, ordenDeRelargada, type PuestoRelargada } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
@@ -72,7 +74,7 @@ interface ValidacionResult {
   qr_id?: string;
   advertencia?: string;
 }
-type PanelTab = "direccion" | "crono" | "qr" | "pilotos" | "config" | "revision" | "eventos";
+type PanelTab = "direccion" | "crono" | "pantallas" | "qr" | "pilotos" | "config" | "revision" | "eventos";
 type TipoEvento = "racing" | "track_day" | "entrenamiento";
 type QRStep = "idle" | "scanning" | "validating" | "result" | "confirmed";
 
@@ -103,6 +105,7 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
   racing: [
     { id: "direccion", label: "Dirección",    emoji: "🏎"  },
     { id: "crono",     label: "Crono",        emoji: "⏱"   },
+    { id: "pantallas", label: "Pantallas",    emoji: "📱"  },
     { id: "qr",        label: "Acceso QR",    emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",      emoji: "👤"  },
     { id: "revision",  label: "Rev. Técnica", emoji: "🔧"  },
@@ -111,6 +114,7 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
   track_day: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
     { id: "crono",     label: "Crono",      emoji: "⏱"   },
+    { id: "pantallas", label: "Pantallas",  emoji: "📱"  },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
     { id: "config",    label: "Config",     emoji: "⚙️"  },
@@ -118,6 +122,7 @@ const TABS_POR_TIPO: Record<string, Array<{ id: PanelTab; label: string; emoji: 
   entrenamiento: [
     { id: "direccion", label: "Dirección",  emoji: "🏎"  },
     { id: "crono",     label: "Crono",      emoji: "⏱"   },
+    { id: "pantallas", label: "Pantallas",  emoji: "📱"  },
     { id: "qr",        label: "Acceso QR",  emoji: "📷"  },
     { id: "pilotos",   label: "Pilotos",    emoji: "👤"  },
     { id: "config",    label: "Config",     emoji: "⚙️"  },
@@ -565,7 +570,7 @@ export default function AdminPage() {
   // La tendencia se calcula con la MISMA función que el triángulo del piloto.
   // Así el color del cartel y su flecha tienen que coincidir siempre, y si no
   // coinciden es señal de que algo se está leyendo mal.
-  const recibirEstado = useCallback((pilotos: Record<string, { ad: number | null }>) => {
+  const recibirEstado = useCallback((pilotos: EstadoCarreraViva["pilotos"]) => {
     setGapsPilotos(prev => {
       const next: Record<string, { ad: number | null; tend: number }> = {};
       for (const [pid, p] of Object.entries(pilotos)) {
@@ -574,7 +579,23 @@ export default function AdminPage() {
       }
       return next;
     });
+    // Copia completa para la cuadrícula de Pantallas. Va a un ref y se dibuja
+    // con su propio reloj: re-renderizar 15 recuadros a 1 Hz sería tirar
+    // trabajo a la basura cuando la pestaña ni siquiera está abierta.
+    estadoVivoRef.current = pilotos;
   }, []);
+  const estadoVivoRef = useRef<EstadoCarreraViva["pilotos"]>({});
+
+  // ── Lo que cada teléfono informa de sí mismo ──────────────────
+  // Se engancha al MISMO canal de posiciones que ya está abierto, así que no
+  // agrega ni un mensaje: solo un oyente más del lado del panel.
+  const pantallasRef = useRef<Map<string, PosicionViva & { recibido: number }>>(new Map());
+  useEffect(() => {
+    if (!autenticado || !contexto.fechaId) return;
+    return suscribirPosiciones(contexto.fechaId, (p) => {
+      pantallasRef.current.set(p.pid, { ...p, recibido: Date.now() });
+    });
+  }, [autenticado, contexto.fechaId]);
   useEffect(() => {
     if (!autenticado || !tandaActiva || tandaActiva.fin) { setCrucesTanda(0); return; }
     const t = tandaActiva;
@@ -1472,7 +1493,7 @@ export default function AdminPage() {
         ))}
       </nav>
 
-      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" || tab === "crono" ? "max-w-7xl" : tab === "config" ? "max-w-5xl" : "max-w-3xl"}`}>
+      <main className={`mx-auto p-4 space-y-4 ${tab === "direccion" || tab === "crono" || tab === "pantallas" ? "max-w-7xl" : tab === "config" ? "max-w-5xl" : "max-w-3xl"}`}>
 
         {/* ── BANNER: sin evento activo ──────────────────────────────── */}
         {!contexto.fechaId && tab !== "eventos" && tab !== "config" && (
@@ -1549,6 +1570,31 @@ export default function AdminPage() {
             <p className="text-base font-bold text-gray-800">Sin fecha activa</p>
             <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">
               Selecciona un campeonato y una fecha para ver el cronometraje.
+            </p>
+          </div>
+        )}
+
+        {/* ══ PANTALLAS ══════════════════════════════════════════════════
+            Lo que informa el teléfono de cada piloto. El cronometraje sigue
+            vivo detrás (está en la grilla de abajo, solo escondida), así que
+            esta pestaña no interrumpe el reparto de posiciones ni banderas. */}
+        {tab === "pantallas" && !!contexto.fechaId && (
+          <PantallasPilotos
+            pantallas={pantallasRef.current}
+            estado={estadoVivoRef.current}
+            nombres={nombresSesionRef.current}
+            pilotos={sesiones.map(x => ({
+              piloto_id: x.piloto_id,
+              nombre: x.piloto?.nombre || x.piloto_id.slice(0, 8),
+            }))}
+          />
+        )}
+        {tab === "pantallas" && !contexto.fechaId && (
+          <div className="bg-gray-50 border border-gray-200 rounded-2xl px-6 py-14 text-center">
+            <p className="text-4xl mb-3">📱</p>
+            <p className="text-base font-bold text-gray-800">Elige un evento</p>
+            <p className="text-sm text-gray-400 mt-2">
+              Acá se ve lo que está mostrando el teléfono de cada piloto.
             </p>
           </div>
         )}

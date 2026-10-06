@@ -2156,6 +2156,9 @@ export default function Home() {
           v:     pos.coords.speed ?? null,
           vu:    vueltasComparables(cronoRef.current.cruces, tanda),
           pista: geocercaDefinida(gc) ? puntoEnGeocerca({ lat, lng }, gc) : null,
+          bd:    banderaVistaRef.current,
+          bat:   bateriaRef.current,
+          foco:  focoRef.current,
         });
       };
 
@@ -2792,7 +2795,41 @@ export default function Home() {
   //
   // Solo se escribe en los CAMBIOS, no cada segundo: en una tanda entera son
   // unas pocas decenas de filas por piloto.
+  // ── Lo que este teléfono informa de sí mismo ──────────────────
+  // Tres cosas que la pantalla del panel no puede deducir y solo sabe el
+  // aparato: qué bandera está pintando, cuánta batería le queda y si la app
+  // sigue al frente. Viajan en el mensaje de posición que ya se manda a 1 Hz,
+  // así que no cuestan ni un mensaje ni un byte de almacenamiento.
+  const banderaVistaRef = useRef<string | null>(null);
+  const bateriaRef      = useRef<number | null>(null);
+  const focoRef         = useRef<boolean>(true);
+
+  useEffect(() => {
+    // La batería es una lectura local: el sistema operativo ya tiene el dato,
+    // no enciende nada ni consulta la red. Se escucha el evento en vez de
+    // preguntar en bucle.
+    let bat: any = null;
+    const leer = () => { bateriaRef.current = bat ? Math.round(bat.level * 100) : null; };
+    const api = (navigator as any).getBattery?.();
+    if (api?.then) api.then((b: any) => {
+      bat = b; leer();
+      b.addEventListener?.("levelchange", leer);
+    }).catch(() => { /* aparato que no la informa: queda en null */ });
+
+    // Foco: cuando entra una llamada o el piloto se cambia de app, la página
+    // deja de estar visible. No se puede VER la notificación, pero sí saber
+    // que algo tapó la pantalla, que es el dato que importa.
+    const verFoco = () => { focoRef.current = document.visibilityState === "visible"; };
+    verFoco();
+    document.addEventListener("visibilitychange", verFoco);
+    return () => {
+      document.removeEventListener("visibilitychange", verFoco);
+      bat?.removeEventListener?.("levelchange", leer);
+    };
+  }, []);
+
   const banderaLogRef = useRef<string | null>(null);
+  banderaVistaRef.current = banderaEfectiva;   // lo que se está pintando ahora
   useEffect(() => {
     if (stage !== "app" || !pilotoData?.id || !eventoActivo?.fechaId) return;
     const previa = banderaLogRef.current;

@@ -3,6 +3,43 @@
 
 ---
 
+## [0.40.0] — 6 Octubre 2026
+### Agregado (Pestaña "Pantallas": lo que está viendo cada piloto)
+- Cuadrícula en el panel con una miniatura por piloto. Cada recuadro usa **el
+  color real de la bandera** que ese teléfono está pintando, con su posición,
+  vuelta y diferencias
+- **No es un recálculo del panel.** Cada teléfono informa qué bandera está
+  mostrando —ya resuelta por su jerarquía—, cuánta batería le queda y si la app
+  sigue al frente. Un espejo calculado repetiría el mismo error que la app y no
+  serviría para desconfiar de ella, que es para lo que existe esto
+- Los recuadros **gritan solos**: borde rojo si pierde la señal más de 20 s, si
+  la batería baja de 10% o si aparece una **azul sobre alguien que va primero o
+  segundo** —que es imposible y fue justo lo que pasó el 4 de octubre—. Borde
+  amarillo si la app perdió el foco o la batería baja de 20%
+- Con bandera azul el recuadro dice **quién lo está doblando** en vez de las
+  diferencias, que es el dato útil en ese momento
+- Los que pierden señal **no desaparecen**: quedan en gris con su última
+  información y el "hace 47 s"
+
+### Detalle
+- **Costo cero en mensajes y almacenamiento.** Los tres datos nuevos viajan
+  dentro del mensaje de posición que cada teléfono ya manda a 1 Hz (unos 10
+  bytes la batería), y el panel se engancha al mismo canal que ya estaba
+  abierto: un oyente más, ningún mensaje más
+- La batería es una lectura local —el sistema operativo ya tiene el dato, no
+  enciende sensores ni consulta la red— y se escucha por evento en vez de
+  preguntarla en bucle
+- **Lo que esta vista no puede ver:** una notificación, una llamada entrante o
+  la barra de Android. Ninguna página web puede. Lo que sí detecta es que la app
+  dejó de estar al frente, y eso se muestra como "sin foco". `getDisplayMedia`
+  —la única API que capturaría píxeles de verdad— no funciona en ningún
+  navegador móvil (`version_added: false` en Chrome Android, Firefox Android,
+  Safari iOS, Samsung Internet y WebView)
+- Para los píxeles reales queda la grabación de pantalla de Android en un auto
+  por jornada, que no cuesta nada al servidor
+
+---
+
 ## [0.39.0] — 6 Octubre 2026
 ### Corregido (Bandera azul sobre un auto que iba segundo y nunca fue doblado)
 - En la carrera del 4 de octubre a Iván del Pino le apareció **bandera azul
