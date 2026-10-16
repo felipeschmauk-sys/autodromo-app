@@ -897,6 +897,8 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 
 | Decisión | Razón | Cuándo se tomó |
 |---|---|---|
+| El orden de carrera compara a todos los autos **en el mismo instante** y confirma los adelantamientos estrechos (2,5 s o >25 m) | Las lecturas de GPS de los teléfonos no están sincronizadas: comparar la última de cada uno invertía autos pegados. Ver `docs/DECISIONS.md` | 15 octubre 2026 |
+| "Quién me dobla" (bandera azul) se mide en **distancia**, nunca con los contadores de vueltas | Los contadores saltan en la meta y la azul se apagaba con el doblador encima | 15 octubre 2026 |
 | El sentido de giro es el **orden de los puntos del trazado**, no una columna aparte | Todo (cruces, sectores, diferencias, azul, replay) ya depende de ese orden. Cambiar el sentido invierte los puntos en el origen y nada más tiene que enterarse. Ver `docs/DECISIONS.md` | 15 octubre 2026 |
 | Una consulta que falla **nunca** se trata como un dato válido | Leer solo `data` y descartar `error` hace que un fallo de red sea indistinguible de "no hay nada". El 4-10-2026 eso dejó a doce autos sin GPS en el mismo segundo. Siempre recoger `error` y, ante la duda, **no cambiar nada** | 4 octubre 2026 |
 | Apagar el GPS de un piloto exige varias confirmaciones seguidas | Dejar a un piloto sin cronometraje a mitad de tanda es peor que medir unos segundos de más | 4 octubre 2026 |

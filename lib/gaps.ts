@@ -69,11 +69,112 @@ export interface OpcionesGap {
   frescuraMs?: number
   /** Ahora, en hora de servidor. Se inyecta para poder replayar carreras */
   ahora?: number
+  /**
+   * Orden de carrera ya resuelto (pids, del primero al último), normalmente el
+   * de `ordenEstable`. Si no se pasa, se ordena por recorrido al instante `ahora`.
+   */
+  orden?: string[]
 }
 
 /** Recorrido total de carrera, en metros. */
 export function recorridoTotal(e: { vueltas: number; progreso: number }, largo: number): number {
   return (e.vueltas + e.progreso) * largo
+}
+
+// ── Todos los autos en el mismo instante ──────────────────────
+//
+// Cada teléfono lee el GPS en un momento distinto dentro del segundo, y el
+// panel tiene de cada uno su ÚLTIMA lectura: entre dos autos puede haber hasta
+// un segundo de diferencia, casi 30 metros a 100 km/h. Ordenar con eso es
+// comparar fotos sacadas en momentos distintos. En la simulación de Interlomas
+// (15-10-2026) dos autos a 8 m quedaron invertidos 12 segundos seguidos —el
+// teléfono del de adelante siempre leía medio segundo antes—: posiciones
+// cambiadas en pantalla y una diferencia negativa con el de adelante.
+//
+// Antes de ordenar, cada auto se adelanta hasta `ahora` con su velocidad de los
+// últimos segundos. Esto es solo para ORDENAR: las diferencias de tiempo siguen
+// saliendo del historial real de cada uno.
+
+/** Lo máximo que se adelanta un auto. Más allá ya no es un dato, es una suposición. */
+export const MAX_ADELANTO_MS = 2000
+
+/** Recorrido total estimado en el instante `ahora`. */
+export function recorridoAhora(e: EstadoPiloto, largo: number, ahora: number): number {
+  const rec = recorridoTotal(e, largo)
+  const h = e.historia
+  if (h.length < 2) return rec
+  // Velocidad sobre ~3 lecturas y no sobre la última: el error del GPS en una
+  // sola lectura mueve la velocidad un 15%
+  const ult = h[h.length - 1], ant = h[Math.max(0, h.length - 4)]
+  const dt = ult.t - ant.t
+  const dd = ult.recorrido - ant.recorrido
+  if (dt <= 0 || dd < 0) return rec
+  return rec + (dd / dt) * Math.min(Math.max(0, ahora - e.t), MAX_ADELANTO_MS)
+}
+
+// ── Orden estable ─────────────────────────────────────────────
+//
+// Aun comparando en el mismo instante, el GPS tiene unos metros de error: dos
+// autos rueda con rueda podrían "intercambiarse" una y otra vez sin que nadie
+// haya adelantado. Idea de Felipe: en pantalla, un adelantamiento aparece solo
+// cuando es claro que un auto va delante del otro. Un cambio de posición entre
+// dos autos se acepta:
+//  · al tiro, si la ventaja es clara (más de MARGEN_CLARO_M), o
+//  · si se sostiene CONFIRMAR_ORDEN_MS seguidos.
+// Así un adelantamiento real con los autos todavía pegados se muestra apenas se
+// consolida, y un vaivén de un segundo no mueve las posiciones.
+
+/** Ventaja a partir de la cual un adelantamiento se da por hecho sin esperar. */
+export const MARGEN_CLARO_M = 25
+
+/** Cuánto debe sostenerse un adelantamiento estrecho para mostrarse. */
+export const CONFIRMAR_ORDEN_MS = 2500
+
+export interface EstadoOrden {
+  /** pids del primero al último */
+  orden: string[]
+  /** "A>B" → desde cuándo B viene delante de A sin confirmarse todavía */
+  pendientes: Record<string, number>
+}
+
+export function ordenEstable(
+  pilotos: EstadoPiloto[],
+  largo: number,
+  ahora: number,
+  previo?: EstadoOrden,
+): EstadoOrden {
+  const rec = new Map(pilotos.map((p) => [p.pid, recorridoAhora(p, largo, ahora)]))
+  const r = (pid: string) => rec.get(pid) ?? 0
+
+  // Se parte del orden anterior; quien aparece por primera vez entra directo
+  // en el lugar que le corresponde
+  const orden = (previo?.orden ?? []).filter((pid) => rec.has(pid))
+  for (const pid of [...rec.keys()].sort((a, b) => r(b) - r(a))) {
+    if (orden.includes(pid)) continue
+    const i = orden.findIndex((o) => r(o) < r(pid))
+    if (i < 0) orden.push(pid); else orden.splice(i, 0, pid)
+  }
+
+  const pendientes: Record<string, number> = {}
+  for (let pasada = 0; pasada < orden.length; pasada++) {
+    let cambio = false
+    for (let i = 0; i < orden.length - 1; i++) {
+      const a = orden[i], b = orden[i + 1]
+      const ventaja = r(b) - r(a) // > 0: b va delante de a
+      if (ventaja <= 0) continue
+      const clave = `${a}>${b}`
+      const desde = pendientes[clave] ?? previo?.pendientes[clave] ?? ahora
+      if (ventaja > MARGEN_CLARO_M || ahora - desde >= CONFIRMAR_ORDEN_MS) {
+        orden[i] = b; orden[i + 1] = a
+        delete pendientes[clave]
+        cambio = true
+      } else {
+        pendientes[clave] = desde
+      }
+    }
+    if (!cambio) break
+  }
+  return { orden, pendientes }
 }
 
 /**
@@ -117,8 +218,10 @@ export function gapEntre(adelante: EstadoPiloto, atras: EstadoPiloto, largo: num
   if (dt <= 0 || dd <= 0) return null
   const vel = dd / dt // metros por ms
   const faltan = marca - ult.recorrido
-  // Solo se extrapola hacia atrás (el de adelante ya pasó) y por poco tiempo
-  if (faltan > 0) return null
+  // faltan > 0: la última lectura del de adelante es más vieja que la mía y
+  // todavía no informó haber pasado por ahí. Se lo adelanta con su velocidad,
+  // pero solo por la fracción de segundo que puede separar dos lecturas
+  if (faltan > 0 && faltan / vel > MAX_ADELANTO_MS) return null
   return (atras.t - (ult.t + faltan / vel)) / 1000
 }
 
@@ -203,64 +306,71 @@ export function calcularGaps(
     return salida
   }
 
-  // Orden de carrera: más recorrido = más adelante
-  const orden = [...activos].sort((a, b) => recorridoTotal(b, largo) - recorridoTotal(a, largo))
+  // Orden de carrera: más recorrido = más adelante, con todos los autos llevados
+  // al mismo instante (ver recorridoAhora). Si viene un orden ya estabilizado
+  // (ordenEstable), manda ese.
+  const recAhora = new Map(activos.map((p) => [p.pid, recorridoAhora(p, largo, ahora)]))
+  const ra = (p: EstadoPiloto) => recAhora.get(p.pid) ?? recorridoTotal(p, largo)
+  const porPid = new Map(activos.map((p) => [p.pid, p]))
+  const orden = opciones.orden
+    ? [
+        ...opciones.orden.map((pid) => porPid.get(pid)).filter((p): p is EstadoPiloto => !!p),
+        ...activos.filter((p) => !opciones.orden!.includes(p.pid)).sort((a, b) => ra(b) - ra(a)),
+      ]
+    : [...activos].sort((a, b) => ra(b) - ra(a))
 
   for (let i = 0; i < orden.length; i++) {
     const yo = orden[i]
     const g: GapPiloto = { adelante: null, atras: null, azul: null, pasaronPor: [] }
-    const miRec = recorridoTotal(yo, largo)
+    const miRec = ra(yo)
 
+    // Una diferencia negativa no existe en pantalla: si el orden todavía no
+    // confirmó un adelantamiento estrecho, lo honesto es "van juntos" (0,0)
     // ── Competidor de adelante: el primero que NO me saque una vuelta ──
     for (let j = i - 1; j >= 0; j--) {
       const otro = orden[j]
-      if (recorridoTotal(otro, largo) - miRec >= largo) continue // me dobló: no es rival
-      g.adelante = gapEntre(otro, yo, largo)
+      if (ra(otro) - miRec >= largo) continue // me dobló: no es rival
+      const gap = gapEntre(otro, yo, largo)
+      g.adelante = gap == null ? null : Math.max(0, gap)
       break
     }
 
     // ── Competidor de atrás: el primero al que NO le saque una vuelta ──
     for (let j = i + 1; j < orden.length; j++) {
       const otro = orden[j]
-      if (miRec - recorridoTotal(otro, largo) >= largo) continue // lo doblé: no es rival
+      if (miRec - ra(otro) >= largo) continue // lo doblé: no es rival
       const gap = gapEntre(yo, otro, largo)
-      g.atras = gap == null ? null : -gap // negativo: viene atrás
+      g.atras = gap == null ? null : -Math.max(0, gap) // negativo: viene atrás
       break
     }
 
-    // ── ¿Ya lo pasaron? ───────────────────────────────────────
-    // Quien le sacaba una vuelta y ahora aparece JUSTO adelante en pista acaba
-    // de adelantarlo. Ahí la bandera azul cumplió su función y debe apagarse,
-    // sin esperar a que el gap crezca.
-    for (const otro of activos) {
-      if (otro.pid === yo.pid || otro.vueltas <= yo.vueltas) continue
-      // Diferencia de posición en pista, 0..1 hacia adelante
-      const delta = (((otro.progreso - yo.progreso) % 1) + 1) % 1
-      if (delta > 0 && delta < 0.2) g.pasaronPor.push(otro.pid)
-    }
-
-    // ── Bandera azul ──────────────────────────────────────────
-    // Se busca a quien viene ALCANZÁNDOME por pista y ya me sacó una vuelta.
-    // Está físicamente detrás mío en el trazado, pero adelante en la carrera.
+    // ── Quién me está doblando, medido en DISTANCIA ───────────
+    // Antes se comparaban los contadores de vueltas (`otro.vueltas >
+    // yo.vueltas`). Falla justo en la meta: si el doblado la cruza con el
+    // puntero 3-5 s atrás, por esos segundos los dos tienen el mismo número de
+    // vueltas y la app concluía que nadie lo estaba doblando. La azul se
+    // apagaba ~4 s y volvía, con el puntero encima (simulación de Interlomas,
+    // 15-10-2026). La distancia no salta en la meta.
+    //
+    // ventaja = cuánto me lleva en la carrera. k = vueltas que me saca.
+    //   resto < 0  → viene detrás mío en pista, alcanzándome: candidato a azul
+    //   resto >= 0 → ya me pasó; si está JUSTO adelante (< 20% de vuelta), el
+    //                adelantamiento acaba de consumarse y la azul se apaga ya,
+    //                sin esperar a que la diferencia crezca
     for (const otro of activos) {
       if (otro.pid === yo.pid) continue
-      if (otro.vueltas <= yo.vueltas) continue // no me está doblando
-      // Si ya me pasó, no corresponde bandera: va adelante mío en pista.
-      // Sin este filtro, la referencia de vuelta podía caer en la anterior y
-      // devolver un número chico para alguien que en realidad ya se fue.
-      if (g.pasaronPor.includes(otro.pid)) continue
-
-      // ¿Cuándo pasé YO por donde está él ahora? Si él viene más atrás en la
-      // vuelta que yo, fue en esta misma vuelta; si no, en la anterior.
-      // Cerca de la meta el redondeo puede dejar la referencia en la vuelta
-      // equivocada, así que se prueba también la anterior antes de rendirse:
-      // sin esto la bandera parpadeaba una vez por vuelta.
-      const vueltaRef = otro.progreso <= yo.progreso ? yo.vueltas : yo.vueltas - 1
-      let t: number | null = null
-      for (const vr of [vueltaRef, vueltaRef - 1]) {
-        t = instanteEn(yo.historia, (vr + otro.progreso) * largo)
-        if (t != null) break
+      const ventaja = ra(otro) - miRec
+      const k = Math.round(ventaja / largo)
+      if (k < 1) continue // no me saca vuelta: es un rival, no un doblador
+      const resto = ventaja - k * largo
+      if (resto >= 0) {
+        if (resto < 0.2 * largo) g.pasaronPor.push(otro.pid)
+        continue
       }
+
+      // ¿Cuándo pasé YO por donde está él ahora? Su posición en mi carrera es
+      // su recorrido menos las vueltas que me saca
+      const t = instanteEn(yo.historia, recorridoTotal(otro, largo) - k * largo)
       if (t == null) continue
 
       const segundos = (otro.t - t) / 1000

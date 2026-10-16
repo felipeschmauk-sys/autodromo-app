@@ -22,7 +22,7 @@
 import { readFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { vueltasDeCarrera } from "../lib/carrera.ts";
-import { calcularGaps, instanteEn } from "../lib/gaps.ts";
+import { calcularGaps, instanteEn, ordenEstable } from "../lib/gaps.ts";
 import { prepararTrazado } from "../lib/trazado.ts";
 
 const [carpetaArg, tandaArg] = process.argv.slice(2);
@@ -80,6 +80,9 @@ for (const t of candidatas) {
   let liderTermino = false;
   const eventos = [];
   let azules = 0, instantesDoblaje = 0, mejorAcercamiento = Infinity, mejorTxt = "";
+  // Orden estabilizado entre lecturas, igual que el panel (Cronometraje.tsx)
+  let ordenPrev;
+  const azulesPor = new Map();
 
   for (const r of filas) {
     const t0 = new Date(r.t_dispositivo).getTime() + (r.offset_ms ?? 0);
@@ -106,8 +109,9 @@ for (const t of candidatas) {
       .map(([pid, v]) => ({ pid, vueltas: v.vu, progreso: v.progreso, t: v.t, enPista: v.dentro, historia: v.hist }));
     if (estados.length < 1) continue;
 
-    const gaps = calcularGaps(estados, { largo: LARGO, ahora: t0, modo: esCarrera ? "carrera" : "libre" });
-    gaps.forEach((g) => { if (g.azul) azules++; });
+    if (esCarrera) ordenPrev = ordenEstable(estados, LARGO, t0, ordenPrev);
+    const gaps = calcularGaps(estados, { largo: LARGO, ahora: t0, modo: esCarrera ? "carrera" : "libre", orden: ordenPrev?.orden });
+    gaps.forEach((g, pid) => { if (g.azul) { azules++; azulesPor.set(pid, (azulesPor.get(pid) ?? 0) + 1); } });
 
     // Oportunidades de bandera azul, se cumplan o no: sirve para saber si un
     // cambio de umbral tendría efecto sobre datos reales
@@ -177,6 +181,7 @@ for (const t of candidatas) {
 
   if (esCarrera) {
     console.log(`\n  Bandera azul: ${azules} instantes encendida · ${instantesDoblaje} instantes con alguien doblado`);
+    if (azulesPor.size) console.log(`  Azul por piloto: ${[...azulesPor].sort((a, b) => b[1] - a[1]).map(([pid, n]) => `${nombre.get(pid)} ${n}`).join(" · ")}`);
     console.log(`  Acercamiento máximo doblador→doblado: ${mejorAcercamiento === Infinity ? "nunca se dio" : mejorTxt}`);
   }
 }

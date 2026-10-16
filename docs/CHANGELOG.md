@@ -3,6 +3,53 @@
 
 ---
 
+## [0.42.0] — 15 Octubre 2026
+### Corregido (dos fallas halladas simulando una carrera en Interlomas)
+Simulación offline de 4 autos con la lógica real (detector del teléfono +
+`calcularGaps` + `sostenerAzul`), 30 carreras por escenario, GPS 1 Hz ±3 m.
+
+**1. La bandera azul parpadeaba en la meta.** Si el doblado cruzaba la meta con
+el puntero 3-5 s atrás, por esos segundos los dos tenían el mismo número de
+vueltas y la app concluía que nadie lo doblaba: la azul se apagaba ~4 s y
+volvía, con el puntero encima (2 de 30 carreras). Ahora "quién me dobla" se mide
+en **distancia recorrida**, que no salta en la meta → 0 de 30.
+
+**2. Dos autos pegados aparecían en el orden equivocado.** Cada teléfono lee el
+GPS en un momento distinto del segundo y el panel ordenaba con la última lectura
+de cada uno: hasta 1 s de diferencia, ~28 m. Con autos a menos de eso, el panel
+los invertía —en una carrera, 12 s seguidos con el de adelante 8 m delante—:
+posiciones cambiadas, diferencia negativa para uno y la del auto dos puestos más
+allá para el otro. Dos capas:
+- **Mismo instante:** antes de ordenar, cada auto se adelanta hasta "ahora" con
+  su velocidad reciente (máx. 2 s). Corrige la causa
+- **Orden estable** (idea de Felipe): un adelantamiento estrecho se muestra
+  recién si se sostiene 2,5 s; si la ventaja es clara (>25 m), al tiro. Dos
+  autos rueda con rueda se ven juntos (+0,0) en vez de cambiar de lugar cada segundo
+- Una diferencia negativa ya no llega a la pantalla
+
+| Escenario normal (30 carreras) | Antes | Ahora |
+|---|---|---|
+| Cambios de posición en pantalla (reales: 0) | 102 | 0 |
+| Diferencias con error > 1 s, peor carrera | 11% | 0% |
+| Azul que parpadea antes del paso | 2 | 0 |
+
+| Pelea cerrada: C alcanza y pasa a B sin despegarse | Antes | Ahora |
+|---|---|---|
+| Cambios de posición en pantalla (reales: 36) | 1.047 | 48 |
+| Error medio de las diferencias | 0,76 s | 0,30 s |
+
+Sin cambios en: conteo de vueltas, resultado final, azul nunca al puntero ni a
+quien no corresponde. Replay de las carreras reales del 27-sep y 4-oct: mismas
+vueltas, mismo resultado y la azul sobre los mismos pilotos doblados (±4%).
+`replay-carrera.mjs` ahora usa el orden estable igual que el panel y muestra la
+azul por piloto.
+
+**Queda igual:** la tabla de cronometraje del admin sigue ordenando a los autos
+pegados con su última lectura. Lo que ven los pilotos y el mapa del panel ya sale
+del orden nuevo.
+
+---
+
 ## [0.41.0] — 15 Octubre 2026
 ### Agregado (Sentido de giro del circuito: horario / antihorario)
 - En **Config → Sectores de pista**, arriba de las divisiones, un selector

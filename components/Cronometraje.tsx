@@ -18,7 +18,7 @@ import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS } from "@/lib/gps";
 import { registrarLog } from "@/lib/log";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { suscribirPosiciones, abrirEmisorEstado, type EstadoCarreraViva } from "@/lib/posiciones";
-import { calcularGaps, sostenerAzul, recorridoTotal, type EstadoPiloto, type Muestra, type EstadoAzul } from "@/lib/gaps";
+import { calcularGaps, sostenerAzul, recorridoTotal, ordenEstable, type EstadoPiloto, type Muestra, type EstadoAzul, type EstadoOrden } from "@/lib/gaps";
 import { prepararTrazado } from "@/lib/trazado";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
@@ -231,6 +231,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
   // instante para medir.
   const llegadasRef = useRef<Map<string, { vueltas: number; t: number }>>(new Map());
+  // Orden de carrera estabilizado entre ticks (ver ordenEstable en lib/gaps.ts):
+  // un adelantamiento estrecho tiene que sostenerse antes de mostrarse
+  const ordenRef = useRef<EstadoOrden | undefined>(undefined);
   // Desde cuándo viene lento cada auto, para no marcar como detenido al que
   // solo está pasando despacio por una curva
   const lentoDesdeRef = useRef<Map<string, number>>(new Map());
@@ -243,6 +246,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     alTerminarRef.current = new Map();
     llegadasRef.current   = new Map();
     liderTerminoRef.current = false;
+    ordenRef.current = undefined;
   }, [tandaActivaId]);
 
   // Seguir la selección compartida con el Log (cuando apunta a una tanda válida)
@@ -442,11 +446,22 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // que están corriendo, no de la que el admin tenga abierta en pantalla.
       const tandaViva = tandaVivaRef.current;
       const esCarreraTanda = tandaViva?.tipo === "carrera";
+      // En carrera, posiciones y diferencias salen del MISMO orden: todos los
+      // autos llevados al mismo instante y con los adelantamientos estrechos
+      // confirmados antes de mostrarse. Si no, la posición diría una cosa y la
+      // diferencia con el de adelante otra.
+      const ordenCarrera = esCarreraTanda
+        ? (ordenRef.current = ordenEstable(estados, largoCircuito, ahora, ordenRef.current))
+        : undefined;
       const gaps = calcularGaps(estados, {
         largo: largoCircuito, ahora, modo: esCarreraTanda ? "carrera" : "libre",
+        orden: ordenCarrera?.orden,
       });
-      const orden = [...estados].sort(
-        (a, b) => recorridoTotal(b, largoCircuito) - recorridoTotal(a, largoCircuito));
+      const porPid = new Map(estados.map(e => [e.pid, e]));
+      const orden = ordenCarrera
+        ? ordenCarrera.orden.map(pid => porPid.get(pid)!).filter(Boolean)
+        : [...estados].sort(
+            (a, b) => recorridoTotal(b, largoCircuito) - recorridoTotal(a, largoCircuito));
 
       // ── Posición DENTRO de la categoría ───────────────────────
       // Un piloto compite contra los de su categoría: uno de una categoría más

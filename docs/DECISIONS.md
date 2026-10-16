@@ -101,3 +101,12 @@ Formato: fecha · decisión · razón · alternativa descartada
 **Decisión:** El sentido de giro de un circuito no se guarda como un dato aparte. Es el orden de los puntos de `trazado_coords`: los autos recorren el punto 0, luego el 1, el 2... Para cambiarlo, el botón de Config → Sectores invierte ese orden y reubica la meta, los sectores y la meta de las tandas al mismo lugar físico (`invertirSentidoCircuito` en `lib/gps.ts`).
 **Razón:** Todo lo que depende del sentido —detector de cruces, sectores, diferencias, bandera azul, replay— ya trabaja sobre el orden de los puntos. Corregir el dato en el origen deja todo eso funcionando sin tocarlo. El horario/antihorario que muestra el panel se calcula del trazado (área con signo), así que el rótulo y el comportamiento nunca pueden contradecirse.
 **Alternativa descartada:** Una columna `sentido` en `circuitos` que cada pantalla interprete. Obliga a modificar el detector de cruces, los sectores, los mapas, las diferencias y el replay, y basta con que uno se olvide de mirarla para que el cronometraje deje de contar vueltas sin avisar.
+
+### Orden de carrera: mismo instante + adelantamiento confirmado (15 Octubre 2026)
+**Decisión:** El panel ordena a los autos llevándolos todos al mismo instante (cada uno se adelanta con su velocidad reciente desde su última lectura, máx. 2 s) y un cambio de posición estrecho solo se acepta si se sostiene 2,5 s o la ventaja supera 25 m (`ordenEstable` en `lib/gaps.ts`). Posiciones y diferencias salen de ese mismo orden.
+**Razón:** Las lecturas de GPS de los teléfonos no están sincronizadas: hasta 1 s (~28 m) entre dos autos. Comparar la última lectura de cada uno invertía autos pegados de forma SOSTENIDA, no intermitente. La estabilidad sola (idea inicial de Felipe) habría congelado el orden equivocado; por eso primero se corrige la causa y la estabilidad va encima, para el error de unos metros del GPS.
+**Alternativa descartada:** Solo histéresis sobre el orden crudo, o decidir por "porcentaje del tiempo adelante". Ambas promedian un error sistemático en vez de eliminarlo.
+
+### "Quién me dobla" se mide en distancia, no en vueltas (15 Octubre 2026)
+**Decisión:** La bandera azul y el "ya me pasó" comparan el recorrido total, no los contadores de vueltas.
+**Razón:** Los contadores saltan en la meta. Si el doblado cruza antes que el doblador, quedan iguales unos segundos y la azul se apagaba con el puntero encima.
