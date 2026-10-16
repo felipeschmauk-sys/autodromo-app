@@ -3,6 +3,22 @@
 
 ---
 
+## [0.42.1] — 15 Octubre 2026
+### Corregido (el editor de sectores no recuperaba los límites guardados)
+- Al abrir **Config → Sectores de pista**, el editor leía de `sectores_pista`
+  solo la cantidad y los nombres, y repartía la pista en partes iguales. Si se
+  guardaba de nuevo —por ejemplo, para mover la meta— los límites ajustados a
+  mano se pisaban sin aviso, y las amarillas por sector caían en tramos
+  equivocados
+- Ahora carga los límites guardados. Comprobado con los 5 sectores de
+  Interlomas: el editor muestra los puntos 3, 20, 42, 67 y 81 (19/25/28/16/11%)
+- Si los límites no caben en el trazado (son de otro circuito), se sigue
+  repartiendo en partes iguales
+- Si la lectura de los sectores falla, **Guardar queda bloqueado** con un aviso:
+  un fallo no es "no hay sectores", y guardar a ciegas los borraría
+
+---
+
 ## [0.42.0] — 15 Octubre 2026
 ### Corregido (dos fallas halladas simulando una carrera en Interlomas)
 Simulación offline de 4 autos con la lógica real (detector del teléfono +

@@ -870,6 +870,7 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 ## 17. Bugs Conocidos y Consideraciones Técnicas
 
 ### Resueltos
+- ✅ **El editor de sectores no recuperaba los límites guardados** → al reabrirlo repartía la pista en partes iguales y guardar de nuevo pisaba los límites ajustados a mano. Ahora carga `punto_inicio`/`punto_fin` y bloquea Guardar si no pudo leerlos (v0.42.1, Octubre 2026)
 - ✅ **Todos los autos perdían el GPS a la vez tras una amarilla automática** → la consulta de sesión activa descartaba el `error` y leía un fallo como "sesión cerrada", apagando el GPS. La ráfaga que la hacía fallar era que los doce teléfonos pedían `sectores_pista` completa al mismo tiempo. Ahora el error se mira, hacen falta 3 confirmaciones para apagar, el evento de sector se aplica sin consultar y el intervalo lleva azar. Análisis completo en `docs/INCIDENTE_2026-10-04.md` (Octubre 2026)
 - ✅ GPS nunca conectaba en teléfonos nuevos → el permiso se pedía al montar (sin gesto) y una denegación quedaba silenciosa para siempre. Ahora: overlay que pide ubicación con botón, detección de estado via Permissions API, pantalla de recuperación si está denegado (Julio 2026)
 - ✅ Auto-yellow disparándose desde fuera del autódromo → `dentroGeocerca !== true` guard
@@ -888,7 +889,6 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 | **Campeonatos con mismo timestamp** | Si dos campeonatos se crean en el mismo segundo, el orden por `created_at DESC` puede ser inestable. En la práctica es insignificante. |
 | **GPS accuracy en pista estrecha** | GPS de celular tiene margen de ±10m. En pistas con sectores cortos puede producir falsos cambios de sector. |
 | **Conectividad débil en autódromos** | Algunos autódromos chilenos tienen señal débil. El sistema no tiene modo offline. |
-| **El editor de sectores no recupera los límites guardados** | Al abrir Config → Sectores, el editor lee de `sectores_pista` solo la cantidad y los nombres, y reparte el trazado en partes iguales: ignora `punto_inicio`/`punto_fin`. Si se guarda de nuevo (por ejemplo para mover la meta), los límites ajustados a mano se pisan con la división pareja. Detectado el 15-10-2026, sin corregir |
 | **Sesiones zombie** | Sesiones marcadas como `activa` cuyo piloto no tiene GPS reciente no se cierran automáticamente. Requiere lógica de cierre por inactividad (pendiente). |
 
 ---

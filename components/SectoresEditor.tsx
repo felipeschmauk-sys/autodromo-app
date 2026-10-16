@@ -51,11 +51,14 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
   // no del primer sector: en cada autódromo está donde está.
   const [meta,      setMeta]      = useState(0);
   const [invirtiendo, setInvirtiendo] = useState(false);
+  // No se pudieron leer los sectores guardados: guardar desde aquí los pisaría
+  const [errorSectores, setErrorSectores] = useState(false);
 
   // ── Cargar trazado y sectores existentes ──────────────────
   // circuitoId como dep: cuando cambia el circuito activo, recarga el trazado
   useEffect(() => {
     const init = async () => {
+      setErrorSectores(false);
       let coords: Coordenada[] | null = null;
       if (circuitoId) {
         const { data, error } = await supabase
@@ -77,17 +80,37 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
       // sin caer al trazado global de la última fecha
       setTrazado(coords ?? []);
 
+      // Los sectores guardados se cargan CON sus límites. Antes se leían solo
+      // la cantidad y los nombres, y el editor repartía la pista en partes
+      // iguales: guardar de nuevo —por ejemplo, para mover la meta— pisaba sin
+      // aviso los límites ajustados a mano (detectado el 15-10-2026, con los 5
+      // sectores de Interlomas ya guardados).
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("sectores_pista")
           .select("*")
           .order("orden");
-        if (data && data.length > 0) {
+        if (error) {
+          // Un fallo no es "no hay sectores": sin saber qué hay guardado,
+          // guardar desde aquí podría borrarlo
+          setErrorSectores(true);
+        } else if (data && data.length > 0) {
+          const total = coords?.length ?? 0;
           setCantidad(data.length);
           setNombres(data.map((r: any) => r.nombre));
+          // Límites fuera de este trazado = sectores de otro circuito: en ese
+          // caso se sigue repartiendo en partes iguales
+          if (total && data.every((r: any) => r.punto_inicio < total && r.punto_fin < total)) {
+            setRangos(data.map((r: any, i: number) => ({
+              nombre: r.nombre,
+              inicio: r.punto_inicio,
+              fin:    r.punto_fin,
+              color:  COLORS[i % COLORS.length],
+            })));
+          }
         }
       } catch (_) {
-        // tabla puede no existir aún
+        setErrorSectores(true);
       } finally {
         setCargando(false);
       }
@@ -571,7 +594,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
           onClick={guardarSectores}
           // Con un solo sector no hay división que guardar, pero la meta sí:
           // es propiedad del circuito y tiene que poder fijarse igual
-          disabled={guardando || !trazado.length || (cantidad < 2 && !circuitoId)}
+          disabled={guardando || errorSectores || !trazado.length || (cantidad < 2 && !circuitoId)}
           className="flex-1 py-3 bg-gray-900 hover:bg-gray-700 disabled:opacity-30 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-colors"
         >
           {guardando ? "Guardando..." : cantidad < 2 ? "Guardar punto de meta" : `Guardar ${cantidad} sectores y meta`}
@@ -584,6 +607,12 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
           🗑
         </button>
       </div>
+
+      {errorSectores && (
+        <div className="text-sm text-center font-semibold px-4 py-2.5 rounded-xl border bg-red-50 text-red-700 border-red-200">
+          No se pudieron leer los sectores guardados. Recarga la página antes de guardar, para no borrarlos.
+        </div>
+      )}
 
       {/* ── Feedback ── */}
       {mensaje && (
