@@ -508,6 +508,10 @@ El componente lee el tipo de sesión desde `fechas_evento.tipo` usando `fechaId`
 - Al guardar el circuito activo: también sincroniza `estado_pista.max_pilotos`
 
 **SectoresEditor:**
+- **Sentido de giro** (Horario / Antihorario) arriba de todo, con flechas sobre el
+  trazado del mapa. El sentido ES el orden de los puntos: cambiarlo invierte el
+  trazado y reubica meta, sectores y meta de las tandas en toda la app, al
+  instante (`invertirSentidoCircuito`). Un trazado al revés **no cuenta vueltas**
 - Editor visual sobre el mapa del circuito
 - Divide el trazado en sectores arrastrando puntos límite
 - Crear, nombrar, eliminar sectores
@@ -697,7 +701,20 @@ getUltimasUbicaciones()
 
 iniciarGPS(pilotoId, sesionId, geocerca, onActualizar, intervaloMs=4000): () => cleanup
   → watchPosition continuo + setInterval para envío a Supabase
+
+invertirSectores(sectores, total)
+  → mismos tramos físicos contados sobre el trazado invertido (orden al revés)
+
+invertirSentidoCircuito(circuitoId): { error?, trazado?, meta?, pendientes[] }
+  → invierte el orden de los puntos y reubica meta, trazado_pista, sectores
+    y meta de las tandas del circuito (cambio de sentido de giro)
+
+vueltasEnCircuito(circuitoId): number | null
+  → vueltas ya cronometradas en el circuito (null = no se pudo consultar)
 ```
+
+En `lib/trazado.ts`: `sentidoDeGiro(puntos)` → `'horario' | 'antihorario'`
+(área con signo, norte arriba) e `indiceInvertido(idx, total)`.
 
 ---
 
@@ -871,6 +888,7 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 | **Campeonatos con mismo timestamp** | Si dos campeonatos se crean en el mismo segundo, el orden por `created_at DESC` puede ser inestable. En la práctica es insignificante. |
 | **GPS accuracy en pista estrecha** | GPS de celular tiene margen de ±10m. En pistas con sectores cortos puede producir falsos cambios de sector. |
 | **Conectividad débil en autódromos** | Algunos autódromos chilenos tienen señal débil. El sistema no tiene modo offline. |
+| **El editor de sectores no recupera los límites guardados** | Al abrir Config → Sectores, el editor lee de `sectores_pista` solo la cantidad y los nombres, y reparte el trazado en partes iguales: ignora `punto_inicio`/`punto_fin`. Si se guarda de nuevo (por ejemplo para mover la meta), los límites ajustados a mano se pisan con la división pareja. Detectado el 15-10-2026, sin corregir |
 | **Sesiones zombie** | Sesiones marcadas como `activa` cuyo piloto no tiene GPS reciente no se cierran automáticamente. Requiere lógica de cierre por inactividad (pendiente). |
 
 ---
@@ -879,6 +897,7 @@ Header app piloto:   bg-indigo-700  (único color no oscuro — diferencia al pi
 
 | Decisión | Razón | Cuándo se tomó |
 |---|---|---|
+| El sentido de giro es el **orden de los puntos del trazado**, no una columna aparte | Todo (cruces, sectores, diferencias, azul, replay) ya depende de ese orden. Cambiar el sentido invierte los puntos en el origen y nada más tiene que enterarse. Ver `docs/DECISIONS.md` | 15 octubre 2026 |
 | Una consulta que falla **nunca** se trata como un dato válido | Leer solo `data` y descartar `error` hace que un fallo de red sea indistinguible de "no hay nada". El 4-10-2026 eso dejó a doce autos sin GPS en el mismo segundo. Siempre recoger `error` y, ante la duda, **no cambiar nada** | 4 octubre 2026 |
 | Apagar el GPS de un piloto exige varias confirmaciones seguidas | Dejar a un piloto sin cronometraje a mitad de tanda es peor que medir unos segundos de más | 4 octubre 2026 |
 | Un cambio de bandera de sector no puede costar consultas a la base | Con N teléfonos, re-consultar la tabla en cada evento genera una ráfaga de N consultas simultáneas. El evento ya trae la fila: se aplica en memoria | 4 octubre 2026 |

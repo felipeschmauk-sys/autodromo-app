@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase'
+import { indiceInvertido } from '@/lib/trazado'
 
 export interface Coordenada {
   lat: number
@@ -60,6 +61,23 @@ export function sectorSlice<T>(trazado: T[], inicio: number, fin: number): T[] {
 // Largo del sector en cantidad de puntos (circular)
 export function sectorLargo(inicio: number, fin: number, total: number): number {
   return inicio <= fin ? fin - inicio : (total - inicio) + fin
+}
+
+// Los mismos sectores, contados sobre el trazado invertido (cambio de sentido
+// de giro). Cada tramo físico conserva sus límites, su nombre y su bandera; lo
+// que cambia es el orden en que se recorren: el último pasa a ser el primero.
+// Los nombres por defecto ("Sector 3") se renumeran para que sigan diciendo su
+// posición; un nombre propio ("Curva del Cóndor") se queda con su tramo.
+export function invertirSectores<T extends { nombre: string; inicio: number; fin: number }>(
+  sectores: T[],
+  total: number
+): T[] {
+  return [...sectores].reverse().map((s, i) => ({
+    ...s,
+    inicio: indiceInvertido(s.fin, total),
+    fin:    indiceInvertido(s.inicio, total),
+    nombre: /^Sector \d+$/.test(s.nombre) ? `Sector ${i + 1}` : s.nombre,
+  }))
 }
 
 // Distancia recorrida en km sobre puntos GPS consecutivos (Haversine).
@@ -130,6 +148,125 @@ export async function guardarTrazado(
     .from('trazado_pista')
     .insert({ nombre, coordenadas, activo: true })
   return { error: error?.message }
+}
+
+// ── SENTIDO DE GIRO ───────────────────────────────────────────
+// El sentido es el orden de los puntos del trazado (ver lib/trazado.ts). Para
+// cambiarlo se invierte ese orden en TODOS los lugares que guardan índices
+// sobre él, así cada pantalla —piloto, dirección de carrera, cronometraje,
+// replay— lo recibe ya corregido sin tener que saber que existe un sentido.
+
+/**
+ * Cuántas vueltas se han cronometrado ya sobre este circuito.
+ * null = no se pudo consultar (un fallo no es un cero).
+ */
+export async function vueltasEnCircuito(circuitoId: string): Promise<number | null> {
+  const { data: fechas, error: eF } = await supabase
+    .from('fechas_evento').select('id').eq('circuito_id', circuitoId)
+  if (eF) return null
+  if (!fechas?.length) return 0
+  const { data: tandas, error: eT } = await supabase
+    .from('tandas').select('id').in('fecha_id', fechas.map((f) => f.id))
+  if (eT) return null
+  if (!tandas?.length) return 0
+  const { count, error: eV } = await supabase
+    .from('vueltas').select('id', { count: 'exact', head: true })
+    .in('tanda_id', tandas.map((t) => t.id))
+  if (eV) return null
+  return count ?? 0
+}
+
+/**
+ * Invierte el sentido de giro de un circuito: da vuelta el orden de sus puntos
+ * y reubica todo lo que apunta a un punto por su número, para que siga
+ * apuntando al MISMO lugar físico de la pista:
+ *  1. el trazado y la meta del circuito (en una sola escritura)
+ *  2. la copia global `trazado_pista`, si es una copia de este circuito
+ *  3. los sectores (`sectores_pista`), con su orden y sus banderas
+ *  4. la meta congelada de las tandas ya creadas en fechas de este circuito
+ *
+ * Si falla el paso 1 no se toca nada más. `pendientes` lista lo que no se pudo
+ * actualizar después del paso 1.
+ */
+export async function invertirSentidoCircuito(circuitoId: string): Promise<{
+  error?: string
+  trazado?: Coordenada[]
+  meta?: number
+  pendientes: string[]
+}> {
+  const pendientes: string[] = []
+
+  const { data: c, error: eLeer } = await supabase
+    .from('circuitos').select('trazado_coords, meta_idx').eq('id', circuitoId).single()
+  if (eLeer || !c) return { error: eLeer?.message ?? 'No se encontró el circuito', pendientes }
+
+  const viejo: Coordenada[] = c.trazado_coords ?? []
+  const total = viejo.length
+  if (total < 3) return { error: 'El circuito no tiene trazado cargado', pendientes }
+
+  const trazado = [...viejo].reverse()
+  const meta = indiceInvertido(c.meta_idx ?? 0, total)
+
+  // 1) Puntos y meta juntos: nunca debe quedar uno invertido y el otro no
+  const { error: eCirc } = await supabase
+    .from('circuitos').update({ trazado_coords: trazado, meta_idx: meta }).eq('id', circuitoId)
+  if (eCirc) return { error: eCirc.message, pendientes }
+
+  // 2) Copia global legada: solo si lo que tiene es justo este trazado
+  const { data: tp, error: eTp } = await supabase
+    .from('trazado_pista').select('id, coordenadas').eq('activo', true).maybeSingle()
+  if (eTp) {
+    pendientes.push('trazado global')
+  } else if (tp && JSON.stringify(tp.coordenadas) === JSON.stringify(viejo)) {
+    const { error } = await supabase
+      .from('trazado_pista').update({ coordenadas: trazado }).eq('id', tp.id)
+    if (error) pendientes.push('trazado global')
+  }
+
+  // 3) Sectores. Se actualizan fila por fila (no borrar y crear) para que
+  //    conserven su id y la bandera que tengan puesta
+  const { data: sec, error: eSec } = await supabase
+    .from('sectores_pista').select('id, nombre, punto_inicio, punto_fin').order('orden')
+  if (eSec) {
+    pendientes.push('sectores')
+  } else if (sec?.length && sec.every((s) => s.punto_inicio < total && s.punto_fin < total)) {
+    const invertidos = invertirSectores(
+      sec.map((s) => ({ id: s.id, nombre: s.nombre, inicio: s.punto_inicio, fin: s.punto_fin })),
+      total
+    )
+    for (const [i, s] of invertidos.entries()) {
+      const { error } = await supabase
+        .from('sectores_pista')
+        .update({ orden: i + 1, nombre: s.nombre, punto_inicio: s.inicio, punto_fin: s.fin })
+        .eq('id', s.id)
+      if (error) { pendientes.push('sectores'); break }
+    }
+  }
+
+  // 4) Meta congelada de las tandas de este circuito
+  const { data: fechas, error: eF } = await supabase
+    .from('fechas_evento').select('id').eq('circuito_id', circuitoId)
+  if (eF) {
+    pendientes.push('meta de las tandas')
+  } else if (fechas?.length) {
+    const { data: tandas, error: eT } = await supabase
+      .from('tandas').select('id, meta_idx')
+      .in('fecha_id', fechas.map((f) => f.id))
+      .not('meta_idx', 'is', null)
+    if (eT) {
+      pendientes.push('meta de las tandas')
+    } else {
+      for (const t of tandas ?? []) {
+        // Una meta fuera de rango se congeló sobre otro trazado: no se adivina
+        if (t.meta_idx >= total) continue
+        const { error } = await supabase
+          .from('tandas').update({ meta_idx: indiceInvertido(t.meta_idx, total) }).eq('id', t.id)
+        if (error) { pendientes.push('meta de las tandas'); break }
+      }
+    }
+  }
+
+  return { trazado, meta, pendientes }
 }
 
 // ── GEOCERCA ──────────────────────────────────────────────────

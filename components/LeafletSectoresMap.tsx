@@ -84,6 +84,33 @@ export default function LeafletSectoresMap({ trazado, rangos, onBoundaryChange, 
       L.polyline(allLatlngs, { color: "#cbd5e1", weight: 8, opacity: 1 }).addTo(map)
     );
 
+    // ── Flechas de sentido de giro ─────────────────────────
+    // Apuntan en el orden de los puntos del trazado, que es hacia donde la app
+    // asume que corren los autos (ver sentidoDeGiro en lib/trazado.ts)
+    const nPts    = trazado.length;
+    const kx      = Math.cos((trazado[0].lat * Math.PI) / 180);
+    const FLECHAS = 8;
+    for (let k = 0; k < FLECHAS; k++) {
+      const a = trazado[Math.floor(((k + 0.5) * nPts) / FLECHAS) % nPts];
+      const b = trazado[(Math.floor(((k + 0.5) * nPts) / FLECHAS) + 1) % nPts];
+      // Ángulo contra el reloj desde el este; CSS rota a favor del reloj
+      const ang = (Math.atan2(b.lat - a.lat, (b.lng - a.lng) * kx) * 180) / Math.PI;
+      const flecha = L.divIcon({
+        html: `<div style="width:16px;height:16px;transform:rotate(${-ang}deg)">
+          <svg viewBox="0 0 16 16" width="16" height="16">
+            <path d="M3 2 L14 8 L3 14 L6 8 Z" fill="#fff" stroke="#0a0a0a"
+              stroke-width="1.2" stroke-linejoin="round"/>
+          </svg></div>`,
+        iconSize:   [16, 16],
+        iconAnchor: [8, 8],
+        className:  "",
+      });
+      layersRef.current.push(
+        L.marker([(a.lat + b.lat) / 2, (a.lng + b.lng) / 2],
+          { icon: flecha, interactive: false, keyboard: false, zIndexOffset: 500 }).addTo(map)
+      );
+    }
+
     // Sectores coloreados (sectorSlice soporta el sector que cruza la meta)
     rangos.forEach(r => {
       const pts = sectorSlice(trazado, r.inicio, r.fin)

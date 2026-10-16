@@ -3,6 +3,42 @@
 
 ---
 
+## [0.41.0] — 15 Octubre 2026
+### Agregado (Sentido de giro del circuito: horario / antihorario)
+- En **Config → Sectores de pista**, arriba de las divisiones, un selector
+  **Horario / Antihorario** que muestra hacia dónde cree la app que corren los
+  autos y permite cambiarlo. El mapa del editor ahora lleva **flechas** sobre el
+  trazado con ese mismo sentido, para comprobarlo a la vista
+- Se detectó al cargar **Interlomas** (fecha del 18 de octubre): el KML venía
+  dibujado en sentido antihorario y la pista se corre al revés
+
+### Por qué importa (no es cosmético)
+- La app nunca guardó un "sentido": lo deduce del **orden de los puntos del
+  trazado**. El detector de cruces cuenta una vuelta cuando el progreso salta
+  de ~1 a ~0 al pasar por meta. Un auto que corre contra ese orden produce el
+  salto contrario y **la vuelta no se cuenta**
+- Comprobado con el trazado real de Interlomas: un auto simulado dando 3
+  vueltas en sentido horario registra **0 cruces** con el trazado como estaba y
+  **3 cruces** con el trazado invertido. Lo mismo arrastra el orden de los
+  sectores, las diferencias entre autos y la bandera azul
+
+### Cómo funciona
+- Cambiar el sentido **invierte el orden de los puntos guardados** y reubica
+  todo lo que apunta a un punto por su número, para que siga apuntando al mismo
+  lugar físico de la pista: el trazado y la meta del circuito, la copia global
+  `trazado_pista` (si es de este circuito), los sectores (con su orden, nombre y
+  bandera) y la meta congelada de las tandas ya creadas en fechas de ese circuito
+- Así cada pantalla —piloto, dirección de carrera, cronometraje, replay— recibe
+  el trazado ya corregido sin saber que existe un sentido. Ver `docs/DECISIONS.md`
+- Se guarda **al instante** y pide confirmación. Si el circuito ya tiene vueltas
+  cronometradas, la confirmación lo advierte: invertir un circuito que se contaba
+  bien deja esas carreras sin poder volver a analizarse
+- Nombres de sector por defecto ("Sector 3") se renumeran según el nuevo orden;
+  un nombre propio se queda con su tramo
+- **Sin migración SQL**: no hay columna nueva
+
+---
+
 ## [0.40.0] — 6 Octubre 2026
 ### Agregado (Pestaña "Pantallas": lo que está viendo cada piloto)
 - Cuadrícula en el panel con una miniatura por piloto. Cada recuadro usa **el

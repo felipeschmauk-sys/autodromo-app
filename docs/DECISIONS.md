@@ -96,3 +96,8 @@ Formato: fecha · decisión · razón · alternativa descartada
 ### Vehículos opcionales en registro
 **Decisión:** El campo de vehículo es opcional durante el registro.
 **Razón:** Reduce fricción inicial. El piloto puede agregar vehículos después desde su perfil.
+
+### Sentido de giro = orden de los puntos del trazado (15 Octubre 2026)
+**Decisión:** El sentido de giro de un circuito no se guarda como un dato aparte. Es el orden de los puntos de `trazado_coords`: los autos recorren el punto 0, luego el 1, el 2... Para cambiarlo, el botón de Config → Sectores invierte ese orden y reubica la meta, los sectores y la meta de las tandas al mismo lugar físico (`invertirSentidoCircuito` en `lib/gps.ts`).
+**Razón:** Todo lo que depende del sentido —detector de cruces, sectores, diferencias, bandera azul, replay— ya trabaja sobre el orden de los puntos. Corregir el dato en el origen deja todo eso funcionando sin tocarlo. El horario/antihorario que muestra el panel se calcula del trazado (área con signo), así que el rótulo y el comportamiento nunca pueden contradecirse.
+**Alternativa descartada:** Una columna `sentido` en `circuitos` que cada pantalla interprete. Obliga a modificar el detector de cruces, los sectores, los mapas, las diferencias y el replay, y basta con que uno se olvide de mirarla para que el cronometraje deje de contar vueltas sin avisar.

@@ -110,3 +110,42 @@ export function progresoDesdeMeta(distancia: number, metaDist: number, largo: nu
   if (!largo) return 0
   return (((distancia - metaDist) % largo) + largo) % largo / largo
 }
+
+// ── Sentido de giro ───────────────────────────────────────────
+//
+// La app no guarda hacia dónde corren los autos: lo deduce del ORDEN de los
+// puntos del trazado. Se asume que los autos recorren el punto 0, después el 1,
+// el 2... y de ahí sale todo lo demás: el detector de cruces cuenta una vuelta
+// cuando el progreso salta de ~1 a ~0, los sectores se numeran en ese orden y
+// las diferencias entre autos miden quién va adelante sobre ese recorrido.
+//
+// Si el KML se dibujó al revés, el auto avanza "hacia atrás" sobre el trazado:
+// el progreso salta de ~0 a ~1 al pasar por meta y LA VUELTA NO SE CUENTA.
+// Por eso el sentido no es un dato aparte que cada pantalla tenga que
+// interpretar: para cambiarlo se invierte el orden de los puntos guardados
+// (ver invertirSentidoCircuito en lib/gps.ts) y todo lo demás sigue igual.
+
+export type SentidoGiro = 'horario' | 'antihorario'
+
+/**
+ * Sentido en que se recorre el trazado, visto en un mapa con el norte arriba.
+ * Fórmula del área con signo (shoelace) en metros locales: área positiva =
+ * los puntos giran contra el reloj.
+ */
+export function sentidoDeGiro(puntos: Coordenada[]): SentidoGiro | null {
+  if (!puntos || puntos.length < 3) return null
+  const kx = Math.cos((puntos[0].lat * Math.PI) / 180)
+  let area2 = 0
+  for (let i = 0; i < puntos.length; i++) {
+    const a = puntos[i]
+    const b = puntos[(i + 1) % puntos.length]
+    area2 += a.lng * kx * b.lat - b.lng * kx * a.lat
+  }
+  if (area2 === 0) return null
+  return area2 > 0 ? 'antihorario' : 'horario'
+}
+
+/** El mismo punto físico, contado en el trazado invertido. */
+export function indiceInvertido(idx: number, total: number): number {
+  return total - 1 - idx
+}

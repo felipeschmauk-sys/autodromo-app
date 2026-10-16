@@ -12,7 +12,11 @@
 import { useEffect, useState, useCallback } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-import { getTrazadoActivo, sectorLargo, type Coordenada } from "@/lib/gps";
+import {
+  getTrazadoActivo, sectorLargo, invertirSectores, invertirSentidoCircuito, vueltasEnCircuito,
+  type Coordenada,
+} from "@/lib/gps";
+import { sentidoDeGiro, indiceInvertido, type SentidoGiro } from "@/lib/trazado";
 
 const LeafletSectoresMap = dynamic(
   () => import("@/components/LeafletSectoresMap"),
@@ -46,6 +50,7 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
   // Punto del trazado donde está la línea de meta. Es propiedad del circuito,
   // no del primer sector: en cada autódromo está donde está.
   const [meta,      setMeta]      = useState(0);
+  const [invirtiendo, setInvirtiendo] = useState(false);
 
   // ── Cargar trazado y sectores existentes ──────────────────
   // circuitoId como dep: cuando cambia el circuito activo, recarga el trazado
@@ -216,6 +221,55 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
     }
   };
 
+  // ── Sentido de giro ────────────────────────────────────────
+  // No es un dato guardado aparte: es el orden de los puntos del trazado (ver
+  // lib/trazado.ts). Cambiarlo se guarda al instante y para todo el circuito,
+  // porque el trazado lo leen el piloto, la dirección de carrera y el
+  // cronometraje, no solo este editor.
+  const sentido = sentidoDeGiro(trazado);
+
+  const cambiarSentido = async (destino: SentidoGiro) => {
+    if (!circuitoId || !sentido || destino === sentido || invirtiendo) return;
+    setInvirtiendo(true);
+    try {
+      const vueltas = await vueltasEnCircuito(circuitoId);
+      const aviso =
+        vueltas === null
+          ? "\n\nOjo: no se pudo revisar si este circuito ya tiene vueltas cronometradas."
+          : vueltas > 0
+          ? `\n\nOjo: este circuito ya tiene ${vueltas} vueltas cronometradas. Si esas carreras se contaron bien, con el sentido invertido ya no se van a poder volver a analizar.`
+          : "";
+      const ok = confirm(
+        `¿Cambiar el sentido de giro a ${destino}?\n\n` +
+        "Se invierte el recorrido del circuito en toda la app: conteo de vueltas, orden de los sectores, " +
+        "diferencias entre autos y bandera azul. La meta y los límites de los sectores se quedan en el " +
+        "mismo lugar de la pista." + aviso
+      );
+      if (!ok) return;
+
+      const res = await invertirSentidoCircuito(circuitoId);
+      if (res.error || !res.trazado) throw new Error(res.error);
+
+      // Reflejar el cambio en el editor sin perder lo que aún no se guarda
+      const total = res.trazado.length;
+      const inv = invertirSectores(rangos, total)
+        .map((r, i) => ({ ...r, color: COLORS[i % COLORS.length] }));
+      setTrazado(res.trazado);
+      setMeta(m => indiceInvertido(m, total));
+      setRangos(inv);
+      setNombres(inv.map(r => r.nombre));
+      setMensaje(res.pendientes.length
+        ? { texto: `⚠️ Sentido cambiado, pero no se pudo actualizar: ${res.pendientes.join(", ")}`, ok: false }
+        : { texto: `✅ Sentido de giro: ${destino}`, ok: true });
+    } catch (err: any) {
+      console.error(err);
+      setMensaje({ texto: `❌ Error: ${err?.message || "desconocido"}`, ok: false });
+    } finally {
+      setInvirtiendo(false);
+      setTimeout(() => setMensaje(null), 5000);
+    }
+  };
+
   const resetearSectores = async () => {
     setCantidad(1);
     setNombres(["Sector 1"]);
@@ -238,6 +292,36 @@ export default function SectoresEditor({ circuitoId }: SectoresEditorProps = {})
 
   return (
     <div className="space-y-5">
+
+      {/* ── Sentido de giro ── */}
+      {circuitoId && sentido && (
+        <div>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">
+            Sentido de giro
+          </p>
+          <p className="text-xs text-gray-400 mb-3">
+            Hacia dónde corren los autos, con el norte arriba. Las flechas del mapa lo muestran.
+            Define el conteo de vueltas y el orden de los sectores en toda la app.
+          </p>
+          <div className="flex gap-2">
+            {(["horario", "antihorario"] as const).map(s => (
+              <button
+                key={s}
+                onClick={() => cambiarSentido(s)}
+                disabled={invirtiendo}
+                className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors flex items-center justify-center gap-2 disabled:opacity-50 ${
+                  sentido === s
+                    ? "bg-gray-900 text-white shadow-md"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-800"
+                }`}
+              >
+                <span className="text-lg leading-none">{s === "horario" ? "↻" : "↺"}</span>
+                {s === "horario" ? "Horario" : "Antihorario"}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Selector de cantidad ── */}
       <div>
