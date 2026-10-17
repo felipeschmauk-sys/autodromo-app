@@ -3,6 +3,31 @@
 
 ---
 
+## [0.42.2] — 17 Octubre 2026
+### Corregido (pilotos "Sin señal" con el teléfono funcionando — Interlomas)
+- En las pruebas de Interlomas, 10 pilotos tenían **4-5 sesiones activas a la
+  vez** (4, 15, 16 y 17 de octubre): ingresar a un piloto creaba una sesión
+  nueva sin cerrar las anteriores. El teléfono pregunta por su sesión con
+  `maybeSingle()`, que con varias filas falla; así el GPS solo arrancaba en el
+  instante del ingreso y, si se apagaba, no volvía nunca. El "pista / boxes" de
+  la pantalla del piloto sale de otro componente, así que se veía todo bien
+- Ahora **un piloto tiene una sola sesión activa**: al ingresarlo (directo o por
+  QR) primero se cierran las que tenga abiertas y después se abre la nueva
+  (`abrirSesionPiloto` en `lib/auth.ts`). El orden importa: el teléfono apaga el
+  GPS al enterarse de un cierre, así que debe recibirlo antes que la apertura
+- Ese día se cerraron a mano las 41 sesiones viejas: de 2 teléfonos
+  transmitiendo se pasó a 7 en menos de 30 s, sin tocar los teléfonos
+
+### Sin resolver
+- A las 12:21:10 cinco teléfonos apagaron el GPS en el mismo segundo, 6 s después
+  de una amarilla automática y 3 s después de cuadros global. Misma huella que el
+  4-10-2026. El teléfono no deja registro de por qué: falta un log de errores del
+  cliente para encontrar el disparador
+- Con tres paneles admin abiertos se duplican registros y se crearon dos tandas
+  "Libre 4" a la misma hora
+
+---
+
 ## [0.42.1] — 15 Octubre 2026
 ### Corregido (el editor de sectores no recuperaba los límites guardados)
 - Al abrir **Config → Sectores de pista**, el editor leía de `sectores_pista`

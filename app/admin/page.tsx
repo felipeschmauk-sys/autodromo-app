@@ -7,6 +7,7 @@ import {
   validarQRToken,
   confirmarIngreso,
   cerrarSesionAdmin,
+  abrirSesionPiloto,
 } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { tendenciaGap } from "@/lib/gaps";
@@ -1252,9 +1253,9 @@ export default function AdminPage() {
     // quien decide, y un número de configuración no debe frenarle la mano.
     if (ACCESO_QR && sesiones.length >= maxPilotos) return;
     setIngresandoManualId(pilotoId);
-    const { error } = await supabase
-      .from("sesiones")
-      .insert({ piloto_id: pilotoId, estado: "activa", inicio: new Date().toISOString() });
+    // Cierra las sesiones que el piloto haya dejado abiertas y abre la nueva:
+    // un piloto tiene una sola sesión activa (ver abrirSesionPiloto)
+    const { error } = await abrirSesionPiloto(pilotoId);
     if (!error) {
       const nombre = pilotosEvento.find(x => x.piloto_id === pilotoId)?.nombre ?? "Piloto";
       registrarLog({

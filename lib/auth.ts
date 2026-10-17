@@ -302,13 +302,33 @@ export async function confirmarIngreso(qr_id: string, piloto_id: string) {
     .update({ usado: true, usado_at: new Date().toISOString() })
     .eq('id', qr_id)
 
+  return abrirSesionPiloto(piloto_id)
+}
+
+// ── Una sesión activa por piloto, nunca más ───────────────────
+// Antes de abrir la nueva se cierran las que hayan quedado abiertas. El
+// 17-10-2026, en Interlomas, diez pilotos tenían 4-5 sesiones activas a la vez
+// (4, 15, 16 y 17 de octubre): el teléfono preguntaba por la suya, recibía
+// varias, la consulta fallaba y el GPS, una vez apagado, no podía volver a
+// encenderse. El panel los mostraba "Sin señal" con el teléfono funcionando.
+//
+// Se cierran PRIMERO y se abre DESPUÉS, a propósito: el teléfono apaga su GPS
+// al enterarse de un cierre, así que tiene que recibir el cierre antes que la
+// apertura para arrancar limpio con la sesión nueva.
+export async function abrirSesionPiloto(piloto_id: string) {
+  const ahora = new Date().toISOString()
+  const { error: eCierre } = await supabase
+    .from('sesiones')
+    .update({ estado: 'inactiva', fin: ahora })
+    .eq('piloto_id', piloto_id)
+    .eq('estado', 'activa')
+  // Si no se pudieron cerrar las anteriores no se abre otra encima: sería
+  // volver a dejar al piloto con dos sesiones activas
+  if (eCierre) return { ok: false, sesion: null, error: eCierre.message }
+
   const { data, error } = await supabase
     .from('sesiones')
-    .insert({
-      piloto_id,
-      estado: 'activa',
-      inicio: new Date().toISOString()
-    })
+    .insert({ piloto_id, estado: 'activa', inicio: ahora })
     .select()
     .single()
 
