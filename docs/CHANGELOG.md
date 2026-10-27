@@ -3,6 +3,31 @@
 
 ---
 
+## [0.43.1] — 27 Octubre 2026
+### Corregido (el botón de "Finalizar" quedaba en pantalla después de cerrar la tanda desde otro panel)
+- Encontrado probando la 0.43.0 con el PC y el teléfono abiertos: tanda iniciada
+  desde el teléfono y cerrada desde el PC. El teléfono quedó mostrando
+  **"Finalizar Carrera 1" sobre una carrera que decía "🏁 Finalizada"** dos
+  centímetros más abajo
+- Son dos fuentes distintas en la misma pantalla: el chip de la tanda sale de
+  `Cronometraje`, que consulta `tandas` cada 10 s y estaba al día; la barra de
+  control sale de `tandaActivaId`, que viene del panel padre y solo se refrescaba
+  **al entrar al evento** — no hay suscripción en vivo ni polling sobre `tandas`
+- Ahora el aviso de `log_acciones` que ya llegaba en vivo refresca también las
+  tandas (`cargarLog` + `cargarTandas`). Iniciar y cerrar escriben su fila en el
+  log con el `fecha_id`, así que el aviso estaba ahí sin aprovechar
+- **Es un parche, no la solución:** cada panel sigue manteniendo su propia idea
+  del estado de la jornada. Eso se resuelve con un solo dueño del ciclo
+  (`docs/PENDIENTES.md`, "Panel en la nube")
+
+### De paso, lo que la 0.43.0 ya había evitado
+Apretar ese botón fantasma antes de hoy habría vuelto a escribir `fin` con la
+hora del toque —moviendo el final de la carrera minutos hacia adelante— y habría
+sacado una segunda bandera a cuadros con su registro duplicado. Con el cierre
+condicional no encuentra filas que cerrar, refresca y el botón desaparece solo.
+
+---
+
 ## [0.43.0] — 27 Octubre 2026
 ### Corregido (varios paneles admin abiertos a la vez — Interlomas)
 Requiere correr `docs/task-panel-unico-migration.sql` en Supabase.

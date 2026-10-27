@@ -739,7 +739,13 @@ export default function AdminPage() {
     if (!error && data) setLogAcciones(data as LogRow[]);
   }, [tandaSel]);
 
-  // Log en vivo: Realtime filtrado por el evento + polling de respaldo
+  // Log en vivo: Realtime filtrado por el evento + polling de respaldo.
+  // De paso, el aviso refresca las TANDAS: este panel solo sabía de la tanda
+  // abierta al entrar al evento, así que si otro panel la iniciaba o la cerraba
+  // se quedaba con la barra de control vieja —el teléfono mostraba "Finalizar
+  // Carrera 1" sobre una carrera ya terminada—. Iniciar y cerrar escriben su
+  // fila en log_acciones, así que el aviso ya venía llegando: solo había que
+  // aprovecharlo. Es un parche: cada panel sigue con su propia idea del estado.
   useEffect(() => {
     if (!autenticado || !contexto.fechaId) { setLogAcciones([]); setTandaActivaLog(null); return; }
     const fid = contexto.fechaId;
@@ -749,7 +755,7 @@ export default function AdminPage() {
       .channel("admin-log-live")
       .on("postgres_changes",
         { event: "INSERT", schema: "public", table: "log_acciones", filter: `fecha_id=eq.${fid}` },
-        () => { cargarLog(fid); })
+        () => { cargarLog(fid); cargarTandas(fid); })
       .subscribe();
     const poll = setInterval(() => cargarLog(fid), 15_000);
     return () => { supabase.removeChannel(ch); clearInterval(poll); setTandaActivaLog(null); };
