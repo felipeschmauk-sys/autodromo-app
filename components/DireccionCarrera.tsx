@@ -25,6 +25,9 @@ interface SectorInfo {
   punto_inicio: number;
   punto_fin: number;
   bandera: string;
+  /** Piloto por el que el sistema puso esta amarilla. null = la puso el
+   *  director a mano, y entonces el automático no la toca. */
+  auto_amarilla_piloto_id: string | null;
 }
 
 interface PilotoEnPista {
@@ -81,16 +84,19 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
   const [bandera,     setBandera]     = useState("verde");
   const [sectores,    setSectores]    = useState<SectorInfo[]>([]);
   const [sessionType, setSessionType] = useState<SessionType>("racing");
+  const [faltaMigracion, setFaltaMigracion] = useState(false);
 
   // Refs para evitar closures stale en callbacks de Supabase
   const trazadoRef    = useRef<Coordenada[]>([]);
   const sectoresRef   = useRef<SectorInfo[]>([]);
   const banderaRef    = useRef<string>("verde");
-  const autoYellowRef = useRef<Map<string, string>>(new Map());
+  /** Sin la columna del dueño en la base, el automático no corre. Ver `load`. */
+  const faltaMigracionRef = useRef(false);
 
   useEffect(() => { trazadoRef.current  = trazado;  }, [trazado]);
   useEffect(() => { sectoresRef.current = sectores; }, [sectores]);
   useEffect(() => { banderaRef.current  = bandera;  }, [bandera]);
+  useEffect(() => { faltaMigracionRef.current = faltaMigracion; }, [faltaMigracion]);
 
   // ── Cargar tipo de sesión ──────────────────────────────────────────────────
   useEffect(() => {
@@ -123,19 +129,31 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     return s.find(sec => sectorContienePunto(idx, sec.punto_inicio, sec.punto_fin)) || null;
   }
 
+  // Quién puso cada amarilla automática vive en `sectores_pista`, no en la
+  // memoria de este panel. Antes era un `autoYellowRef` del navegador, con dos
+  // consecuencias: si ese panel se cerraba o se recargaba nadie recordaba
+  // devolver el sector a verde y quedaba amarillo para siempre —incluso con un
+  // solo panel abierto—, y con dos paneles cada uno tenía su propia idea de qué
+  // amarillas eran suyas. En la tabla las comparten todos.
   async function revertAutoYellow(pilotoId: string) {
-    for (const [sectorId, pId] of autoYellowRef.current.entries()) {
-      if (pId === pilotoId) {
-        autoYellowRef.current.delete(sectorId);
-        await supabase.from("sectores_pista").update({ bandera: "verde" }).eq("id", sectorId);
-        const nombreSector = sectoresRef.current.find(s => s.id === sectorId)?.nombre || "sector";
-        registrarLog({
-          fecha_id: fechaId ?? null,
-          piloto_id: pilotoId,
-          tipo: "auto_yellow",
-          descripcion: `🤖 ${nombreSector} vuelve a verde — pista despejada (automático)`,
-        });
-      }
+    for (const sec of sectoresRef.current) {
+      if (sec.auto_amarilla_piloto_id !== pilotoId) continue;
+      // La condición va en el UPDATE y no solo en el `if`: si dos paneles
+      // reciben el mismo dato del GPS a la vez, solo uno afecta la fila y solo
+      // uno registra el regreso a verde.
+      const { data } = await supabase
+        .from("sectores_pista")
+        .update({ bandera: "verde", auto_amarilla_piloto_id: null })
+        .eq("id", sec.id)
+        .eq("auto_amarilla_piloto_id", pilotoId)
+        .select("id");
+      if (!data?.length) continue;
+      registrarLog({
+        fecha_id: fechaId ?? null,
+        piloto_id: pilotoId,
+        tipo: "auto_yellow",
+        descripcion: `🤖 ${sec.nombre} vuelve a verde — pista despejada (automático)`,
+      });
     }
   }
 
@@ -146,6 +164,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     velocidad: number,
     dentroGeocerca: boolean | null,
   ) {
+    if (faltaMigracionRef.current) return;
     if (banderaRef.current !== "verde") return;
 
     // Solo revertir si está CONFIRMADO fuera (false). Si es null/desconocido,
@@ -157,9 +176,20 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     if (velocidad <= DETENIDO_KMH) {
       // Detenido en pista → amarilla en su sector
       const sector = detectSectorByPos(lat, lng);
-      if (sector && sector.bandera === "verde" && !autoYellowRef.current.has(sector.id)) {
-        autoYellowRef.current.set(sector.id, pilotoId);
-        await supabase.from("sectores_pista").update({ bandera: "amarilla" }).eq("id", sector.id);
+      if (sector && sector.bandera === "verde" && !sector.auto_amarilla_piloto_id) {
+        // Reclamar el sector y ponerle la amarilla en la misma escritura, con
+        // las dos condiciones puestas: el sector tiene que seguir en verde y
+        // sin dueño. Si no afectó filas, otro panel llegó primero o el director
+        // cambió la bandera a mano en el intertanto — en los dos casos esta
+        // amarilla no es nuestra y no se registra.
+        const { data } = await supabase
+          .from("sectores_pista")
+          .update({ bandera: "amarilla", auto_amarilla_piloto_id: pilotoId })
+          .eq("id", sector.id)
+          .eq("bandera", "verde")
+          .is("auto_amarilla_piloto_id", null)
+          .select("id");
+        if (!data?.length) return;
         registrarLog({
           fecha_id: fechaId ?? null,
           piloto_id: pilotoId,
@@ -206,6 +236,10 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     }
     const load = async () => {
       const { data } = await supabase.from("sectores_pista").select("*").order("orden");
+      // Sin la columna del dueño, la amarilla automática no se puede devolver a
+      // verde desde otro panel: se apaga y se avisa en pantalla. Preferimos
+      // decirlo a tener un camino de respaldo que nunca se probó en pista.
+      if (data?.length) setFaltaMigracion(!("auto_amarilla_piloto_id" in data[0]));
       // Solo actualizar si cambió de verdad — evita redibujar el mapa en cada evento
       if (data) setSectores(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
     };
@@ -400,6 +434,14 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
           {chipBandera.label}
         </div>
       </div>
+
+      {faltaMigracion && (
+        <div className="px-4 py-2 bg-red-950 border-b border-red-800 text-xs text-red-300 font-medium">
+          ⚠ Amarilla automática DESACTIVADA — falta correr{" "}
+          <span className="font-mono">docs/task-panel-unico-migration.sql</span> en Supabase.
+          Las banderas por sector se siguen poniendo a mano.
+        </div>
+      )}
 
       {/* ── MAPA ───────────────────────────────────────────────────────────── */}
       {pilotosList.length > 0 && (

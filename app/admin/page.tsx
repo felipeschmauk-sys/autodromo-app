@@ -31,6 +31,14 @@ const AdminEventos     = dynamic(() => import('@/components/AdminEventos'),     
 // AdminMensajes desactivado temporalmente
 // const AdminMensajes = dynamic(() => import('@/components/AdminMensajes'), { ssr: false });
 // ─── Types ────────────────────────────────────────────────────────────────────
+// Choque con el índice `tandas_una_abierta_por_fecha`: otro panel ya tiene una
+// tanda abierta en esta fecha. 23505 es "unique_violation" de Postgres; el
+// nombre del índice se mira además por si el código no viaja.
+function esTandaDuplicada(error: { code?: string; message?: string } | null) {
+  if (!error) return false;
+  return error.code === "23505" || /tandas_una_abierta_por_fecha/i.test(error.message ?? "");
+}
+
 interface Sector {
   id: string;
   nombre: string;
@@ -517,13 +525,27 @@ export default function AdminPage() {
     let sinMigracion = false;
     if (res.error) {
       // Columnas de cronometraje sin migrar: crear la tanda básica igual,
-      // pero AVISANDO fuerte — sin duración guardada no hay auto-cierre
-      sinMigracion = true;
-      res = await supabase
-        .from("tandas")
-        .insert({ fecha_id: contexto.fechaId, tipo, nombre })
-        .select()
-        .single();
+      // pero AVISANDO fuerte — sin duración guardada no hay auto-cierre.
+      // Salvo que el choque sea con el candado de la base: ahí no falta
+      // ninguna columna, es que otro panel ya abrió la tanda.
+      if (!esTandaDuplicada(res.error)) {
+        sinMigracion = true;
+        res = await supabase
+          .from("tandas")
+          .insert({ fecha_id: contexto.fechaId, tipo, nombre })
+          .select()
+          .single();
+      }
+    }
+    if (res.error && esTandaDuplicada(res.error)) {
+      // El candado de verdad vive en la base (índice
+      // tandas_una_abierta_por_fecha). El `if (tandaActiva)` de arriba mira la
+      // lista en memoria de ESTE panel: en Interlomas dos paneles con la lista
+      // vacía calcularon el mismo nombre y crearon dos "Libre 4" en el mismo
+      // segundo. Ahora el segundo insert rebota y la pantalla se pone al día.
+      await cargarTandas(contexto.fechaId);
+      alert("Ya hay una tanda abierta en esta fecha, iniciada desde otro panel.\n\nSe actualizó la pantalla para mostrarla.");
+      return;
     }
     if (res.error || !res.data) return;
     setTandaActivaLog(res.data.id);
@@ -547,14 +569,35 @@ export default function AdminPage() {
 
   const finalizarTanda = useCallback(async () => {
     if (!contexto.fechaId || !tandaActiva) return;
+    // Cerrar PRIMERO, y solo si la tanda sigue abierta. Con dos paneles
+    // abiertos los dos corren el cierre automático cada 5 s y los dos llegaban
+    // acá: el `finalizandoRef` que lo evita es por navegador. El que pierde no
+    // afecta ninguna fila y se va en silencio, en vez de repetir la cuadros y
+    // el registro del log (los duplicados de Interlomas salieron de acá).
+    const { data: cerradas, error: errCierre } = await supabase
+      .from("tandas")
+      .update({ fin: new Date().toISOString() })
+      .eq("id", tandaActiva.id)
+      .is("fin", null)
+      .select("id");
+    if (!errCierre && (cerradas?.length ?? 0) === 0) {
+      // Otro panel la cerró: él ya sacó la cuadros y ya lo registró
+      cargarTandas(contexto.fechaId);
+      return;
+    }
     // Bandera a cuadros automática al finalizar la tanda (misma escritura
     // que aplicarBandera; inline por orden de declaración de callbacks)
     setBandera("cuadros");
     await supabase.from("estado_pista").update({ bandera: "cuadros" }).eq("activo", true);
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "bandera_global", descripcion: "Bandera global: Cuadros (fin de tanda)" });
-    // Registrar el cierre ANTES de soltar la tanda para que quede dentro de ella
+    // El log queda etiquetado con la tanda porque setTandaActivaLog(null) va al
+    // final: cerrarla en la base no cambia la etiqueta, que vive en lib/log.ts
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `⏹ Tanda finalizada: ${tandaActiva.nombre}` });
-    await supabase.from("tandas").update({ fin: new Date().toISOString() }).eq("id", tandaActiva.id);
+    if (errCierre) {
+      // La cuadros ya salió —el director la necesita— pero la tanda quedó
+      // abierta en la base. Un fallo no se trata como un cierre.
+      await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `⚠️ No se pudo cerrar ${tandaActiva.nombre} en la base: ${errCierre.message}` });
+    }
     setTandaActivaLog(null);
     cargarTandas(contexto.fechaId);
   }, [contexto.fechaId, tandaActiva, cargarTandas]);
@@ -983,10 +1026,19 @@ export default function AdminPage() {
   const setSectorBandera = useCallback(async (id: string, nuevaBandera: string) => {
     // Optimistic update
     setSectores(prev => prev.map(s => s.id === id ? { ...s, bandera: nuevaBandera } : s));
-    await supabase
+    // Una bandera puesta a mano suelta la amarilla automática de ese sector: si
+    // no, el automático seguiría creyéndolo suyo y al volver a moverse el auto
+    // devolvería a verde justo lo que el director acababa de poner.
+    const { error } = await supabase
       .from("sectores_pista")
-      .update({ bandera: nuevaBandera })
+      .update({ bandera: nuevaBandera, auto_amarilla_piloto_id: null })
       .eq("id", id);
+    if (error) {
+      // Columna sin migrar: la bandera del director no puede quedarse sin
+      // aplicar por esto. Se escribe igual y el aviso de la migración lo da
+      // Dirección de Carrera, que es donde vive la amarilla automática.
+      await supabase.from("sectores_pista").update({ bandera: nuevaBandera }).eq("id", id);
+    }
     const nombreSector = sectores.find(s => s.id === id)?.nombre || "Sector";
     registrarLog({
       fecha_id: contexto.fechaId,

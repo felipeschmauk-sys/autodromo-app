@@ -941,13 +941,32 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     setMarcandoLargada(true);
     setErrorLargada(null);
     const ahora = new Date().toISOString();
-    const { error } = await supabase.from("tandas").update({ largada_at: ahora }).eq("id", tandaActivaId);
+    // Solo si no estaba marcada. Este botón se puede apretar desde el PC de la
+    // torre y desde el teléfono en boxes, y un segundo toque MOVÍA la hora de
+    // largada: con el reloj de la carrera corrido, todos los tiempos de vuelta
+    // y todas las diferencias quedan mal. La largada se marca una vez.
+    const { data, error } = await supabase
+      .from("tandas")
+      .update({ largada_at: ahora })
+      .eq("id", tandaActivaId)
+      .is("largada_at", null)
+      .select("largada_at");
     if (error) {
       setErrorLargada(
         /largada_at|column|schema cache/i.test(error.message)
           ? "Falta correr docs/task-largada-migration.sql en Supabase"
           : `No se pudo marcar: ${error.message}`
       );
+    } else if ((data?.length ?? 0) === 0) {
+      // Ya estaba marcada, acá o en otro aparato. No se pisa: se avisa con la
+      // hora que quedó, que es la que manda para los tiempos de vuelta.
+      const { data: ya } = await supabase
+        .from("tandas").select("largada_at").eq("id", tandaActivaId).maybeSingle();
+      const hora = (ya as { largada_at?: string | null } | null)?.largada_at ?? null;
+      setErrorLargada(hora
+        ? `La largada ya estaba marcada a las ${new Date(hora).toLocaleTimeString("es-CL")} — no se movió`
+        : "La largada ya estaba marcada — no se movió");
+      if (hora) setTandas(prev => prev.map(t => (t.id === tandaActivaId ? { ...t, largada_at: hora } : t)));
     } else {
       setTandas(prev => prev.map(t => (t.id === tandaActivaId ? { ...t, largada_at: ahora } : t)));
     }

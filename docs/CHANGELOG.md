@@ -3,6 +3,67 @@
 
 ---
 
+## [0.43.0] — 27 Octubre 2026
+### Corregido (varios paneles admin abiertos a la vez — Interlomas)
+Requiere correr `docs/task-panel-unico-migration.sql` en Supabase.
+
+En Interlomas había hasta tres paneles abiertos. Cada uno se creía el único
+porque los candados vivían en el navegador, y de ahí salieron las dos tandas
+"Libre 4" creadas en el mismo segundo y los registros duplicados del log.
+
+**Lo que NO se cambió, a propósito:** cualquier vista sigue pudiendo poner
+banderas y la última escritura manda. Las banderas viajan por la base
+(`estado_pista` y `sectores_pista`, con `postgres_changes` al teléfono), así
+que son una fila y el último toque gana — eso permite dejar el PC en la torre y
+operar desde el teléfono en boxes. Lo que no puede estar duplicado son las
+acciones que pasan **una sola vez**:
+
+- **Una sola tanda abierta por fecha.** `iniciarTanda` se protegía mirando su
+  propia lista en memoria: dos paneles con la lista vacía calculaban el mismo
+  nombre e insertaban los dos. Ahora el candado es un índice único parcial
+  (`tandas_una_abierta_por_fecha`, solo sobre las tandas sin cerrar) y el
+  segundo panel rebota con un aviso y refresca la pantalla
+- **La tanda se cierra una sola vez.** Los dos paneles corrían el cierre
+  automático cada 5 s y los dos llamaban a `finalizarTanda` (`finalizandoRef`
+  es por navegador). Ahora el cierre es condicional —`fin IS NULL`— y el que
+  pierde se va sin repetir la cuadros ni el registro. Si la escritura falla, la
+  cuadros sale igual y queda un `⚠️` en el log: un fallo no es un cierre
+- **La largada se marca una sola vez.** `marcarLargada` escribía la hora sin
+  preguntar si ya estaba. Un segundo toque —desde el teléfono, por ejemplo—
+  **corría el reloj de la carrera** y con él todos los tiempos de vuelta y
+  todas las diferencias. Ahora solo escribe si estaba vacía, y si ya estaba
+  marcada avisa con la hora que quedó
+
+### Corregido (la amarilla automática quedaba pegada para siempre)
+- Quién puso cada amarilla automática vivía en `autoYellowRef`, un Map del
+  navegador que abrió el panel. **Con un solo panel abierto ya fallaba:** si se
+  cerraba o se recargaba, nadie recordaba devolver el sector a verde
+- Ahora el dueño es una columna de `sectores_pista`
+  (`auto_amarilla_piloto_id`), así que cualquier panel —incluso uno recién
+  abierto— puede devolverla a verde cuando el auto se mueve. Poner y reclamar
+  van en la misma escritura, con las dos condiciones (`bandera = 'verde'` y sin
+  dueño), de modo que dos paneles con el mismo dato del GPS no la registran dos
+  veces
+- Una bandera que el director pone **a mano** suelta el dueño automático: antes
+  el automático habría devuelto a verde justo lo que el director acababa de
+  poner
+- Si la migración no está corrida, la amarilla automática **se desactiva y lo
+  dice en pantalla**, en vez de caer a un camino de respaldo que nunca se probó
+  en pista. Las banderas por sector se siguen poniendo a mano
+
+### Sin resolver
+- El cálculo de posiciones, diferencias y bandera azul **sigue corriendo en
+  cada panel abierto**: dos paneles emiten dos versiones de la carrera sobre el
+  mismo canal `estado-<fecha>` y el teléfono aplica la última. Un panel recién
+  abierto emite un estado parcial, y al piloto que falta en ese mensaje se le
+  borra la pantalla (`if (!mio) setMisGaps(null)` en `app/page.tsx`). Es el
+  paso siguiente: un solo dueño del ciclo, con arriendo en la base
+- Queda igual el caso del auto detenido con el teléfono sin batería: nunca
+  llega el dato de que volvió a moverse y la amarilla se queda puesta. Es lo
+  correcto —el auto sigue ahí— pero hay que soltarla a mano
+
+---
+
 ## [0.42.2] — 17 Octubre 2026
 ### Corregido (pilotos "Sin señal" con el teléfono funcionando — Interlomas)
 - En las pruebas de Interlomas, 10 pilotos tenían **4-5 sesiones activas a la

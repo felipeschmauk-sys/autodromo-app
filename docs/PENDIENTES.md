@@ -112,6 +112,33 @@ el historial. Lo esencial: `lib/gaps.ts`, `lib/trazado.ts` y `lib/carrera.ts` so
 TypeScript puro sin nada del navegador, así que se mudan sin cambios. Lo único
 acoplado a React es de dónde salen las categorías.
 
+**Cómo se elige quién calcula (27-10-2026).** No un "panel principal"
+configurado: si ese equipo se queda sin batería a mitad de carrera, nadie corre
+el ciclo hasta que un humano lo reconfigure. Un **arriendo** en la base
+—`fecha_id`, dueño, `expira_at`— que el que calcula renueva cada 2 s y que queda
+libre a los ~6 s si deja de renovarlo. El que lo tiene emite el estado; los
+demás se abren como vista y dibujan lo que llega, con todos sus botones
+funcionando igual. El servidor de la nube es después el mismo mecanismo: toma el
+arriendo y no lo suelta, y un navegador lo puede retomar si el servidor no está
+—un solo camino de código, dos lugares donde puede vivir.
+
+Dos cosas que no se pueden saltar:
+
+- **La memoria de la carrera tiene que estar en la base antes de mover el
+  arriendo.** Hoy los pilotos ya congelados al cruzar la meta final viven en
+  `congeladosRef` y `alTerminarRef`, refs del navegador. Si el arriendo cambia de
+  manos en la última vuelta, el dueño nuevo no sabe quién ya terminó y el
+  resultado sale revuelto. El orden estable (`ordenRef`) sí se puede reconstruir:
+  cuesta un par de segundos de temblor
+- **Chrome frena los relojes de las pestañas en segundo plano.** El panel en una
+  pestaña de atrás puede dejar de renovar estando perfectamente bien, y el
+  arriendo se pondría a saltar entre aparatos. Renovar bastante más seguido que
+  el plazo, y que el que acaba de perderlo espere antes de intentar recuperarlo
+
+Se prueba sin ir al autódromo: replay del export de Interlomas
+(`exportes/2026-10-25-Interlomas`) con un dueño y con dos alternándose, exigiendo
+el mismo resultado.
+
 ---
 
 ## Secuelas del incidente del 4 de octubre

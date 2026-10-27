@@ -110,3 +110,13 @@ Formato: fecha · decisión · razón · alternativa descartada
 ### "Quién me dobla" se mide en distancia, no en vueltas (15 Octubre 2026)
 **Decisión:** La bandera azul y el "ya me pasó" comparan el recorrido total, no los contadores de vueltas.
 **Razón:** Los contadores saltan en la meta. Si el doblado cruza antes que el doblador, quedan iguales unos segundos y la azul se apagaba con el puntero encima.
+
+### Banderas desde cualquier vista; una sola vez lo que tiene memoria (27 Octubre 2026)
+**Decisión:** Cualquier panel abierto puede poner banderas y la última escritura manda. Lo que tiene que pasar exactamente una vez —abrir la tanda, cerrarla, marcar la largada, reclamar un sector para la amarilla automática— se resuelve con una condición en la base, no con un candado en memoria del navegador.
+**Razón:** Las banderas ya viajan por una fila de `estado_pista` / `sectores_pista` y el teléfono las lee con `postgres_changes`: son idempotentes y el último toque gana sin dañar nada. Eso es justamente lo que permite dejar el PC en la torre y bajar a boxes a operar desde el teléfono. Los candados en memoria, en cambio, no se ven entre paneles: en Interlomas dos paneles con la lista de tandas vacía crearon dos "Libre 4" y los dos repitieron el cierre.
+**Alternativa descartada:** Un "admin principal" y los demás como veedores sin poder de escritura. Quita la flexibilidad que se necesita en pista y no resuelve nada: el problema no son los botones —que son idempotentes— sino el cálculo duplicado y las acciones con memoria.
+
+### La amarilla automática se apaga antes que adivinar (27 Octubre 2026)
+**Decisión:** Si falta la columna `sectores_pista.auto_amarilla_piloto_id`, la amarilla automática se desactiva y el panel lo dice en pantalla. No hay camino de respaldo que la ponga sin registrar dueño.
+**Razón:** El respaldo tendría que volver a guardar el dueño en memoria del navegador, que es el problema que se está arreglando, y sería un segundo camino que solo corre en los minutos que pasan entre desplegar y correr el SQL — nunca probado en pista. Una función de seguridad apagada y visible es más segura que una que funciona a medias sin avisar. Las banderas por sector se siguen poniendo a mano.
+
