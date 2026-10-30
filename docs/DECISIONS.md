@@ -120,3 +120,16 @@ Formato: fecha · decisión · razón · alternativa descartada
 **Decisión:** Si falta la columna `sectores_pista.auto_amarilla_piloto_id`, la amarilla automática se desactiva y el panel lo dice en pantalla. No hay camino de respaldo que la ponga sin registrar dueño.
 **Razón:** El respaldo tendría que volver a guardar el dueño en memoria del navegador, que es el problema que se está arreglando, y sería un segundo camino que solo corre en los minutos que pasan entre desplegar y correr el SQL — nunca probado en pista. Una función de seguridad apagada y visible es más segura que una que funciona a medias sin avisar. Las banderas por sector se siguen poniendo a mano.
 
+### El cálculo se reparte con un arriendo, no con un panel principal (27 Octubre 2026)
+**Decisión:** Quién calcula la carrera se decide con un arriendo de 6 s en `panel_lider` que el dueño renueva cada 2 s, tomado y renovado por la función `tomar_arriendo_panel` para que todas las horas sean las del servidor. Cualquier panel lo toma si está vencido; el que no lo tiene es vista y no recalcula nada.
+**Razón:** Un principal configurado a mano deja la carrera sin cálculo justo cuando ese equipo se queda sin batería, y obliga a un humano a reconfigurar en el peor momento. El arriendo se recupera solo en segundos y es el mismo mecanismo que después va a usar el proceso en la nube: toma el arriendo y no lo suelta, con el navegador como respaldo. Un solo camino de código, dos lugares donde puede vivir.
+**Alternativa descartada:** Comparar el vencimiento con UPDATE desde el cliente. Un panel con el reloj adelantado le robaría el arriendo a otro que está trabajando bien, que es el mismo problema de relojes por el que existe `lib/reloj.ts`.
+
+### Un panel que no puede confirmar su arriendo deja de emitir (27 Octubre 2026)
+**Decisión:** Si pasan más de 6 s sin respuesta de la base, el panel suelta el cálculo por su cuenta aunque crea que el arriendo es suyo.
+**Razón:** En la base ya venció y otro panel lo va a tomar. Un panel aislado que sigue emitiendo recrea exactamente el problema que esto arregla: dos versiones de la carrera llegando al mismo teléfono, y la suya con datos cada vez más viejos. Es la misma regla de "un fallo no es un dato" del 4 de octubre.
+
+### La llegada se guarda en la base antes de mover el arriendo (27 Octubre 2026)
+**Decisión:** Quién ya cruzó su meta final se guarda en `estado_carrera` y el ciclo no arranca hasta haberlo leído.
+**Razón:** Es el requisito del relevo. Si el cálculo cambia de panel en la última vuelta y el panel nuevo no sabe quién ya llegó, descongela a los que terminaron, el líder "vuelve a terminar" y el resultado sale revuelto. Es el único estado del cálculo donde equivocarse cuesta el resultado de la carrera y no un parpadeo: el orden estable y la histéresis de la azul se reconstruyen solos en un par de segundos.
+

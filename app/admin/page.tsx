@@ -15,6 +15,8 @@ import { suscribirPosiciones, type EstadoCarreraViva, type PosicionViva } from "
 import PantallasPilotos from "@/components/PantallasPilotos";
 import { desdeLargadaMs, transcurridoTandaS, deadlineTanda, tandaEnPausa, esVueltaDeCarrera, ordenDeRelargada, type PuestoRelargada } from "@/lib/carrera";
 import { registrarLog, setTandaActivaLog, NOMBRE_BANDERA } from "@/lib/log";
+import { useArriendoPanel } from "@/lib/arriendo";
+import { medirOffsetReloj } from "@/lib/reloj";
 const GeofenceMap = dynamic(() => import('@/components/GeofenceMap'), { ssr: false })
 const CategoriasPilotos = dynamic(() => import('@/components/CategoriasPilotos'), { ssr: false })
 const QrScanner = dynamic(() => import("@/components/QrScanner"), {
@@ -457,6 +459,24 @@ export default function AdminPage() {
   useEffect(() => { gpsStateRef.current = pilotoGpsState; }, [pilotoGpsState]);
   const fechaIdRef = useRef<string | null>(null);
   useEffect(() => { fechaIdRef.current = contexto.fechaId; }, [contexto.fechaId]);
+
+  // ── Quién calcula la carrera ─────────────────────────────────
+  // Un solo panel por fecha corre el ciclo de 1 Hz y emite a los pilotos; los
+  // demás miran. Se reparte solo y se suelta solo — no hay que elegir nada.
+  // Los botones no dependen de esto: cualquier panel pone banderas, da la
+  // largada y abre o cierra tandas. Ver lib/arriendo.ts
+  const arriendo = useArriendoPanel(autenticado ? contexto.fechaId : null);
+
+  // El desfase con el reloj del servidor. El teléfono ya lo medía para marcar
+  // los cruces; el panel lo necesita para anotar la hora de LLEGADA de cada
+  // piloto, porque si el cálculo cambia de panel esas horas se comparan entre
+  // dos relojes distintos. Ver lib/reloj.ts
+  useEffect(() => {
+    if (!autenticado) return;
+    medirOffsetReloj();
+    const id = setInterval(() => { medirOffsetReloj(); }, 300_000);
+    return () => clearInterval(id);
+  }, [autenticado]);
   const nombresSesionRef = useRef<Map<string, string>>(new Map());
   useEffect(() => {
     const m = new Map<string, string>();
@@ -1488,6 +1508,21 @@ export default function AdminPage() {
               <span className={`w-2 h-2 rounded-full inline-block ${realtimeConectado ? "bg-green-400 animate-pulse" : "bg-yellow-400"}`} />
               {realtimeConectado ? "En vivo" : "Conectando..."}
             </div>
+            {/* Quién está haciendo la cuenta. No es un permiso ni algo que
+                elegir: en "Mirando" todos los botones funcionan igual. */}
+            {contexto.fechaId && arriendo.conocido && (
+              <div
+                className={`flex items-center gap-1.5 text-xs font-medium ${arriendo.soyDueno ? "text-sky-400" : "text-gray-500"}`}
+                title={arriendo.soyDueno
+                  ? "Este equipo calcula las posiciones y diferencias que ven los pilotos"
+                  : "Otro panel está calculando. Tus botones funcionan igual."}
+              >
+                <span className={`w-2 h-2 rounded-full inline-block ${arriendo.soyDueno ? "bg-sky-400" : "bg-gray-600"}`} />
+                {arriendo.soyDueno
+                  ? "Calculando aquí"
+                  : `Mirando${arriendo.etiquetaDueno ? ` · calcula ${arriendo.etiquetaDueno}` : ""}`}
+              </div>
+            )}
             <button
               onClick={() => setAutenticado(false)}
               className="text-gray-400 hover:text-white text-xs transition-colors"
@@ -2102,6 +2137,7 @@ export default function AdminPage() {
               tandaSeleccionada={tandaSel === "todas" ? null : tandaSel}
               onSeleccionarTanda={(id) => setTandaSel(id)}
               tandaActivaId={tandaActiva?.id ?? null}
+              soyDueno={arriendo.soyDueno}
               onIniciarTanda={iniciarTanda}
               onFinalizarTanda={finalizarTanda}
               onEstado={recibirEstado}

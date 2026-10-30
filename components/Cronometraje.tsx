@@ -17,7 +17,9 @@ import { esVueltaDeCarrera, deadlineTanda, transcurridoTandaS, tandaEnPausa } fr
 import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS } from "@/lib/gps";
 import { registrarLog } from "@/lib/log";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
-import { suscribirPosiciones, abrirEmisorEstado, type EstadoCarreraViva } from "@/lib/posiciones";
+import { suscribirPosiciones, abrirEmisorEstado, suscribirEstado, type EstadoCarreraViva } from "@/lib/posiciones";
+import { leerEstadoLlegadas, guardarEstadoLlegadas, type EstadoLlegadas } from "@/lib/llegadas";
+import { aHoraServidor } from "@/lib/reloj";
 import { calcularGaps, sostenerAzul, recorridoTotal, ordenEstable, type EstadoPiloto, type Muestra, type EstadoAzul, type EstadoOrden } from "@/lib/gaps";
 import { prepararTrazado } from "@/lib/trazado";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
@@ -34,6 +36,10 @@ interface Props {
   onEstado?: (pilotos: EstadoCarreraViva["pilotos"]) => void;
   onIniciarTanda?: (tipo: string, duracionMin: number | null, vueltas: number | null) => void;
   onFinalizarTanda?: () => void;
+  /** true = este panel tiene el arriendo del cálculo y es el que emite a los
+   *  pilotos. En false la pestaña Crono funciona igual, pero mirando: los
+   *  números llegan del panel que está calculando. Ver lib/arriendo.ts */
+  soyDueno?: boolean;
 }
 
 const TIPO_LABEL: Record<string, string> = {
@@ -109,7 +115,7 @@ function fmtReloj(totalS: number): string {
   return `${m}:${s < 10 ? "0" : ""}${s}`;
 }
 
-export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda, tandaActivaId, onIniciarTanda, onFinalizarTanda, onEstado }: Props) {
+export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionarTanda, tandaActivaId, onIniciarTanda, onFinalizarTanda, onEstado, soyDueno = true }: Props) {
   // Configuración local para iniciar una tanda desde Crono
   const [cfgTipo, setCfgTipo]       = useState<string | null>(null);
   const [cfgDur, setCfgDur]         = useState("15");
@@ -231,6 +237,9 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
   // instante para medir.
   const llegadasRef = useRef<Map<string, { vueltas: number; t: number }>>(new Map());
+  // Firma de lo último que se guardó en la base, para no reescribir en cada
+  // tick: esto cambia cuando alguien cruza su meta, no cada segundo
+  const guardadoRef = useRef<string | null>(null);
   // Orden de carrera estabilizado entre ticks (ver ordenEstable en lib/gaps.ts):
   // un adelantamiento estrecho tiene que sostenerse antes de mostrarse
   const ordenRef = useRef<EstadoOrden | undefined>(undefined);
@@ -241,12 +250,44 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // reiniciarse porque el padre pase una función nueva en cada render
   const onEstadoRef = useRef(onEstado);
   useEffect(() => { onEstadoRef.current = onEstado; }, [onEstado]);
+  // Tanda cuya llegada ya se recuperó de la base. El ciclo no arranca hasta
+  // que esto coincide con la tanda activa: si empezara antes, no sabría quién
+  // ya cruzó su meta final y los descongelaría a todos.
+  const [llegadasCargadasDe, setLlegadasCargadasDe] = useState<string | null>(null);
   useEffect(() => {
     congeladosRef.current = new Map();
     alTerminarRef.current = new Map();
     llegadasRef.current   = new Map();
     liderTerminoRef.current = false;
     ordenRef.current = undefined;
+    guardadoRef.current = null;
+    setLlegadasCargadasDe(null);
+    if (!tandaActivaId) return;
+
+    // La llegada vive en la base, no en esta pestaña: así el cálculo puede
+    // cambiar de panel a mitad de carrera —o esta pestaña puede recargarse—
+    // sin que el líder "vuelva a terminar". Ver lib/llegadas.ts
+    let vivo = true;
+    let reintento: ReturnType<typeof setTimeout> | null = null;
+    const cargar = async () => {
+      try {
+        const previo = await leerEstadoLlegadas(tandaActivaId);
+        if (!vivo) return;
+        if (previo) {
+          liderTerminoRef.current = previo.liderTermino;
+          alTerminarRef.current   = new Map(Object.entries(previo.alTerminar));
+          llegadasRef.current     = new Map(Object.entries(previo.llegadas));
+          congeladosRef.current   = new Map(Object.entries(previo.congelados));
+        }
+        setLlegadasCargadasDe(tandaActivaId);
+      } catch {
+        // Un fallo no es "nadie ha llegado": se reintenta en vez de arrancar
+        // el ciclo creyendo que la carrera recién empieza
+        if (vivo) reintento = setTimeout(cargar, 3_000);
+      }
+    };
+    cargar();
+    return () => { vivo = false; if (reintento) clearTimeout(reintento); };
   }, [tandaActivaId]);
 
   // Seguir la selección compartida con el Log (cuando apunta a una tanda válida)
@@ -411,6 +452,13 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // el admin no los necesita, van directo a la pantalla de cada piloto.
   useEffect(() => {
     if (!fechaId || !largoCircuito || !tandaActivaId) return;
+    // Solo calcula y emite el panel que tiene el arriendo. Los demás miran:
+    // con dos emisores sobre el mismo canal el teléfono aplicaba el último
+    // mensaje que llegara, y un panel recién abierto emite un estado parcial
+    // que le borra la pantalla al piloto que falte en él.
+    if (!soyDueno) return;
+    // Y no antes de saber quién ya cruzó su meta final.
+    if (llegadasCargadasDe !== tandaActivaId) return;
     const emisor = abrirEmisorEstado(fechaId);
 
     // Congelado al cruzar la meta final. La carrera termina cuando cruza el
@@ -568,7 +616,10 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
           // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
           // momento para medir: el que acaba de llegar aparecería detrás de
           // cualquiera que venga a mitad de su vuelta.
-          llegadasRef.current.set(e.pid, { vueltas: e.vueltas, t: ahora });
+          // En hora de SERVIDOR: entre dos llegadas anotadas por paneles
+          // distintos hay dos relojes, y de este instante sale el orden de los
+          // que terminan en la misma vuelta
+          llegadasRef.current.set(e.pid, { vueltas: e.vueltas, t: aHoraServidor(ahora) });
           congelados.set(e.pid, { ...suyo, azul: false, fin: true });
         }
 
@@ -620,6 +671,30 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         if (ahora - desde >= DETENIDO_MS) detenidos.push({ pid, lat: p.lat, lng: p.lng });
       });
 
+      // ── Guardar la llegada cuando cambia ──────────────────────
+      // Solo cuando cambia, que es cuando alguien cruza su meta final: unas
+      // pocas veces por carrera, no en cada tick. Es lo que permite que el
+      // arriendo cambie de manos sin perder el resultado.
+      const hayLlegada =
+        liderTerminoRef.current || llegadasRef.current.size > 0 || congelados.size > 0;
+      if (tandaViva?.id && hayLlegada) {
+        const aGuardar: EstadoLlegadas = {
+          liderTermino: liderTerminoRef.current,
+          alTerminar:   Object.fromEntries(vueltasAlTerminarElLider),
+          llegadas:     Object.fromEntries(llegadasRef.current),
+          congelados:   Object.fromEntries(congelados),
+        };
+        const firma = JSON.stringify(aGuardar);
+        if (firma !== guardadoRef.current) {
+          guardadoRef.current = firma;
+          const tid = tandaViva.id;
+          guardarEstadoLlegadas(tid, aGuardar).catch(() => {
+            // Que se reintente en el próximo tick
+            if (guardadoRef.current === firma) guardadoRef.current = null;
+          });
+        }
+      }
+
       emisor.enviar({ t: ahora, pilotos, det: detenidos.length ? detenidos : undefined });
       // El mapa del panel muestra la MISMA diferencia que ve el piloto: si
       // saliera de otro cálculo dejaría de servir como verificación
@@ -627,7 +702,17 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     }, 1000);
 
     return () => { clearInterval(id); emisor.cerrar(); };
-  }, [fechaId, largoCircuito, tandaActivaId]);
+  }, [fechaId, largoCircuito, tandaActivaId, soyDueno, llegadasCargadasDe]);
+
+  // ── Modo vista: los números llegan del panel que calcula ──────
+  // El mapa de Dirección y la cuadrícula de Pantallas muestran la MISMA
+  // diferencia que ve el piloto. Cuando este panel no calcula, esa diferencia
+  // no se recalcula acá —sería una segunda verdad—: se escucha la que se está
+  // repartiendo y se pasa al panel igual que si la hubiéramos hecho nosotros.
+  useEffect(() => {
+    if (!fechaId || soyDueno) return;
+    return suscribirEstado(fechaId, (e) => { onEstadoRef.current?.(e.pilotos); });
+  }, [fechaId, soyDueno]);
 
   useEffect(() => {
     const ch = supabase

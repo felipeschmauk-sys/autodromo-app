@@ -3,6 +3,70 @@
 
 ---
 
+## [0.44.0] — 27 Octubre 2026
+### Agregado (un solo panel calcula la carrera)
+Requiere correr `docs/task-arriendo-panel-migration.sql` en Supabase.
+
+Hasta ahora **cada panel admin abierto corría su propio ciclo de 1 Hz** y emitía
+su versión de la carrera por el canal `estado-<fecha>`. El teléfono del piloto
+aplica el último mensaje que llega, así que con dos paneles recibía dos verdades
+alternadas. Y como un panel recién abierto todavía no tiene historia de todos
+los autos, emite un estado **parcial**: al piloto que falta en ese mensaje se le
+borraba la pantalla (`if (!mio) setMisGaps(null)` en `app/page.tsx`).
+
+- **Arriendo, no panel principal.** Una fila por fecha en `panel_lider`: el
+  panel que la tiene calcula y emite, y la renueva cada 2 s. Si deja de
+  renovarla, a los 6 s queda libre y otro panel la toma solo. Un principal
+  configurado a mano habría dejado la carrera sin cálculo justo cuando ese
+  equipo se queda sin batería
+- **Tomar y renovar van en una sola llamada** (`tomar_arriendo_panel`), que
+  además devuelve quién lo tiene aunque no se consiga. Es una función y no un
+  UPDATE desde el cliente por el reloj: comparar el vencimiento contra la hora
+  del navegador dejaría que un panel con el reloj adelantado le robe el
+  arriendo a otro que está trabajando bien
+- **Si no se puede confirmar el arriendo, se suelta el cálculo.** Un panel sin
+  respuesta de la base por más de 6 s deja de emitir por su cuenta: allá el
+  arriendo ya venció y otro lo va a tomar. Seguir emitiendo sería volver a
+  tener dos versiones
+- **En la barra de arriba:** "Calculando aquí" o "Mirando · calcula PC". No es
+  un permiso ni algo que haya que elegir — **todos los botones funcionan igual
+  en los dos modos**: banderas, largada, abrir y cerrar tandas
+- El panel que mira **no recalcula**: escucha el mismo estado que se reparte a
+  los pilotos y lo dibuja. El mapa de Dirección y la cuadrícula de Pantallas
+  siguen mostrando exactamente el número que ve el piloto
+- El panel que mira **sigue recibiendo las posiciones** de los teléfonos y
+  manteniendo su historial, así que si le toca tomar el arriendo puede calcular
+  de inmediato en vez de empezar de cero
+
+### Agregado (la llegada deja de vivir en el navegador)
+- Quién ya cruzó su meta final, con cuántas vueltas y cuándo, y con qué
+  diferencia quedó congelado, vivía en refs de React. **Bastaba recargar el
+  panel en la última vuelta para que el líder "volviera a terminar"**
+- Ahora se guarda en `estado_carrera`, una fila por tanda, y se vuelve a leer
+  al abrir la tanda. Se escribe solo cuando cambia —cuando alguien cruza—, no
+  en cada tick
+- **Es el requisito del relevo, no un extra:** sin esto, un arriendo que cambia
+  de manos en la última vuelta dejaría al panel nuevo sin saber quién ya llegó
+- El ciclo **no arranca** hasta haber leído esa llegada. Si la lectura falla se
+  reintenta: un fallo no es "nadie ha llegado"
+- La hora de llegada se anota en **hora de servidor** (`lib/reloj.ts`, que el
+  panel ahora también mide): entre dos llegadas anotadas por paneles distintos
+  hay dos relojes, y de ese instante sale el orden de los que terminan en la
+  misma vuelta
+
+### Sin resolver
+- **Sin probar en pista ni con el replay.** El relevo del arriendo a mitad de
+  carrera es justo lo que no se puede improvisar: hay que correr el export de
+  Interlomas con un dueño y con dos alternándose, y exigir el mismo resultado
+- La histéresis de la bandera azul (`azulRef`) sigue siendo memoria de cada
+  panel: al cambiar de dueño se reconstruye en un segundo. A diferencia de la
+  llegada, equivocarse ahí cuesta un parpadeo, no el resultado
+- Falta el paso siguiente: que el arriendo lo tome un proceso en la nube
+  siempre encendido, y que los navegadores sean siempre vista. El mecanismo ya
+  es el mismo — ver `docs/PENDIENTES.md`
+
+---
+
 ## [0.43.1] — 27 Octubre 2026
 ### Corregido (el botón de "Finalizar" quedaba en pantalla después de cerrar la tanda desde otro panel)
 - Encontrado probando la 0.43.0 con el PC y el teléfono abiertos: tanda iniciada

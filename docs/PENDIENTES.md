@@ -102,9 +102,10 @@ descargar resultados, ni que las diferencias crucen entre categorías distintas.
 
 ## Panel en la nube
 
-Hoy el ciclo que calcula posiciones y banderas vive en una pestaña del navegador:
-si ese equipo se duerme o pierde señal, los pilotos se quedan sin nada. Pasó el
-27 sep con el notebook viajando dentro de un auto.
+Hoy el ciclo que calcula posiciones y banderas vive en una pestaña del navegador.
+Desde la v0.44.0, si ese equipo se duerme o pierde señal otro panel abierto toma
+el cálculo a los 6 s — pero si no hay otro, los pilotos se quedan sin nada igual.
+Pasó el 27 sep con el notebook viajando dentro de un auto.
 
 La conversación completa —opciones evaluadas, por qué un proceso chico siempre
 encendido es el camino, y por qué no arregla la cobertura del autódromo— está en
@@ -112,28 +113,34 @@ el historial. Lo esencial: `lib/gaps.ts`, `lib/trazado.ts` y `lib/carrera.ts` so
 TypeScript puro sin nada del navegador, así que se mudan sin cambios. Lo único
 acoplado a React es de dónde salen las categorías.
 
-**Cómo se elige quién calcula (27-10-2026).** No un "panel principal"
-configurado: si ese equipo se queda sin batería a mitad de carrera, nadie corre
-el ciclo hasta que un humano lo reconfigure. Un **arriendo** en la base
-—`fecha_id`, dueño, `expira_at`— que el que calcula renueva cada 2 s y que queda
-libre a los ~6 s si deja de renovarlo. El que lo tiene emite el estado; los
-demás se abren como vista y dibujan lo que llega, con todos sus botones
-funcionando igual. El servidor de la nube es después el mismo mecanismo: toma el
-arriendo y no lo suelta, y un navegador lo puede retomar si el servidor no está
-—un solo camino de código, dos lugares donde puede vivir.
+**Cómo se elige quién calcula: hecho el 27-10-2026 (v0.44.0).** El arriendo
+está construido y corriendo en los navegadores: `panel_lider` +
+`tomar_arriendo_panel`, con la llegada guardada en `estado_carrera` para que el
+relevo no pierda el resultado. Ver `lib/arriendo.ts` y el CHANGELOG.
 
-Dos cosas que no se pueden saltar:
+**Lo que falta es solo dónde vive el dueño.** Hoy el arriendo lo toma un
+navegador; lo que queda es que lo tome un proceso siempre encendido y que los
+navegadores sean siempre vista. El mecanismo no cambia: el servidor toma el
+arriendo y no lo suelta, y si se cae, un panel lo retoma a los 6 s. Un solo
+camino de código, dos lugares donde puede vivir.
 
-- **La memoria de la carrera tiene que estar en la base antes de mover el
-  arriendo.** Hoy los pilotos ya congelados al cruzar la meta final viven en
-  `congeladosRef` y `alTerminarRef`, refs del navegador. Si el arriendo cambia de
-  manos en la última vuelta, el dueño nuevo no sabe quién ya terminó y el
-  resultado sale revuelto. El orden estable (`ordenRef`) sí se puede reconstruir:
-  cuesta un par de segundos de temblor
-- **Chrome frena los relojes de las pestañas en segundo plano.** El panel en una
-  pestaña de atrás puede dejar de renovar estando perfectamente bien, y el
-  arriendo se pondría a saltar entre aparatos. Renovar bastante más seguido que
-  el plazo, y que el que acaba de perderlo espere antes de intentar recuperarlo
+Lo que hay que resolver para eso:
+
+- **Vercel no sirve:** es serverless, no hay proceso que viva. Fly.io, Railway,
+  un VPS chico o un equipo en el autódromo
+- **Dos lugares donde el código puede quedar desactualizado.** El riesgo
+  concreto es el servidor corriendo la lógica de gaps vieja mientras los
+  teléfonos corren la nueva, sin que nadie se entere hasta la carrera
+- **Un proceso colgado es peor que uno caído:** si no muere, sigue renovando el
+  arriendo y nadie lo releva. Hace falta que el latido dependa de que el ciclo
+  realmente esté calculando, no solo de que el proceso exista
+- **Con cuentas de organizadores**, un solo servidor tiene que sostener un
+  arriendo y un ciclo por cada fecha activa a la vez
+
+**Chrome frena los relojes de las pestañas en segundo plano.** Con el arriendo
+eso dejó de ser invisible: un panel que se va al fondo pierde el arriendo en 6 s
+y otro toma el cálculo. Si no hay otro, la pestaña del fondo lo recupera al
+volver. Conviene comprobar en pista que no se pasee entre aparatos sin motivo.
 
 Se prueba sin ir al autódromo: replay del export de Interlomas
 (`exportes/2026-10-25-Interlomas`) con un dueño y con dos alternándose, exigiendo
