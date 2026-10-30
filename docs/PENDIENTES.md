@@ -8,6 +8,28 @@ tomadas (`DECISIONS.md`): son cabos sueltos con dueño claro.
 
 ---
 
+## LO PRIMERO: que la advertencia no falle en silencio
+
+El objetivo principal de la app es avisarle al piloto. Todo lo demás
+—cronometraje, diferencias, posiciones— existe para que tenga motivo de mirar
+la pantalla.
+
+Hoy ese objetivo **no está sólido**: el piloto no puede distinguir "pista
+verde" de "no me está llegando nada", porque las dos cosas se ven igual.
+
+- Diagnóstico: `docs/EVALUACION_ADVERTENCIAS.md`
+- Plan: `docs/PLAN_ADVERTENCIAS.md`
+- La regla que manda: *todo piloto en pista ve el estado vigente de las
+  advertencias, o ve que no lo está viendo, dentro de N segundos. Siempre.*
+
+Mientras no esté hecho, las banderas se avisan también por radio, y ante una
+caída del GPS el camino que sigue funcionando es la **bandera global**.
+
+Todo lo que viene más abajo en este archivo es mejora de experiencia. Esto es
+la función.
+
+---
+
 ## Auto de seguridad visible en tiempo real
 
 **Qué:** que el pace car tenga su propia cuenta y que su posición se vea como un
