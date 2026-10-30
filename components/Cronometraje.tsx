@@ -18,7 +18,8 @@ import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS } from "@/lib/gps";
 import { registrarLog } from "@/lib/log";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { suscribirPosiciones, abrirEmisorEstado, suscribirEstado, type EstadoCarreraViva } from "@/lib/posiciones";
-import { leerEstadoLlegadas, guardarEstadoLlegadas, type EstadoLlegadas } from "@/lib/llegadas";
+import { leerEstadoLlegadas, guardarEstadoLlegadas } from "@/lib/llegadas";
+import { memoriaVacia, hidratarMemoria, serializarMemoria, hayLlegada, aplicarLlegada } from "@/lib/llegada";
 import { aHoraServidor } from "@/lib/reloj";
 import { calcularGaps, sostenerAzul, recorridoTotal, ordenEstable, type EstadoPiloto, type Muestra, type EstadoAzul, type EstadoOrden } from "@/lib/gaps";
 import { prepararTrazado } from "@/lib/trazado";
@@ -226,17 +227,11 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   }, [vueltas, pilotosInfo, fechaId]);
 
   // ── Llegada: estado que NO puede perderse a mitad de carrera ──
-  // Quién ya terminó, en qué posición llegó, y con cuántas vueltas venía cada
-  // uno cuando cruzó el líder. Se limpia solo al cambiar de tanda.
-  const congeladosRef  = useRef<Map<string, EstadoCarreraViva["pilotos"][string]>>(new Map());
-  const alTerminarRef  = useRef<Map<string, number>>(new Map());
-  const liderTerminoRef = useRef(false);
-  // Cómo llegó cada piloto que ya terminó: con cuántas vueltas y en qué
-  // instante cruzó. El resultado oficial sale de acá —vueltas primero, y entre
-  // iguales quién cruzó antes— y no de la distancia recorrida, porque justo al
-  // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
-  // instante para medir.
-  const llegadasRef = useRef<Map<string, { vueltas: number; t: number }>>(new Map());
+  // Quién ya terminó, en qué posición llegó y con cuántas vueltas venía cada
+  // uno cuando cruzó el líder. La regla vive en lib/llegada.ts, aparte, para
+  // que el replay pruebe ESTE código y no una copia suya. Se limpia y se
+  // recupera de la base al cambiar de tanda.
+  const memoriaRef = useRef(memoriaVacia());
   // Firma de lo último que se guardó en la base, para no reescribir en cada
   // tick: esto cambia cuando alguien cruza su meta, no cada segundo
   const guardadoRef = useRef<string | null>(null);
@@ -255,10 +250,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // ya cruzó su meta final y los descongelaría a todos.
   const [llegadasCargadasDe, setLlegadasCargadasDe] = useState<string | null>(null);
   useEffect(() => {
-    congeladosRef.current = new Map();
-    alTerminarRef.current = new Map();
-    llegadasRef.current   = new Map();
-    liderTerminoRef.current = false;
+    memoriaRef.current = memoriaVacia();
     ordenRef.current = undefined;
     guardadoRef.current = null;
     setLlegadasCargadasDe(null);
@@ -273,12 +265,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       try {
         const previo = await leerEstadoLlegadas(tandaActivaId);
         if (!vivo) return;
-        if (previo) {
-          liderTerminoRef.current = previo.liderTermino;
-          alTerminarRef.current   = new Map(Object.entries(previo.alTerminar));
-          llegadasRef.current     = new Map(Object.entries(previo.llegadas));
-          congeladosRef.current   = new Map(Object.entries(previo.congelados));
-        }
+        if (previo) memoriaRef.current = hidratarMemoria(previo);
         setLlegadasCargadasDe(tandaActivaId);
       } catch {
         // Un fallo no es "nadie ha llegado": se reintenta en vez de arrancar
@@ -470,8 +457,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     // o que cambie una de sus dependencias— y entonces todo esto se perdía: el
     // líder "volvía a terminar", los que ya habían llegado se recongelaban con
     // otra posición y el resultado quedaba revuelto.
-    const congelados = congeladosRef.current;
-    const vueltasAlTerminarElLider = alTerminarRef.current;
+    const memoria = memoriaRef.current;
 
     const id = setInterval(() => {
       const ahora = Date.now();
@@ -538,7 +524,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         const catSinDatos = new Set<string>();
         for (const e of estados) {
           if (ahora - e.t <= FRESCURA_POS_MS) continue;
-          if (congelados.has(e.pid)) continue; // ya llegó: su resultado ya está fijo
+          if (memoria.congelados.has(e.pid)) continue; // ya llegó: su resultado ya está fijo
           const cat = catDe(e.pid);
           if (cat) catSinDatos.add(cat);
         }
@@ -595,57 +581,17 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       });
 
       // ── Meta final: congelar a cada uno en su propio cruce ──
-      const programadas = tandaViva?.vueltas_programadas ?? null;
-      if (programadas && orden.length) {
-        if (!liderTerminoRef.current && orden[0].vueltas >= programadas) {
-          liderTerminoRef.current = true;
-          // Se anota en qué vuelta venía cada uno cuando cayó la bandera: su
-          // meta es el cruce SIGUIENTE
-          orden.forEach(e => vueltasAlTerminarElLider.set(e.pid, e.vueltas));
-        }
-        for (const e of orden) {
-          if (congelados.has(e.pid)) continue;
-          const suyo = pilotos[e.pid];
-          if (!suyo) continue;
-          const yaCruzoSuMeta =
-            e.vueltas >= programadas ||
-            (liderTerminoRef.current && e.vueltas > (vueltasAlTerminarElLider.get(e.pid) ?? Infinity));
-          if (!yaCruzoSuMeta) continue;
-          // Se anota CÓMO llegó: con cuántas vueltas y en qué instante. La
-          // posición sale de ahí y no de la distancia recorrida, porque al
-          // cruzar la meta el progreso de vuelta vuelve a cero y ese es el peor
-          // momento para medir: el que acaba de llegar aparecería detrás de
-          // cualquiera que venga a mitad de su vuelta.
-          // En hora de SERVIDOR: entre dos llegadas anotadas por paneles
-          // distintos hay dos relojes, y de este instante sale el orden de los
-          // que terminan en la misma vuelta
-          llegadasRef.current.set(e.pid, { vueltas: e.vueltas, t: aHoraServidor(ahora) });
-          congelados.set(e.pid, { ...suyo, azul: false, fin: true });
-        }
-
-        // Posición final de los que ya llegaron: mandan las vueltas, y entre
-        // los que tienen las mismas, quién cruzó primero. Un doblado termina
-        // detrás de los de la vuelta del líder aunque haya cruzado antes que
-        // alguno de ellos. Se recalcula en cada tick porque un piloto puede
-        // llegar después y con MÁS vueltas que otro que ya había terminado.
-        const porCategoria = new Map<string, { pid: string; vueltas: number; t: number }[]>();
-        llegadasRef.current.forEach((ll, pid) => {
-          const cat = catDe(pid);
-          if (!cat) return;
-          if (!porCategoria.has(cat)) porCategoria.set(cat, []);
-          porCategoria.get(cat)!.push({ pid, ...ll });
-        });
-        porCategoria.forEach(lista => {
-          lista.sort((a, b) => b.vueltas - a.vueltas || a.t - b.t);
-          lista.forEach((l, i) => {
-            const cong = congelados.get(l.pid);
-            if (cong) congelados.set(l.pid, { ...cong, pos: i + 1 });
-          });
-        });
-      }
-      // El dato congelado pisa al vivo: el piloto ya terminó y no debe ver
-      // números que sigan moviéndose
-      congelados.forEach((v, pid) => { pilotos[pid] = v; });
+      // La regla está en lib/llegada.ts para que el replay corra exactamente
+      // esto. `pilotos` sale modificado: el dato congelado pisa al vivo, que
+      // el que ya terminó no debe ver números moviéndose.
+      aplicarLlegada(memoria, pilotos, orden, {
+        programadas: tandaViva?.vueltas_programadas ?? null,
+        // En hora de SERVIDOR: entre dos llegadas anotadas por paneles
+        // distintos hay dos relojes, y de este instante sale el orden de los
+        // que terminan en la misma vuelta
+        ahoraServidor: aHoraServidor(ahora),
+        categoriaDe: catDe,
+      });
 
       // ── Autos detenidos en pista ──────────────────────────────
       // Se reparte la posición, no el sector: con bandera roja la advertencia
@@ -675,15 +621,8 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // Solo cuando cambia, que es cuando alguien cruza su meta final: unas
       // pocas veces por carrera, no en cada tick. Es lo que permite que el
       // arriendo cambie de manos sin perder el resultado.
-      const hayLlegada =
-        liderTerminoRef.current || llegadasRef.current.size > 0 || congelados.size > 0;
-      if (tandaViva?.id && hayLlegada) {
-        const aGuardar: EstadoLlegadas = {
-          liderTermino: liderTerminoRef.current,
-          alTerminar:   Object.fromEntries(vueltasAlTerminarElLider),
-          llegadas:     Object.fromEntries(llegadasRef.current),
-          congelados:   Object.fromEntries(congelados),
-        };
+      if (tandaViva?.id && hayLlegada(memoria)) {
+        const aGuardar = serializarMemoria(memoria);
         const firma = JSON.stringify(aGuardar);
         if (firma !== guardadoRef.current) {
           guardadoRef.current = firma;

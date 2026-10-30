@@ -17,15 +17,35 @@
  * Uso:
  *   node scripts/replay-carrera.mjs exportes/2026-09-27-prueba-1
  *   node scripts/replay-carrera.mjs exportes/2026-09-27-prueba-1 "Carrera 5"
+ *
+ * Opciones:
+ *   --vueltas N       correr la carrera como si fuera de N vueltas. Ninguna
+ *                     carrera guardada llegó a completar las suyas, así que sin
+ *                     esto la lógica de llegada no se ejecuta nunca.
+ *   --relevo-cada N   simular que el cálculo cambia de panel cada N lecturas:
+ *                     la memoria de la llegada se serializa, pasa por JSON como
+ *                     pasaría por la base, y se recupera en un panel nuevo que
+ *                     además empieza sin orden estable. El resultado tiene que
+ *                     salir IDÉNTICO al de la corrida sin relevos.
  */
 
 import { readFileSync, existsSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join, resolve } from "node:path";
 import { vueltasDeCarrera } from "../lib/carrera.ts";
 import { calcularGaps, instanteEn, ordenEstable } from "../lib/gaps.ts";
 import { prepararTrazado } from "../lib/trazado.ts";
+import { memoriaVacia, hidratarMemoria, serializarMemoria, aplicarLlegada } from "../lib/llegada.ts";
 
-const [carpetaArg, tandaArg] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const opcion = (nombre) => {
+  const i = args.indexOf(nombre);
+  return i >= 0 ? Number(args[i + 1]) : null;
+};
+const VUELTAS_FORZADAS = opcion("--vueltas");
+const RELEVO_CADA      = opcion("--relevo-cada");
+const [carpetaArg, tandaArg] = args.filter((a, i) =>
+  !a.startsWith("--") && !(i > 0 && args[i - 1].startsWith("--")));
 if (!carpetaArg) {
   console.error("Uso: node scripts/replay-carrera.mjs <carpeta-exportada> [nombre de tanda]");
   process.exit(1);
@@ -64,27 +84,30 @@ for (const t of candidatas) {
   const filas = traza.filter((r) => r.tanda_id === t.id && r.progreso != null);
   if (filas.length < 10) continue;
 
-  const PROG = t.vueltas_programadas ?? null;
+  const PROG = VUELTAS_FORZADAS ?? t.vueltas_programadas ?? null;
   const LG   = t.largada_at ? new Date(t.largada_at).getTime() : null;
   const esCarrera = t.tipo === "carrera";
 
   console.log(`\n${"═".repeat(62)}`);
   console.log(`${t.nombre} [${t.tipo}] · ${filas.length} lecturas` +
-              (PROG ? ` · ${PROG} vueltas` : "") +
+              (PROG ? ` · ${PROG} vueltas${VUELTAS_FORZADAS ? " (forzadas)" : ""}` : "") +
               (LG ? ` · largada ${hora(LG)}` : esCarrera ? " · SIN LARGADA MARCADA" : ""));
 
   // Estado por piloto, simulando el detector que corre en cada teléfono
   const est = new Map();
-  const llegadas = new Map();
-  const alTerminar = new Map();
-  let liderTermino = false;
+  // La memoria de la llegada es la MISMA que usa el panel (lib/llegada.ts), no
+  // una copia: de eso se trata esta prueba
+  let memoria = memoriaVacia();
+  let relevos = 0;
   const eventos = [];
   let azules = 0, instantesDoblaje = 0, mejorAcercamiento = Infinity, mejorTxt = "";
   // Orden estabilizado entre lecturas, igual que el panel (Cronometraje.tsx)
   let ordenPrev;
   const azulesPor = new Map();
 
+  let leidas = 0;
   for (const r of filas) {
+    leidas++;
     const t0 = new Date(r.t_dispositivo).getTime() + (r.offset_ms ?? 0);
     const p  = r.progreso;
     const e  = est.get(r.piloto_id) ?? {
@@ -134,21 +157,43 @@ for (const t of candidatas) {
       }
     }
 
-    // Llegada: cada piloto termina en SU cruce, y el resultado lo fijan las
-    // vueltas primero y el orden de cruce después
+    // ── Llegada, con el código del panel ──────────────────────
     if (esCarrera && PROG) {
-      const orden = [...estados].sort((a, b) => (b.vueltas + b.progreso) - (a.vueltas + a.progreso));
-      if (!liderTermino && orden[0].vueltas >= PROG) {
-        liderTermino = true;
-        orden.forEach((x) => alTerminar.set(x.pid, x.vueltas));
+      const porPid = new Map(estados.map((e) => [e.pid, e]));
+      const orden = ordenPrev
+        ? ordenPrev.orden.map((pid) => porPid.get(pid)).filter(Boolean)
+        : [...estados].sort((a, b) => (b.vueltas + b.progreso) - (a.vueltas + a.progreso));
+
+      // El panel congela a partir del dato vivo de cada piloto; acá se arma lo
+      // mínimo que la regla toca
+      const vivos = {};
+      for (const e of estados) {
+        const g = gaps.get(e.pid);
+        if (!g) continue;
+        vivos[e.pid] = { pos: null, vu: e.vueltas, ad: g.adelante, at: g.atras, azul: g.azul, azulDe: null };
+      }
+
+      const antesLider = memoria.liderTermino;
+      const antes = new Set(memoria.llegadas.keys());
+      aplicarLlegada(memoria, vivos, orden, {
+        programadas: PROG, ahoraServidor: t0, categoriaDe: (pid) => catDe.get(pid) ?? null,
+      });
+      if (!antesLider && memoria.liderTermino) {
         eventos.push(`${hora(t0)}  el líder (${nombre.get(orden[0].pid)}) completa las ${PROG} vueltas`);
       }
-      for (const x of orden) {
-        if (llegadas.has(x.pid)) continue;
-        const ya = x.vueltas >= PROG || (liderTermino && x.vueltas > (alTerminar.get(x.pid) ?? Infinity));
-        if (!ya) continue;
-        llegadas.set(x.pid, { vueltas: x.vueltas, t: t0 });
-        eventos.push(`${hora(t0)}  cruza su meta ${String(nombre.get(x.pid)).padEnd(16)} con ${x.vueltas} vueltas`);
+      for (const [pid, ll] of memoria.llegadas) {
+        if (antes.has(pid)) continue;
+        eventos.push(`${hora(t0)}  cruza su meta ${String(nombre.get(pid)).padEnd(16)} con ${ll.vueltas} vueltas`);
+      }
+
+      // ── Relevo del arriendo ─────────────────────────────────
+      // Lo que de verdad pasa cuando el cálculo cambia de panel: la memoria se
+      // guarda, viaja como JSON y la recupera otro panel, que además arranca
+      // sin el orden estable del anterior.
+      if (RELEVO_CADA && leidas % RELEVO_CADA === 0) {
+        memoria = hidratarMemoria(JSON.parse(JSON.stringify(serializarMemoria(memoria))));
+        ordenPrev = undefined;
+        relevos++;
       }
     }
   }
@@ -166,17 +211,25 @@ for (const t of candidatas) {
   });
   if (descuadres === 0) console.log("  → el replay reproduce exactamente los cruces registrados en pista");
 
+  if (RELEVO_CADA) console.log(`\n  Relevos del cálculo simulados: ${relevos}`);
+
   if (eventos.length) {
     console.log("\n  Llegada:");
     eventos.forEach((e) => console.log("    " + e));
-    const lista = [...llegadas].map(([pid, l]) => ({ pid, ...l, cat: catDe.get(pid) }));
-    const porCat = new Map();
-    lista.forEach((l) => { if (!l.cat) return; if (!porCat.has(l.cat)) porCat.set(l.cat, []); porCat.get(l.cat).push(l); });
-    console.log("\n  Resultado oficial (vueltas, luego orden de cruce):");
-    porCat.forEach((li) => {
-      li.sort((a, b) => b.vueltas - a.vueltas || a.t - b.t);
-      li.forEach((l, i) => console.log(`    P${i + 1}  ${String(nombre.get(l.pid)).padEnd(16)} ${l.vueltas} vueltas · cruzó ${hora(l.t)}`));
-    });
+
+    // El resultado tal como queda congelado en el panel, que es lo que ve el
+    // piloto. Es la salida que tiene que ser idéntica con y sin relevos.
+    console.log("\n  Resultado oficial (posición congelada por el panel):");
+    const filasRes = [...memoria.congelados]
+      .map(([pid, c]) => ({ pid, pos: c.pos, vu: c.vu, t: memoria.llegadas.get(pid)?.t ?? 0,
+                            cat: catDe.get(pid) ?? "sin categoría" }))
+      .sort((a, b) => String(a.cat).localeCompare(String(b.cat)) || (a.pos ?? 99) - (b.pos ?? 99));
+    filasRes.forEach((f) => console.log(
+      `    P${f.pos ?? "-"}  ${String(nombre.get(f.pid)).padEnd(16)} ${f.vu} vueltas · cruzó ${hora(f.t)}`));
+
+    // Una línea para comparar dos corridas de un vistazo
+    const firma = filasRes.map((f) => `${f.cat}:${f.pos}:${nombre.get(f.pid)}:${f.vu}:${f.t}`).join("|");
+    console.log(`\n  Firma del resultado: ${createHash("sha1").update(firma).digest("hex").slice(0, 12)}`);
   }
 
   if (esCarrera) {

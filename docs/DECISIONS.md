@@ -133,3 +133,8 @@ Formato: fecha · decisión · razón · alternativa descartada
 **Decisión:** Quién ya cruzó su meta final se guarda en `estado_carrera` y el ciclo no arranca hasta haberlo leído.
 **Razón:** Es el requisito del relevo. Si el cálculo cambia de panel en la última vuelta y el panel nuevo no sabe quién ya llegó, descongela a los que terminaron, el líder "vuelve a terminar" y el resultado sale revuelto. Es el único estado del cálculo donde equivocarse cuesta el resultado de la carrera y no un parpadeo: el orden estable y la histéresis de la azul se reconstruyen solos en un par de segundos.
 
+### La regla de la llegada vive en un módulo, no en el componente (30 Octubre 2026)
+**Decisión:** `lib/llegada.ts` tiene la regla que congela a cada piloto en su cruce de meta, y la usan tanto `Cronometraje.tsx` como `scripts/replay-carrera.mjs`.
+**Razón:** El replay tenía su propia copia de la regla, así que validaba una imitación y no el código que corre en la carrera. Las dos copias ya habían divergido —el replay ordenaba por `vueltas + progreso` en vez del orden estable del panel—, y es justamente la parte donde equivocarse cuesta el resultado de la carrera. Con la regla afuera, probar el relevo del arriendo es serializar la memoria, pasarla por JSON y seguir: lo mismo que pasa entre dos paneles.
+**Alternativa descartada:** Simular el relevo dentro del script con su propia copia. Habría probado el script, no la app.
+

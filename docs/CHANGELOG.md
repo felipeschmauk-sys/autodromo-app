@@ -3,6 +3,56 @@
 
 ---
 
+## [0.44.1] — 30 Octubre 2026
+### Agregado (el replay prueba el relevo del arriendo)
+- **La regla de la llegada estaba escrita dos veces.** Dentro del ciclo de
+  `Cronometraje.tsx` y otra vez, por su cuenta, dentro de
+  `scripts/replay-carrera.mjs`. Dos implementaciones de lo único que decide el
+  resultado de una carrera, y la del replay ya había quedado atrás: ordenaba por
+  `vueltas + progreso` en vez de usar el orden estable del panel. Ahora las dos
+  usan `lib/llegada.ts`, así que **el replay prueba el código de verdad**
+- `--relevo-cada N` simula que el cálculo cambia de panel cada N lecturas: la
+  memoria se serializa, pasa por JSON como pasaría por la base, y la recupera un
+  panel nuevo que además arranca **sin el orden estable** del anterior
+- `--vueltas N` corre la carrera como si fuera de N vueltas
+
+### Descubierto al probar
+**Ninguna carrera guardada llegó a completar sus vueltas programadas.** El
+4-oct la Carrera 1 era de 10 y nadie pasó de 4; la Carrera 2 de 15 y nadie pasó
+de 14. En Interlomas las dos carreras quedaron sin largada marcada, así que el
+contador nunca alcanza las 19. Dicho de otra forma: **la lógica de la llegada
+—la que fija el resultado— nunca se había ejecutado sobre datos reales.** Por
+eso `--vueltas`: el GPS y los cruces son reales, lo único sintético es cuándo
+termina la carrera.
+
+### Resultado de la prueba
+Cuatro carreras reales, con el relevo forzado hasta en CADA lectura del GPS:
+
+| Carrera | Relevos | Resultado |
+|---|---:|---|
+| Interlomas · Carrera 2 (15 v) | 0 · 43 · 217 · 1.088 · 4.352 · 21.762 | idéntico |
+| Interlomas · Carrera 3 (15 v) | 0 · 261 · 13.055 | idéntico |
+| 4-oct · Carrera 2 (12 v) | 0 · 340 · 17.014 | idéntico |
+| 4-oct · Carrera 1 (2 v) | 0 · 5.065 | idéntico |
+
+La última es la prueba más dura: 12 pilotos terminando en la misma vuelta, con
+pares cruzando en el mismo segundo (juri y perez a las 12:12:45; del pino y
+Facusse a las 12:12:32). Es justo donde un relevo mal hecho cambiaría el orden,
+y el resultado sale igual con 5.065 relevos que con ninguno.
+
+Con `--relevo-cada 1` el relevo ocurre en todos los instantes posibles, así que
+no hace falta probar otros momentos de corte.
+
+### Lo que esto NO prueba
+- El viaje real por Supabase: `estado_carrera` se lee y se escribe de verdad
+  solo en el navegador. El replay prueba la regla y el ida y vuelta por JSON
+- El arriendo en sí (`lib/arriendo.ts`): que dos paneles se lo pasen en el
+  tiempo correcto sigue sin probarse fuera de la pantalla
+- El replay del 4-oct sin forzar vueltas da los mismos números que antes del
+  cambio: mismos cruces, 0 instantes de azul y el mismo acercamiento máximo
+
+---
+
 ## [0.44.0] — 27 Octubre 2026
 ### Agregado (un solo panel calcula la carrera)
 Requiere correr `docs/task-arriendo-panel-migration.sql` en Supabase.
