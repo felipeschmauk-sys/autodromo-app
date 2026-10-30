@@ -153,9 +153,14 @@ el mismo resultado.
 El análisis está en `docs/INCIDENTE_2026-10-04.md` y los tres arreglos ya están
 aplicados. Quedan tres cabos:
 
-- **Confirmar en pista.** Falta una jornada con pelotón completo donde una
-  amarilla automática no corte nada. Hasta entonces, las banderas se avisan
-  también por radio: viajan por el mismo canal de tiempo real
+- ~~Confirmar en pista~~ **CONFIRMADO QUE SIGUE PASANDO (30-10-2026).** El
+  export de Interlomas tiene **tres caídas más** con la misma huella, ya con el
+  arreglo puesto: 17-oct 12:21 (7 teléfonos → 2), 18-oct 09:25 (11 → 0, se
+  perdió el Entrenamiento 1 entero) y 18-oct 10:53 (10 → 2). Los tiempos
+  descartan `checkSession`, que fue lo que se arregló: quedan dos caminos a
+  `detenerGPS()` sin ninguna protección. Análisis completo en
+  `docs/INCIDENTE_2026-10-18.md`; se busca con
+  `scripts/buscar-caidas-gps.mjs`. Las banderas se siguen avisando por radio
 - **El panel todavía recarga la tabla entera de sectores** en cada cambio
   (`components/DireccionCarrera.tsx` y `app/admin/page.tsx`). Son dos clientes
   en el PC, no doce teléfonos, así que hoy no hace daño — pero si el panel

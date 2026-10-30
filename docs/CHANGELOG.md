@@ -3,6 +3,43 @@
 
 ---
 
+## [0.44.2] — 30 Octubre 2026
+### Analizado (el GPS se sigue cayendo después de las amarillas)
+Sin cambios de comportamiento: una herramienta y un análisis.
+
+- `scripts/buscar-caidas-gps.mjs` busca en una jornada exportada los momentos en
+  que varios teléfonos apagaron el GPS a la vez. La huella es el volcado de la
+  traza que hace `detenerGPS()` antes de soltar el `watch`: varias sesiones
+  escribiendo en el mismo segundo y después silencio. Descarta las que caen en
+  la cadencia de ~10 s de la subida normal, que con muchos autos también junta
+  varias sesiones por segundo
+- Comprobada contra el 4 de octubre: encuentra las dos caídas documentadas con
+  los mismos números del informe de entonces (46 filas de 11 sesiones a las
+  12:13:12 y 45 de 7 a las 09:05:58)
+
+**Resultado: no está resuelto.** Interlomas tiene tres caídas más, con el
+arreglo del 4 de octubre ya puesto:
+
+| Momento | Teléfonos antes | A los 11-30 s | A los 31-120 s |
+|---|---:|---:|---:|
+| 17-oct 12:21:04 | 7 | 2 | 2 |
+| 18-oct 09:25:55 | 11 | **0** | **0** |
+| 18-oct 10:53:51 | 10 | 2 | 2 |
+
+Ninguna se recuperó sola; la del 18 a las 09:25 dejó la pista sin un teléfono y
+se perdió el Entrenamiento 1 entero. Los volcados fueron a los 4, 5 y 6
+segundos de la amarilla, y `checkSession` —lo que se arregló— necesita 24 s
+como mínimo para apagar: **por ahí no pasó**. Quedan dos caminos a
+`detenerGPS()` sin ninguna protección, y la sospecha de que el cierre de
+sesiones anteriores de la 0.42.2 haya abierto más uno de ellos.
+
+Análisis completo, con lo que se descarta y lo que falta para cerrarlo, en
+`docs/INCIDENTE_2026-10-18.md`. Lo primero que hace falta no es el arreglo: es
+el registro de errores del cliente que ya estaba pendiente desde la 0.42.2, sin
+el cual cualquier arreglo es a ciegas.
+
+---
+
 ## [0.44.1] — 30 Octubre 2026
 ### Agregado (el replay prueba el relevo del arriendo)
 - **La regla de la llegada estaba escrita dos veces.** Dentro del ciclo de
