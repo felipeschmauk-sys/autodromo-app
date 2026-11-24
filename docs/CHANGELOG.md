@@ -3,6 +3,62 @@
 
 ---
 
+## [0.46.0] — 24 Noviembre 2026
+### Agregado (el teléfono deja constancia de por qué se apagó)
+Punto 4 de `docs/PLAN_ADVERTENCIAS.md`. Requiere correr
+`docs/task-eventos-cliente-migration.sql`. **Rama `advertencias`, sin desplegar.**
+
+Dos análisis completos de caídas simultáneas de GPS —4 de octubre e
+Interlomas— terminaron en **hipótesis**, porque desde fuera no hay forma de
+saber si el teléfono recibió un cierre de sesión, si le falló una consulta o si
+el efecto se volvió a montar. Mientras eso siguiera así, cualquier arreglo de
+las caídas era a ciegas: si la próxima jornada no se cae, no se sabría si fue el
+arreglo o la suerte.
+
+- `detenerGPS()` **exige un motivo**. No es opcional a propósito: es el dato que
+  faltaba. Los cinco caminos quedan distinguidos:
+  - `evento en vivo: la sesión pasó a inactiva` — el principal sospechoso, que
+    apaga con un solo evento sin confirmar nada
+  - `consulta: 3 respuestas seguidas sin sesión activa` — el camino ya blindado
+  - `cambio de sesión: llegó otra distinta` — produce la MISMA huella de volcado
+    sin ser un apagón, y en los análisis se confundía con uno
+  - `la pantalla del piloto se desmontó`
+  - salida de la geocerca
+- Las **consultas que fallan** quedan anotadas. Ya no apagan el GPS, pero son la
+  señal temprana de que la base está sufriendo
+- **Perder y recuperar el contacto** también, con cuánto llevaba sin confirmar.
+  Responde la pregunta que hoy no tiene respuesta: ¿este piloto estuvo sin ver
+  banderas, cuándo y por cuánto rato?
+
+### Pensado para servir justo cuando todo falla
+`lib/diagnostico.ts`:
+
+- **Se anota al instante, se escribe cuando se puede.** La cola vive en memoria
+  con la hora del teléfono; si la base no responde —que es exactamente lo que
+  pasa en una caída— se reintenta. La tabla guarda las dos horas, y la
+  diferencia entre ellas cuenta lo que pasó en el medio
+- **Nunca estorba.** Ningún `await`, ningún error que suba. Un registro de
+  diagnóstico no puede ser la causa de la próxima falla
+- **Cola acotada** a 100: si nunca se logra escribir, se pierden los eventos más
+  viejos y no la memoria del teléfono
+- Si la migración no está corrida, se desactiva solo y deja de intentar
+
+### El circuito completo
+- `exportar-prueba.mjs` se lleva `eventos_cliente.json` y además `sesiones.json`,
+  que faltaba y era justo lo que hizo falta en Interlomas para comprobar si hubo
+  cierres en el instante de una caída
+- `buscar-caidas-gps.mjs` muestra, alrededor de cada caída, **lo que informaron
+  los teléfonos**: tipo, motivo, piloto y cuánto tardó en escribirse el registro
+- Sigue funcionando con las jornadas viejas, que no tienen esos archivos
+
+Capturar → exportar → analizar. La próxima caída debería terminar en un
+diagnóstico y no en otra hipótesis.
+
+### Sin probar
+Compila y el lint no se mueve. Falta correr la migración y una jornada real.
+
+---
+
 ## [0.45.2] — 24 Noviembre 2026
 ### Corregido (la amarilla automática disparaba con ruido)
 Punto 3 de `docs/PLAN_ADVERTENCIAS.md`. **Rama `advertencias`, sin desplegar.**

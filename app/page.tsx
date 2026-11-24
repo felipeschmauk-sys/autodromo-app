@@ -9,6 +9,7 @@ import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type Tr
 import { abrirEmisorPosiciones, suscribirEstado, type GapsPiloto } from "@/lib/posiciones";
 import { tendenciaGap } from "@/lib/gaps";
 import { useContactoPista } from "@/lib/contacto";
+import { registrarEventoCliente, fijarContextoDiagnostico, vaciarDiagnostico } from "@/lib/diagnostico";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -1578,6 +1579,26 @@ export default function Home() {
     releer: releerBanderas,
   });
 
+  // A qué piloto y a qué fecha pertenece lo que este teléfono registre
+  useEffect(() => {
+    fijarContextoDiagnostico(eventoActivo?.fechaId ?? null, pilotoData?.id ?? null);
+  }, [eventoActivo?.fechaId, pilotoData?.id]);
+
+  // Perder y recuperar el contacto queda anotado. Es lo que permite responder
+  // después la pregunta que hoy no tiene respuesta: ¿este piloto estuvo sin ver
+  // banderas, cuándo y por cuánto rato?
+  const contactoPrevioRef = useRef(true);
+  useEffect(() => {
+    if (stage !== "app" || !eventoActivo?.fechaId) return;
+    if (contactoPrevioRef.current === contacto.hay) return;
+    contactoPrevioRef.current = contacto.hay;
+    registrarEventoCliente(
+      "contacto",
+      contacto.hay ? "recuperado" : "perdido",
+      contacto.haceMs != null ? { sinConfirmarMs: contacto.haceMs } : undefined,
+    );
+  }, [contacto.hay]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // ── Cargar trazado y estado de pista al entrar a la app ──
   useEffect(() => {
     if (stage !== "app") return;
@@ -2044,7 +2065,11 @@ export default function Home() {
       }, { onConflict: "sesion_id" }).then(() => { /* fire and forget */ });
     };
 
-    const detenerGPS = () => {
+    // El motivo no es opcional a propósito: de las dos caídas analizadas, lo
+    // único que faltaba para diagnosticar en vez de suponer era POR QUÉ se
+    // apagó este teléfono. Ver docs/INCIDENTE_2026-10-18.md
+    const detenerGPS = (motivo: string) => {
+      if (sesionId) registrarEventoCliente("gps_detenido", motivo, undefined, sesionId);
       // Último volcado del odómetro y de la traza antes de apagar
       upsertHistorial();
       volcarTraza();
@@ -2057,7 +2082,10 @@ export default function Home() {
 
     const iniciarGPS = (sid: string) => {
       if (sesionId === sid) return; // ya corriendo con esta sesión
-      detenerGPS();
+      // Esto también vuelca la traza, así que produce la MISMA huella que un
+      // apagón. Sin el motivo, los dos casos se confundían en el análisis.
+      detenerGPS("cambio de sesión: llegó otra distinta");
+      registrarEventoCliente("gps_iniciado", "sesión activa", undefined, sid);
       sesionId = sid;
       // Reset del odómetro + retomar lo ya acumulado de esta sesión
       // (por si la app se recargó a mitad de tanda)
@@ -2353,7 +2381,13 @@ export default function Home() {
         .maybeSingle();
 
       // La base no respondió. No sabemos nada nuevo, así que no cambiamos nada.
-      if (error) return;
+      if (error) {
+        // Esta es la consulta que el 4 de octubre, al fallar, apagaba el GPS.
+        // Ahora no lo apaga — pero que falle sigue siendo la señal temprana de
+        // que la base está sufriendo, y eso hay que poder verlo después.
+        registrarEventoCliente("consulta_fallida", "sesión activa", { mensaje: error.message }, sesionId);
+        return;
+      }
 
       if (data?.id) {
         sinSesionSeguidas = 0;
@@ -2368,7 +2402,7 @@ export default function Home() {
       // mucho peor que seguir midiendo unos segundos de más.
       sinSesionSeguidas++;
       if (sinSesionSeguidas < CONFIRMACIONES_CIERRE) return;
-      if (sesionId) detenerGPS();
+      if (sesionId) detenerGPS(`consulta: ${CONFIRMACIONES_CIERRE} respuestas seguidas sin sesión activa`);
       setBanderaPersonal(null);
     };
 
@@ -2423,7 +2457,10 @@ export default function Home() {
               setBanderaPersonal(s.bandera_piloto ?? null);
             }
             if (s.estado === "inactiva") {
-              detenerGPS();
+              // Este camino apaga con UN solo evento, sin confirmar nada. Es el
+              // principal sospechoso de las caídas de Interlomas y hasta ahora
+              // no dejaba rastro ninguno.
+              detenerGPS("evento en vivo: la sesión pasó a inactiva");
               setBanderaPersonal(null);
             }
           }
@@ -2435,7 +2472,8 @@ export default function Home() {
       if (pollTimer) clearTimeout(pollTimer);
       pollTimer = null;
       clearInterval(relojInterval);
-      detenerGPS();
+      detenerGPS("la pantalla del piloto se desmontó");
+      vaciarDiagnostico();
       supabase.removeChannel(ch);
     };
   }, [stage, pilotoData?.id, gpsPermiso]); // eslint-disable-line react-hooks/exhaustive-deps

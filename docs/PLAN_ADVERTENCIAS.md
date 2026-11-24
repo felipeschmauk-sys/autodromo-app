@@ -53,10 +53,15 @@ Importante, porque acota el trabajo:
 | 1. La pizarra con edad de conocimiento | **hecho** (v0.45.0, rama `advertencias`) |
 | 2. Vencer la posición y escalar | **hecho** (v0.45.1, rama `advertencias`) |
 | 3. Tiempo sostenido en la amarilla automática | **hecho** (v0.45.2, rama `advertencias`) |
-| 4. Registro de errores del cliente | pendiente |
+| 4. Registro de errores del cliente | **hecho** (v0.46.0, rama `advertencias`) |
 
-Los dos primeros están sin probar en pista y sin desplegar: viven en la rama
+Los cuatro están **sin probar en pista y sin desplegar**: viven en la rama
 `advertencias`, con producción congelada en la etiqueta `estable-2026-10-30`.
+El punto 4 requiere además correr `docs/task-eventos-cliente-migration.sql`.
+
+Lo que sigue después de probarlos: con el registro del punto 4 andando, recién
+ahí tiene sentido tocar los dos caminos a `detenerGPS()` que
+`docs/INCIDENTE_2026-10-18.md` deja señalados.
 
 ---
 

@@ -152,6 +152,17 @@ try {
 try { guardar("log_acciones.json", await pedirTodo("log_acciones", `select=*&fecha_id=eq.${fecha.id}&order=creado_at`, "log")); }
 catch (e) { console.log(`  log_acciones.json        (no se pudo: ${e.message.slice(0, 70)})`); }
 
+// Diagnóstico del teléfono: por qué se apagó cada GPS, qué consultas fallaron
+// y cuándo perdió contacto. Es lo que faltaba para analizar las caídas sin
+// adivinar (ver docs/INCIDENTE_2026-10-18.md).
+try { guardar("eventos_cliente.json", await pedirTodo("eventos_cliente", `select=*&fecha_id=eq.${fecha.id}&order=t_dispositivo`, "eventos")); }
+catch (e) { console.log(`  eventos_cliente.json     (migración sin correr — omitido)`); }
+
+// Las sesiones del día. Sin esto no se puede comprobar si hubo cierres en el
+// instante de una caída, que es justo lo que hizo falta en Interlomas.
+try { guardar("sesiones.json", await pedirTodo("sesiones", `select=*&order=inicio`, "sesiones")); }
+catch (e) { console.log(`  sesiones.json            (no se pudo: ${e.message.slice(0, 70)})`); }
+
 // Resumen legible, para saber qué hay en la carpeta sin abrir los JSON
 const traza = JSON.parse(readFileSync(join(carpeta, "traza_gps.json"), "utf8"));
 const vueltas = JSON.parse(readFileSync(join(carpeta, "vueltas.json"), "utf8"));

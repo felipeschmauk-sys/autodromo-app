@@ -56,6 +56,11 @@ const leer = (n) => {
 const traza   = leer("traza_gps.json");
 const log     = leer("log_acciones.json");
 const pilotos = leer("pilotos.json");
+// Diagnóstico del teléfono, si la jornada es posterior a la migración de
+// eventos_cliente. Es lo que convierte "varios teléfonos se apagaron" en
+// "varios teléfonos se apagaron POR ESTO".
+let eventos = [];
+try { eventos = JSON.parse(readFileSync(join(dir, "eventos_cliente.json"), "utf8")); } catch { /* jornada vieja */ }
 
 const nombre = new Map(pilotos.map((p) => [p.id, p.numero || p.nombre]));
 const seg = (s) => Math.floor(new Date(s).getTime() / 1000);
@@ -160,6 +165,19 @@ if (caidas) {
         console.log(`   ${(d >= 0 ? "+" : "") + d}s`.padStart(8) +
                     `  ${e.tipo.padEnd(15)} ${e.descripcion.slice(0, 62)}  ${quien}`);
       });
+
+    const suyos = eventos.filter((e) => { const d = seg(e.t_dispositivo) - t; return d >= -30 && d <= 60; });
+    if (suyos.length) {
+      console.log("      — lo que informaron los teléfonos —");
+      suyos.sort((a, b) => a.t_dispositivo.localeCompare(b.t_dispositivo)).forEach((e) => {
+        const d = seg(e.t_dispositivo) - t;
+        const demora = e.creado_at ? seg(e.creado_at) - seg(e.t_dispositivo) : null;
+        console.log(`   ${(d >= 0 ? "+" : "") + d}s`.padStart(8) +
+          `  ${e.tipo.padEnd(16)} ${String(e.motivo ?? "").slice(0, 52).padEnd(52)}` +
+          `  ${nombre.get(e.piloto_id) ?? ""}` +
+          (demora && demora > 2 ? `   (tardó ${demora}s en escribirse)` : ""));
+      });
+    }
   }
 }
 console.log("");
