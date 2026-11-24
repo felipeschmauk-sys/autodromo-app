@@ -33,6 +33,11 @@ import { sectorSlice, type Coordenada } from "@/lib/gps";
  */
 const CIERRE_MS = 10 * 60_000;
 
+/** Cada cuánto se repregunta por los nombres cuando todo va bien. */
+const NOMBRES_MS = 60_000;
+/** Y cuándo se reintenta si la consulta falló: sin nombres la tabla muestra ids. */
+const NOMBRES_REINTENTO_MS = 3_000;
+
 interface Props {
   fechaId: string;
   // Selección sincronizada con el Log de acciones: el panel es el dueño
@@ -354,40 +359,64 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   }, [fechaId, tandaActivaId]);
 
   // ── Nombres y números de los pilotos del evento ──
+  //
+  // Esto se pedía UNA sola vez, sin reintento. El 24-11-2026 la consulta salió
+  // justo en los segundos en que se cayó el contacto con la base, falló, y la
+  // tabla de posiciones mostró los ids de los pilotos recortados a 8
+  // caracteres durante toda la carrera. Dos reglas desde entonces:
+  //
+  //  · Un fallo NO borra los nombres que ya se tenían. Antes el mapa vacío
+  //    pisaba al bueno, así que un tropiezo de red costaba los nombres aunque
+  //    la carga anterior hubiera funcionado.
+  //  · Se reintenta pronto si falló, y se repregunta cada tanto igual: un
+  //    piloto inscrito a mitad de jornada también tiene que aparecer.
   useEffect(() => {
-    const cargar = async () => {
+    let vivo = true;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const pedir = async () => {
       // Se pide la categoría junto con el nombre. Si la migración de categorías
       // aún no se corrió, se cae al pedido de siempre y todo sigue funcionando.
       const res = await supabase
         .from("inscripciones")
         .select("piloto_id, pilotos(nombre, numero, categorias(nombre))")
         .eq("fecha_id", fechaId);
-      let data: any[] | null = res.data as any;
-      if (res.error) {
-        const r2 = await supabase
-          .from("inscripciones")
-          .select("piloto_id, pilotos(nombre, numero)")
-          .eq("fecha_id", fechaId);
-        data = r2.data as any;
-        if (r2.error) {
-          const r3 = await supabase
-            .from("inscripciones")
-            .select("piloto_id, pilotos(nombre)")
-            .eq("fecha_id", fechaId);
-          data = r3.data as any;
-        }
-      }
-      const m = new Map<string, PilotoInfo>();
-      (data || []).forEach((r: any) => {
-        m.set(r.piloto_id, {
-          nombre:    r.pilotos?.nombre || "Piloto",
-          numero:    r.pilotos?.numero ?? null,
-          categoria: r.pilotos?.categorias?.nombre ?? null,
-        });
-      });
-      setPilotosInfo(m);
+      if (!res.error) return res.data as any[];
+      const r2 = await supabase
+        .from("inscripciones")
+        .select("piloto_id, pilotos(nombre, numero)")
+        .eq("fecha_id", fechaId);
+      if (!r2.error) return r2.data as any[];
+      const r3 = await supabase
+        .from("inscripciones")
+        .select("piloto_id, pilotos(nombre)")
+        .eq("fecha_id", fechaId);
+      // Fallaron las tres: null, que NO es lo mismo que "no hay inscritos"
+      if (r3.error) return null;
+      return r3.data as any[];
     };
+
+    const cargar = async () => {
+      let data: any[] | null = null;
+      try { data = await pedir(); } catch { data = null; }
+      if (!vivo) return;
+      if (data) {
+        const m = new Map<string, PilotoInfo>();
+        data.forEach((r: any) => {
+          m.set(r.piloto_id, {
+            nombre:    r.pilotos?.nombre || "Piloto",
+            numero:    r.pilotos?.numero ?? null,
+            categoria: r.pilotos?.categorias?.nombre ?? null,
+          });
+        });
+        setPilotosInfo(m);
+      }
+      // Pronto si falló, tranquilo si salió bien
+      timer = setTimeout(cargar, data ? NOMBRES_MS : NOMBRES_REINTENTO_MS);
+    };
+
     cargar();
+    return () => { vivo = false; if (timer) clearTimeout(timer); };
   }, [fechaId]);
 
   // ── Trazado del circuito del evento (para el progreso en carrera) ──

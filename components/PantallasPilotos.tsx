@@ -43,7 +43,17 @@ const COLOR: Record<string, { bg: string; txt: string; sub: string; label: strin
   taller:         { bg: "#7c3aed", txt: "#ffffff", sub: "#ede9fe", label: "Ingrese a taller" },
   rayas:          { bg: "#facc15", txt: "#7f1d1d", sub: "#991b1b", label: "Pista resbaladiza" },
   cuadros:        { bg: "#1c1917", txt: "#ffffff", sub: "#d6d3d1", label: "Cuadros" },
+  // El teléfono avisando que NO está recibiendo el estado de pista. Faltaba
+  // acá, y como lo desconocido caía en verde, el teléfono que gritaba "no me
+  // llega nada" se dibujaba en control de carrera como "pista libre". Se vio
+  // en la prueba del 24-11-2026: cinco recuadros verdes que eran lo contrario.
+  sin_contacto:   { bg: "#111827", txt: "#fbbf24", sub: "#fde68a", label: "Sin contacto" },
 };
+
+// Lo que el teléfono informa y este panel no sabe leer: una bandera nueva, o
+// un teléfono que no está informando la suya. Verde sería mentir —un recuadro
+// verde dice "pista libre"—; gris dice "no sé", que es la verdad.
+const DESCONOCIDO = { bg: "#6b7280", txt: "#ffffff", sub: "#e5e7eb", label: "Sin dato" };
 
 interface Props {
   /** pid → lo que ese teléfono informa de sí mismo */
@@ -141,14 +151,17 @@ function Recuadro({
 }) {
   const bat = vista?.bat ?? null;
   const foco = vista?.foco !== false;
-  const bandera = vista?.bd ?? "verde";
-  const c = COLOR[bandera] ?? COLOR.verde;
+  const bandera = vista?.bd ?? null;
+  const c = (bandera && COLOR[bandera]) || DESCONOCIDO;
+  // Un teléfono sin contacto necesita atención del director tanto como uno sin
+  // señal: está en pista mostrando algo que puede estar viejo.
+  const sinContacto = bandera === "sin_contacto";
 
   // Qué merece que el recuadro grite. La regla es la de Felipe: una azul sobre
   // alguien que va primero o segundo es imposible, y un teléfono callado más de
   // 20 segundos ya no es un hipo de la red.
   const azulImposible = bandera === "azul" && est?.pos != null && est.pos <= 2;
-  const alerta = !vivo || azulImposible || (bat != null && bat <= BAT_CRITICA);
+  const alerta = !vivo || sinContacto || azulImposible || (bat != null && bat <= BAT_CRITICA);
   const aviso  = vivo && !alerta && (!foco || (bat != null && bat <= BAT_AVISO));
   const borde  = alerta ? "border-2 border-red-500"
                : aviso  ? "border-2 border-amber-400"
