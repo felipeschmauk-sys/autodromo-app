@@ -8,6 +8,7 @@ import { registrarLog } from "@/lib/log";
 import { prepararTrazado, proyectar, progresoDesdeMeta, distanciaDeMeta, type TrazadoPreparado } from "@/lib/trazado";
 import { abrirEmisorPosiciones, suscribirEstado, type GapsPiloto } from "@/lib/posiciones";
 import { tendenciaGap } from "@/lib/gaps";
+import { useContactoPista } from "@/lib/contacto";
 import { supabase } from "@/lib/supabase";
 
 const LeafletPilotMap = dynamic(() => import("@/components/LeafletPilotMap"), { ssr: false });
@@ -227,6 +228,9 @@ const FLAG_CONFIG: Record<string, {
   taller:         { bg: "bg-violet-600", border: "border-violet-700", color: "text-white",      subColor: "text-white/80",   emoji: "🔧",    title: "INGRESE A TALLER", desc: "Dirigirse a boxes de inmediato",                      pulse: false },
   rayas:          { bg: "bg-yellow-400", border: "border-red-600",    color: "text-red-700",    subColor: "text-red-800/80", emoji: "⚠️",    title: "PISTA RESBALADIZA", desc: "Aceite o escombros en el sector · Máxima precaución", pulse: false },
   cuadros:        { bg: "bg-black",      border: "border-gray-600",   color: "text-white",      subColor: "text-white/70",   emoji: "🏁",    title: "BANDERA DE CUADROS", desc: "Fin de la sesión · Ingrese a boxes",                pulse: false },
+  // No es una bandera: es la ausencia de información. Reemplaza al verde
+  // —que es el único que tranquiliza— y nunca a una advertencia.
+  sin_contacto:   { bg: "bg-gray-900",   border: "border-amber-500",  color: "text-amber-400",  subColor: "text-amber-200/80", emoji: "📵",  title: "SIN CONTACTO",     desc: "No se está recibiendo el estado de pista · Máxima precaución", pulse: true },
 };
 
 // ── Task #58: detección de sector por posición GPS ────────────
@@ -250,6 +254,7 @@ function PizarraLandscape({
   sectores,
   bandera,
   esPersonal,
+  sinContacto,
   gaps,
   posicion,
   detenidos,
@@ -261,6 +266,12 @@ function PizarraLandscape({
   sectores: Sector[];
   bandera: string;
   esPersonal: boolean;
+  /**
+   * No se puede asegurar que esta pantalla esté al día. Cuando la bandera
+   * tranquiliza, `bandera` ya llega como "sin_contacto"; esto es para avisarlo
+   * también cuando se está mostrando una advertencia, que no se reemplaza.
+   */
+  sinContacto?: boolean;
   /** Datos de carrera: posición, vuelta y diferencias con los rivales */
   gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
   /**
@@ -297,6 +308,7 @@ function PizarraLandscape({
     cuadros:        "repeating-conic-gradient(#18181b 0% 25%, #fafafa 0% 50%) 50% / 130px 130px",
     rayas:          "repeating-linear-gradient(90deg, #f5b400 0 90px, #dc2626 90px 180px)",
     blanca:         "#e5e7eb",
+    sin_contacto:   "#111827",
   };
   const TEXTOS: Record<string, string> = {
     verde:          "Circulación normal habilitada",
@@ -577,6 +589,29 @@ function PizarraLandscape({
         ["--uh" as string]: `${altoPiz / 100}px`,
       } as React.CSSProperties}
     >
+      {/* Sin contacto mientras se muestra una ADVERTENCIA: la advertencia
+          manda y el aviso va al lado. Cuando la bandera es de las que
+          tranquilizan, `bandera` ya llega como "sin_contacto" y esto no se
+          dibuja: no hay dos avisos para lo mismo. */}
+      {sinContacto && bandera !== "sin_contacto" && (
+        <div
+          className="absolute inset-x-0 flex justify-center pointer-events-none"
+          style={{ top: 0, zIndex: 4 }}
+        >
+          <span
+            style={{
+              background: "#111827", color: "#fbbf24", fontWeight: 800,
+              fontSize: "clamp(10px, calc(var(--uw) * 1.7), 18px)",
+              letterSpacing: "0.12em",
+              padding: "calc(var(--uh) * 0.7) calc(var(--uw) * 2)",
+              borderBottomLeftRadius: "10px", borderBottomRightRadius: "10px",
+            }}
+          >
+            📵 SIN CONTACTO · ESTE AVISO PUEDE ESTAR VIEJO
+          </span>
+        </div>
+      )}
+
       {/* Aviso de fijar / salir, discreto para no competir con la bandera */}
       <div
         className="absolute inset-x-0 flex justify-center pointer-events-none"
@@ -1488,6 +1523,36 @@ export default function Home() {
     setStage("app");
   };
 
+  // ── Relectura de respaldo de las banderas ────────────────────
+  // El tiempo real es el camino rápido; esto es la red. Devuelve true SOLO si
+  // las dos lecturas salieron bien: media verdad no confirma contacto, y
+  // confirmar de más es exactamente lo que no puede pasar acá.
+  const releerBanderas = useCallback(async () => {
+    const [est, sec] = await Promise.all([
+      supabase.from("estado_pista").select("*").eq("activo", true).single(),
+      supabase.from("sectores_pista").select("*").order("orden"),
+    ]);
+    if (est.error || sec.error) return false;
+    const e = est.data as { bandera?: string; sector?: string; mensaje?: string } | null;
+    if (e) {
+      setEstadoPista(prev =>
+        prev.bandera === (e.bandera || "verde") && prev.sector === e.sector && prev.mensaje === e.mensaje
+          ? prev
+          : { bandera: e.bandera || "verde", sector: e.sector, mensaje: e.mensaje });
+    }
+    const s = sec.data as Sector[] | null;
+    if (s) setSectores(prev => (JSON.stringify(prev) === JSON.stringify(s) ? prev : s));
+    return true;
+  }, []);
+
+  // ── ¿Está viendo el estado vigente, o no lo sabe? ────────────
+  // La pizarra deja de ser función de `bandera` y pasa a serlo de
+  // (bandera, hace cuánto lo confirmé). Ver lib/contacto.ts
+  const { contacto, reportarCanal, confirmar } = useContactoPista({
+    activo: stage === "app" && !!eventoActivo?.fechaId,
+    releer: releerBanderas,
+  });
+
   // ── Cargar trazado y estado de pista al entrar a la app ──
   useEffect(() => {
     if (stage !== "app") return;
@@ -1567,6 +1632,7 @@ export default function Home() {
         const n = payload.new as any;
         // Solo aceptar eventos que realmente sean de la fila activa de estado_pista
         // (las filas de sectores no tienen columna `activo`)
+        confirmar();   // llegó un dato: eso es contacto
         if (n && n.activo === true && typeof n.bandera === "string") {
           setEstadoPista(prev =>
             prev.bandera === n.bandera && prev.sector === n.sector && prev.mensaje === n.mensaje
@@ -1575,7 +1641,7 @@ export default function Home() {
           );
         }
       })
-      .subscribe();
+      .subscribe((estado) => reportarCanal("estado", estado === "SUBSCRIBED"));
 
     const chSectores = supabase
       .channel("flag-sectores")
@@ -1589,6 +1655,7 @@ export default function Home() {
         // consultas y tumbó la prueba del 4-10-2026 con cada amarilla
         // automática. Una bandera de sector tiene que costar cero consultas.
         // En un DELETE la fila viene en `old` (y `new` llega vacío, no nulo).
+        confirmar();   // llegó un dato: eso es contacto
         const borrado = payload.eventType === "DELETE";
         const fila = (borrado ? payload.old : payload.new) as Partial<Sector> | null;
         if (!fila?.id) { recargarSectores(); return; }   // payload raro: red de seguridad
@@ -1600,7 +1667,7 @@ export default function Home() {
           return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
         });
       })
-      .subscribe();
+      .subscribe((estado) => reportarCanal("sectores", estado === "SUBSCRIBED"));
 
     return () => {
       supabase.removeChannel(chEstado);
@@ -2787,6 +2854,15 @@ export default function Home() {
     : banderaSector                   ? banderaSector
     : baseGlobal;
 
+  // ── Sin contacto: reemplaza lo que tranquiliza, nunca lo que advierte ──
+  // Si no se puede asegurar que la pantalla esté al día, el verde es una
+  // mentira: se reemplaza. Pero una amarilla o una roja vieja siguen siendo la
+  // mejor información que hay, así que esas se mantienen y el aviso va al lado.
+  // Nunca se baja una advertencia a "sin contacto".
+  const sinContacto = !contacto.hay;
+  const tranquiliza = banderaEfectiva === "verde" || banderaEfectiva === "formacion";
+  const banderaMostrada = sinContacto && tranquiliza ? "sin_contacto" : banderaEfectiva;
+
   // ── Registro de la bandera que este teléfono realmente muestra ──
   // Hasta el 4-10-2026 no quedaba rastro de lo que veía el piloto. Cuando Iván
   // del Pino reportó una bandera azul yendo segundo hubo que deducir la causa
@@ -2829,29 +2905,30 @@ export default function Home() {
   }, []);
 
   const banderaLogRef = useRef<string | null>(null);
-  banderaVistaRef.current = banderaEfectiva;   // lo que se está pintando ahora
+  banderaVistaRef.current = banderaMostrada;   // lo que se está pintando ahora
   useEffect(() => {
     if (stage !== "app" || !pilotoData?.id || !eventoActivo?.fechaId) return;
     const previa = banderaLogRef.current;
-    if (previa === banderaEfectiva) return;
-    banderaLogRef.current = banderaEfectiva;
+    if (previa === banderaMostrada) return;
+    banderaLogRef.current = banderaMostrada;
     if (previa === null) return;   // primera lectura: no es un cambio
     const motivo =
-      cuadrosPropia && banderaEfectiva === "cuadros" ? "su propia meta"
-      : banderaPersonal === banderaEfectiva ? "personal del director"
-      : azulAutomatica === banderaEfectiva  ? "automática: lo están doblando"
-      : banderaSector === banderaEfectiva   ? "sector"
+      banderaMostrada === "sin_contacto"    ? "no le está llegando el estado"
+      : cuadrosPropia && banderaMostrada === "cuadros" ? "su propia meta"
+      : banderaPersonal === banderaMostrada ? "personal del director"
+      : azulAutomatica === banderaMostrada  ? "automática: lo están doblando"
+      : banderaSector === banderaMostrada   ? "sector"
       : "global";
     registrarLog({
       fecha_id:  eventoActivo.fechaId,
       piloto_id: pilotoData.id,
       tipo:      "bandera_vista",
-      descripcion: `📱 ${nombreMostrar} ve ${banderaEfectiva.toUpperCase()} (${motivo})`,
+      descripcion: `📱 ${nombreMostrar} ve ${banderaMostrada.toUpperCase()} (${motivo})`,
     });
-  }, [banderaEfectiva]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [banderaMostrada]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const flagEsPersonal = !!banderaPersonal && banderaEfectiva === banderaPersonal;
-  const flag = FLAG_CONFIG[banderaEfectiva] || FLAG_CONFIG.verde;
+  const flagEsPersonal = !!banderaPersonal && banderaMostrada === banderaPersonal;
+  const flag = FLAG_CONFIG[banderaMostrada] || FLAG_CONFIG.verde;
   const habilitado = estadoPiloto === "habilitado";
 
   // ─────────────────────────────────────────────────────────────
@@ -3508,7 +3585,8 @@ export default function Home() {
             <PizarraLandscape
               trazado={trazado}
               sectores={sectores}
-              bandera={banderaEfectiva}
+              bandera={banderaMostrada}
+              sinContacto={sinContacto}
               gaps={misGaps}
               posicion={posPiloto}
               detenidos={detenidos}
@@ -3579,6 +3657,18 @@ export default function Home() {
                     height={230}
                     onTap={() => setShowFullTrack(true)}
                   />
+                )}
+
+                {/* Sin contacto mientras se muestra una ADVERTENCIA: no se
+                    reemplaza la advertencia, se avisa encima. Con una bandera
+                    que tranquiliza, la tarjeta de abajo YA es "sin contacto". */}
+                {sinContacto && banderaMostrada !== "sin_contacto" && (
+                  <div className="rounded-xl bg-gray-900 border border-amber-500 px-4 py-2.5 flex items-center gap-2">
+                    <span className="text-lg">📵</span>
+                    <p className="text-xs font-bold tracking-wider text-amber-400 leading-snug">
+                      SIN CONTACTO · este aviso puede estar viejo
+                    </p>
+                  </div>
                 )}
 
                 {/* PIZARRA DE BANDERA — panel único grande */}

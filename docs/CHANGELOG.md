@@ -3,6 +3,64 @@
 
 ---
 
+## [0.45.0] — 24 Noviembre 2026
+### Agregado (el teléfono avisa cuando no está recibiendo)
+Punto 1 de `docs/PLAN_ADVERTENCIAS.md`. **Rama `advertencias`, sin desplegar.**
+
+La pizarra deja de ser función de `bandera` y pasa a serlo de
+**`(bandera, hace cuánto lo confirmé)`**.
+
+Antes, los dos canales de banderas se suscribían sin callback de estado y no
+había consulta de respaldo: si el canal moría, el teléfono seguía mostrando la
+última bandera recibida para siempre. Una pantalla verde significaba "pista
+libre" y "no tengo contacto" a la vez.
+
+- **Dos señales independientes** (`lib/contacto.ts`):
+  1. **Estado del canal.** `SUBSCRIBED` confirma; `CHANNEL_ERROR`, `TIMED_OUT`
+     o `CLOSED` cortan el contacto **al instante**. Es inmediata y no cuesta
+     nada. Además, cada evento que llega cuenta como confirmación
+  2. **Relectura de respaldo cada 20–30 s, con azar por teléfono**, más una al
+     recuperar el foco. Cubre el caso en que el socket se cree vivo y no llegue
+     nada. El azar no es un detalle: la ráfaga sincronizada de doce teléfonos
+     es lo que tumbó la prueba del 4-10-2026
+- Sin confirmar por ninguna vía durante **65 s** —dos relecturas perdidas más
+  margen— se declara la falta de contacto
+- **Gracia de 10 s al entrar al evento**: sin eso la pantalla gritaría al abrir
+  la app, que es la forma más rápida de enseñarle al piloto a ignorar el aviso
+- La relectura confirma **solo si las dos lecturas salieron bien**: media verdad
+  no es contacto
+
+### La regla de presentación
+**Sin contacto reemplaza lo que tranquiliza, nunca lo que advierte.**
+
+- Bandera verde o vuelta de formación → la pantalla pasa a **SIN CONTACTO**,
+  fondo oscuro con borde ámbar y pulso. El verde sin respaldo es una mentira
+- Cualquier advertencia (amarilla, roja, azul, cuadros, personal) → **se
+  mantiene**, y el aviso va al lado: *"SIN CONTACTO · este aviso puede estar
+  viejo"*. Una advertencia vieja sigue siendo la mejor información disponible, y
+  degradarla a "sin contacto" sería quitarle al piloto lo único que tenía
+- En los dos modos: vista vertical y modo conducción
+
+### El director también lo ve
+- El log de Dirección registra `📱 <piloto> ve SIN CONTACTO (no le está
+  llegando el estado)`, igual que cualquier otra bandera
+- La pestaña **Pantallas** lo muestra en el recuadro del piloto, porque lo que
+  se informa al panel pasó a ser la bandera **mostrada**. Sirve para el caso
+  parcial: el canal de banderas caído con el de posiciones todavía vivo
+
+### Lo que cuesta
+Una consulta doble por teléfono cada 20–30 s. Con doce teléfonos son unas 50
+consultas por minuto, desfasadas entre sí, contra tablas de una y cinco filas.
+Es carga constante y pequeña a cambio de que el piloto nunca vea un verde que
+no sea cierto. La ráfaga sincronizada —lo peligroso— se evita con el azar.
+
+### Sin probar
+Compila y el lint baja de 50 a 49 avisos en `app/page.tsx`. **Falta la prueba
+que importa:** teléfono en pista, modo avión unos segundos, la pantalla tiene
+que decir "sin contacto" y volver sola.
+
+---
+
 ## [0.44.2] — 30 Octubre 2026
 ### Analizado (el GPS se sigue cayendo después de las amarillas)
 Sin cambios de comportamiento: una herramienta y un análisis.
