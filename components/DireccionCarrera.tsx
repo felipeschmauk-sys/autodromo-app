@@ -28,6 +28,9 @@ interface SectorInfo {
   /** Piloto por el que el sistema puso esta amarilla. null = la puso el
    *  director a mano, y entonces el automático no la toca. */
   auto_amarilla_piloto_id: string | null;
+  /** Piloto cuya parada actual ya NO levanta amarilla acá, porque el director
+   *  forzó la verde sobre ella. Se suelta cuando el auto se mueve. */
+  auto_amarilla_silenciado_piloto_id: string | null;
 }
 
 interface PilotoEnPista {
@@ -143,25 +146,57 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
   // devolver el sector a verde y quedaba amarillo para siempre —incluso con un
   // solo panel abierto—, y con dos paneles cada uno tenía su propia idea de qué
   // amarillas eran suyas. En la tabla las comparten todos.
-  async function revertAutoYellow(pilotoId: string) {
+  //
+  // Este auto se volvió a mover (o salió de la pista): suelta lo que retenía.
+  // Son dos cosas distintas y las dos son suyas.
+  //
+  //  · La LLAVE. Si tiene una amarilla automática, vuelve a verde — pero solo
+  //    si el sector sigue mostrando ESA amarilla. Si el director puso roja o
+  //    doble amarilla encima, el dueño conserva la llave (no la suelta con
+  //    ninguna bandera que no sea la verde) y al moverse NO le borra la orden
+  //    al director: suelta la llave y deja la bandera donde está. Un auto
+  //    arrancando no puede hacer desaparecer una roja.
+  //  · El SILENCIO. Si estaba silenciado acá —el director le forzó la verde
+  //    mientras seguía detenido— moverse es lo único que lo re-arma. Si
+  //    después vuelve a parar, levanta amarilla para todos otra vez.
+  async function soltarLoQueRetiene(pilotoId: string) {
     for (const sec of sectoresRef.current) {
-      if (sec.auto_amarilla_piloto_id !== pilotoId) continue;
-      // La condición va en el UPDATE y no solo en el `if`: si dos paneles
-      // reciben el mismo dato del GPS a la vez, solo uno afecta la fila y solo
-      // uno registra el regreso a verde.
-      const { data } = await supabase
-        .from("sectores_pista")
-        .update({ bandera: "verde", auto_amarilla_piloto_id: null })
-        .eq("id", sec.id)
-        .eq("auto_amarilla_piloto_id", pilotoId)
-        .select("id");
-      if (!data?.length) continue;
-      registrarLog({
-        fecha_id: fechaId ?? null,
-        piloto_id: pilotoId,
-        tipo: "auto_yellow",
-        descripcion: `🤖 ${sec.nombre} vuelve a verde — pista despejada (automático)`,
-      });
+      if (sec.auto_amarilla_piloto_id === pilotoId) {
+        // Las condiciones van en el UPDATE y no solo en el `if`: si dos paneles
+        // reciben el mismo dato del GPS a la vez, solo uno afecta la fila y solo
+        // uno registra el regreso a verde.
+        const { data } = await supabase
+          .from("sectores_pista")
+          .update({ bandera: "verde", auto_amarilla_piloto_id: null })
+          .eq("id", sec.id)
+          .eq("auto_amarilla_piloto_id", pilotoId)
+          .eq("bandera", "amarilla")
+          .select("id");
+        if (data?.length) {
+          registrarLog({
+            fecha_id: fechaId ?? null,
+            piloto_id: pilotoId,
+            tipo: "auto_yellow",
+            descripcion: `🤖 ${sec.nombre} vuelve a verde — pista despejada (automático)`,
+          });
+        } else {
+          // El sector ya no muestra la amarilla automática: manda otra bandera
+          // del director. Se suelta la llave sin tocarle la orden.
+          await supabase
+            .from("sectores_pista")
+            .update({ auto_amarilla_piloto_id: null })
+            .eq("id", sec.id)
+            .eq("auto_amarilla_piloto_id", pilotoId)
+            .neq("bandera", "amarilla");
+        }
+      }
+      if (sec.auto_amarilla_silenciado_piloto_id === pilotoId) {
+        await supabase
+          .from("sectores_pista")
+          .update({ auto_amarilla_silenciado_piloto_id: null })
+          .eq("id", sec.id)
+          .eq("auto_amarilla_silenciado_piloto_id", pilotoId);
+      }
     }
   }
 
@@ -181,7 +216,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     if (dentroGeocerca === false) {
       lentoDesdeRef.current.delete(pilotoId);
       rapidoDesdeRef.current.delete(pilotoId);
-      await revertAutoYellow(pilotoId);
+      await soltarLoQueRetiene(pilotoId);
       return;
     }
     if (dentroGeocerca !== true) return;
@@ -200,20 +235,29 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
       lentoDesdeRef.current.set(pilotoId, desde);
       if (ahora - desde < DETENIDO_MS) return;
 
-      // Detenido en pista → amarilla en su sector
+      // Detenido en pista → amarilla en su sector, salvo que esta misma parada
+      // ya esté silenciada: el director le forzó la verde acá y mientras no se
+      // mueva no vuelve a levantar nada. Sin esto, la orden del director
+      // duraría lo que tarda la lectura siguiente del GPS.
       const sector = detectSectorByPos(lat, lng);
-      if (sector && sector.bandera === "verde" && !sector.auto_amarilla_piloto_id) {
+      if (
+        sector &&
+        sector.bandera === "verde" &&
+        !sector.auto_amarilla_piloto_id &&
+        sector.auto_amarilla_silenciado_piloto_id !== pilotoId
+      ) {
         // Reclamar el sector y ponerle la amarilla en la misma escritura, con
-        // las dos condiciones puestas: el sector tiene que seguir en verde y
-        // sin dueño. Si no afectó filas, otro panel llegó primero o el director
-        // cambió la bandera a mano en el intertanto — en los dos casos esta
-        // amarilla no es nuestra y no se registra.
+        // las tres condiciones puestas: el sector tiene que seguir en verde,
+        // sin dueño y sin silenciarnos. Si no afectó filas, otro panel llegó
+        // primero o el director cambió la bandera a mano en el intertanto — en
+        // los dos casos esta amarilla no es nuestra y no se registra.
         const { data } = await supabase
           .from("sectores_pista")
           .update({ bandera: "amarilla", auto_amarilla_piloto_id: pilotoId })
           .eq("id", sector.id)
           .eq("bandera", "verde")
           .is("auto_amarilla_piloto_id", null)
+          .or(`auto_amarilla_silenciado_piloto_id.is.null,auto_amarilla_silenciado_piloto_id.neq.${pilotoId}`)
           .select("id");
         if (!data?.length) return;
         registrarLog({
@@ -234,7 +278,7 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
       const desde = rapidoDesdeRef.current.get(pilotoId) ?? ahora;
       rapidoDesdeRef.current.set(pilotoId, desde);
       if (ahora - desde < DETENIDO_MS) return;
-      await revertAutoYellow(pilotoId);
+      await soltarLoQueRetiene(pilotoId);
     } else {
       // Banda intermedia: ni detenido ni en movimiento. No se avanza ninguna de
       // las dos cuentas, pero tampoco se reinician: un auto que oscila entre 11
@@ -275,9 +319,14 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     const load = async () => {
       const { data } = await supabase.from("sectores_pista").select("*").order("orden");
       // Sin la columna del dueño, la amarilla automática no se puede devolver a
-      // verde desde otro panel: se apaga y se avisa en pantalla. Preferimos
-      // decirlo a tener un camino de respaldo que nunca se probó en pista.
-      if (data?.length) setFaltaMigracion(!("auto_amarilla_piloto_id" in data[0]));
+      // verde desde otro panel; sin la del silencio, la verde que fuerce el
+      // director no aguanta un segundo. Faltando cualquiera de las dos, el
+      // automático se apaga y se avisa en pantalla: preferimos decirlo a tener
+      // un camino de respaldo que nunca se probó en pista.
+      if (data?.length) setFaltaMigracion(
+        !("auto_amarilla_piloto_id" in data[0]) ||
+        !("auto_amarilla_silenciado_piloto_id" in data[0])
+      );
       // Solo actualizar si cambió de verdad — evita redibujar el mapa en cada evento
       if (data) setSectores(prev => JSON.stringify(prev) === JSON.stringify(data) ? prev : data);
     };

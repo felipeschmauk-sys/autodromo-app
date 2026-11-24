@@ -1,0 +1,25 @@
+-- ── La llave de la amarilla automática ────────────────────────
+--
+-- Regla (definida por Felipe, 24-11-2026):
+--
+--   El auto que se detiene levanta la amarilla de su sector y queda con la
+--   LLAVE: solo él la devuelve a verde, y la devuelve moviéndose. La única
+--   orden que le quita la llave es la VERDE forzada por el director en ESE
+--   sector. Con cualquier otra bandera —roja, doble amarilla— el dueño
+--   conserva la llave y el sector no se libera.
+--
+-- Cuando el director fuerza la verde, el auto sigue detenido donde estaba. Sin
+-- esta columna el automático lo volvería a levantar en la lectura siguiente y
+-- la orden del director duraría un segundo. Acá queda anotado qué piloto está
+-- silenciado en el sector: su parada ACTUAL ya no levanta nada.
+--
+-- El silencio no se vence por tiempo: se re-arma con el movimiento. El auto se
+-- mueve, suelta el silencio, y si vuelve a parar levanta amarilla para todos
+-- otra vez.
+--
+-- Límite conocido: un slot por sector. Si dos autos quedan detenidos en el
+-- mismo sector y el director fuerza la verde dos veces, el segundo silencio
+-- sobreescribe el primero. La consecuencia es una amarilla de más que el
+-- director vuelve a bajar, no un aviso perdido.
+ALTER TABLE sectores_pista
+  ADD COLUMN IF NOT EXISTS auto_amarilla_silenciado_piloto_id UUID;

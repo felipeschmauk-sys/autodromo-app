@@ -48,6 +48,10 @@ interface Sector {
   punto_inicio: number;
   punto_fin: number;
   bandera: string;
+  /** Piloto que tiene la llave de la amarilla automática de este sector. */
+  auto_amarilla_piloto_id?: string | null;
+  /** Piloto cuya parada actual ya no levanta amarilla acá. */
+  auto_amarilla_silenciado_piloto_id?: string | null;
 }
 interface Piloto {
   id: string;
@@ -1052,12 +1056,31 @@ export default function AdminPage() {
   const setSectorBandera = useCallback(async (id: string, nuevaBandera: string) => {
     // Optimistic update
     setSectores(prev => prev.map(s => s.id === id ? { ...s, bandera: nuevaBandera } : s));
-    // Una bandera puesta a mano suelta la amarilla automática de ese sector: si
-    // no, el automático seguiría creyéndolo suyo y al volver a moverse el auto
-    // devolvería a verde justo lo que el director acababa de poner.
+    // ── Quién tiene la llave de la amarilla automática ─────────
+    // El auto que se detiene levanta la amarilla de su sector y queda con la
+    // llave: la devuelve a verde moviéndose, y nadie más la saca. La ÚNICA
+    // orden que le quita la llave es la VERDE forzada acá, en ese sector.
+    //
+    // Con la verde forzada el auto queda liberado, pero sigue detenido donde
+    // estaba. Si no se anota que está silenciado, el automático lo vuelve a
+    // levantar en la lectura siguiente y esta orden dura un segundo. El
+    // silencio no se vence por tiempo: se re-arma con el movimiento.
+    //
+    // Con cualquier otra bandera —roja, doble amarilla— el dueño CONSERVA la
+    // llave. El sector muestra lo que puso el director, y el auto, al moverse,
+    // suelta la llave sin borrarle la orden.
+    const dueno = sectores.find(s => s.id === id)?.auto_amarilla_piloto_id ?? null;
+    const cambios: Record<string, unknown> = { bandera: nuevaBandera };
+    if (nuevaBandera === "verde") {
+      cambios.auto_amarilla_piloto_id = null;
+      // Solo se silencia si había dueño. Si no había, no se toca el silencio
+      // que pueda estar puesto: es de un auto que sigue detenido ahí y al que
+      // ya se le forzó la verde antes, y borrarlo lo dejaría levantar otra vez.
+      if (dueno) cambios.auto_amarilla_silenciado_piloto_id = dueno;
+    }
     const { error } = await supabase
       .from("sectores_pista")
-      .update({ bandera: nuevaBandera, auto_amarilla_piloto_id: null })
+      .update(cambios)
       .eq("id", id);
     if (error) {
       // Columna sin migrar: la bandera del director no puede quedarse sin
@@ -1069,7 +1092,8 @@ export default function AdminPage() {
     registrarLog({
       fecha_id: contexto.fechaId,
       tipo: "bandera_sector",
-      descripcion: `${nombreSector}: bandera ${NOMBRE_BANDERA[nuevaBandera] || nuevaBandera} (director)`,
+      descripcion: `${nombreSector}: bandera ${NOMBRE_BANDERA[nuevaBandera] || nuevaBandera} (director)`
+        + (dueno && nuevaBandera === "verde" ? " — libera la amarilla automática" : ""),
     });
   }, [sectores, contexto.fechaId]);
 
