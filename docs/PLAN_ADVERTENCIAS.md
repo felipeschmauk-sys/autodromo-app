@@ -52,7 +52,7 @@ Importante, porque acota el trabajo:
 |---|---|
 | 1. La pizarra con edad de conocimiento | **hecho** (v0.45.0, rama `advertencias`) |
 | 2. Vencer la posición y escalar | **hecho** (v0.45.1, rama `advertencias`) |
-| 3. Tiempo sostenido en la amarilla automática | pendiente |
+| 3. Tiempo sostenido en la amarilla automática | **hecho** (v0.45.2, rama `advertencias`) |
 | 4. Registro de errores del cliente | pendiente |
 
 Los dos primeros están sin probar en pista y sin desplegar: viven en la rama

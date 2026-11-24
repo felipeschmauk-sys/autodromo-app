@@ -3,6 +3,55 @@
 
 ---
 
+## [0.45.2] — 24 Noviembre 2026
+### Corregido (la amarilla automática disparaba con ruido)
+Punto 3 de `docs/PLAN_ADVERTENCIAS.md`. **Rama `advertencias`, sin desplegar.**
+
+`checkAutoYellow` decidía **solo por velocidad**, con histéresis de 10 y 13 km/h
+pero sin exigir que el auto llevara detenido **ningún tiempo**. El punto de auto
+detenido que se dibuja en la pantalla de los demás sí exigía `DETENIDO_MS` (5 s)
+sostenidos: eran dos reglas distintas para el mismo hecho, y la que disparaba la
+bandera era la más nerviosa.
+
+- Ahora la amarilla sale recién con **5 s seguidos** bajo el umbral, y se quita
+  recién con **5 s seguidos** por encima de `REANUDA_KMH`. Tarde para quitarla
+  es seguro; temprano, no
+- En la banda intermedia (11–13 km/h) no se avanza ninguna de las dos cuentas
+  pero tampoco se reinician: un auto que oscila ahí no está ni arrancando ni
+  parando
+- Salir de la geocerca sigue revirtiendo de inmediato y además limpia las dos
+  cuentas
+
+### Medido, no supuesto
+`scripts/simular-amarilla-automatica.mjs` corre las dos reglas sobre la traza
+real de Interlomas (78.064 lecturas, 17 y 18 de octubre):
+
+| | Episodios | De 10 s o menos | Minutos de amarilla |
+|---|---:|---:|---:|
+| Regla de hoy | 15 | **10** | 71,6 |
+| Regla nueva | **7** | 2 | 71,1 |
+
+Desaparecen ocho episodios, y son justamente los absurdos: **0,4 · 0,7 · 1,5 ·
+2 · 4 · 4 segundos**. Los que sobreviven son los de verdad (11, 20, 14, 28 s) y
+siguen saliendo, apenas 5 o 6 segundos más tarde.
+
+**El dato que manda:** los minutos totales de amarilla casi no cambian, 71,6
+contra 71,1. No se está avisando menos — se está avisando **la misma cantidad
+de veces que hace falta, con la mitad de eventos**. Y cada evento es un abanico
+a todos los teléfonos, que es la carga que correlaciona con las caídas del GPS.
+
+El script toma `--segundos N` para volver a elegir el umbral con datos si 5 s
+resulta lento en pista.
+
+### El costo, dicho claro
+La amarilla verdadera sale **5 segundos más tarde** que antes. A ritmo de
+carrera son unos 150 m de aproximación. Se acepta porque el punto de auto
+detenido ya esperaba esos mismos 5 s, así que la bandera iba por delante del
+aviso que la acompaña, y porque una bandera que salta sobre ruido deja de
+significar algo.
+
+---
+
 ## [0.45.1] — 24 Noviembre 2026
 ### Corregido (la bandera de sector salía de una posición que nunca vencía)
 Punto 2 de `docs/PLAN_ADVERTENCIAS.md`. **Rama `advertencias`, sin desplegar.**

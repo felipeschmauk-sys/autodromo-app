@@ -11,7 +11,7 @@
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
-import { getTrazadoActivo, sectorContienePunto, DETENIDO_KMH, REANUDA_KMH, type Coordenada } from "@/lib/gps";
+import { getTrazadoActivo, sectorContienePunto, DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS, type Coordenada } from "@/lib/gps";
 import { registrarLog } from "@/lib/log";
 
 const LeafletAdminMap = dynamic(() => import("@/components/LeafletAdminMap"), { ssr: false });
@@ -92,6 +92,14 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
   const banderaRef    = useRef<string>("verde");
   /** Sin la columna del dueño en la base, el automático no corre. Ver `load`. */
   const faltaMigracionRef = useRef(false);
+  // Desde cuándo viene lento o rápido cada auto. La amarilla automática decidía
+  // SOLO por velocidad, sin exigir que el auto llevara detenido ningún tiempo:
+  // de las 12 amarillas de Interlomas, 8 duraron 10 s o menos y tres duraron 3,
+  // 4 y 6 segundos. Un auto "detenido" tres segundos no es un auto detenido, es
+  // una curva lenta o ruido del GPS. Y cada una de esas se abre en abanico a
+  // todos los teléfonos. Ver docs/PLAN_ADVERTENCIAS.md, punto 3.
+  const lentoDesdeRef  = useRef<Map<string, number>>(new Map());
+  const rapidoDesdeRef = useRef<Map<string, number>>(new Map());
 
   useEffect(() => { trazadoRef.current  = trazado;  }, [trazado]);
   useEffect(() => { sectoresRef.current = sectores; }, [sectores]);
@@ -170,10 +178,28 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
     // Solo revertir si está CONFIRMADO fuera (false). Si es null/desconocido,
     // no hacer nada — el jitter del GPS en el borde de la geocerca causaba
     // un bucle encender/apagar cada 3 segundos.
-    if (dentroGeocerca === false) { await revertAutoYellow(pilotoId); return; }
+    if (dentroGeocerca === false) {
+      lentoDesdeRef.current.delete(pilotoId);
+      rapidoDesdeRef.current.delete(pilotoId);
+      await revertAutoYellow(pilotoId);
+      return;
+    }
     if (dentroGeocerca !== true) return;
 
+    const ahora = Date.now();
+
     if (velocidad <= DETENIDO_KMH) {
+      // Dejó de ir rápido: se cae la cuenta para volver a verde
+      rapidoDesdeRef.current.delete(pilotoId);
+      // Y empieza (o sigue) la cuenta de detenido. La amarilla sale recién
+      // cuando el auto lleva DETENIDO_MS seguidos bajo el umbral, que es el
+      // mismo tiempo que ya se exige para dibujar el punto de auto detenido en
+      // la pantalla de los demás. Eran dos reglas distintas para el mismo
+      // hecho, y la que disparaba la bandera era la más nerviosa.
+      const desde = lentoDesdeRef.current.get(pilotoId) ?? ahora;
+      lentoDesdeRef.current.set(pilotoId, desde);
+      if (ahora - desde < DETENIDO_MS) return;
+
       // Detenido en pista → amarilla en su sector
       const sector = detectSectorByPos(lat, lng);
       if (sector && sector.bandera === "verde" && !sector.auto_amarilla_piloto_id) {
@@ -198,9 +224,21 @@ export default function DireccionCarrera({ fechaId, mapHeight = 320, circuitoId,
         });
       }
     } else if (velocidad > REANUDA_KMH) {
-      // Histéresis: recién sobre REANUDA_KMH se considera "en movimiento" y se
-      // revierte. En la banda intermedia no se hace nada (anti-parpadeo).
+      // Histéresis de velocidad: recién sobre REANUDA_KMH se considera "en
+      // movimiento". En la banda intermedia no se toca nada (anti-parpadeo).
+      lentoDesdeRef.current.delete(pilotoId);
+      // Y además histéresis de TIEMPO: hay que sostener el movimiento. Quitar
+      // la amarilla apenas el auto roza el umbral es lo que hacía que la misma
+      // bandera se pusiera y se quitara dos veces en diez segundos.
+      // Tarde para quitarla es seguro; temprano, no.
+      const desde = rapidoDesdeRef.current.get(pilotoId) ?? ahora;
+      rapidoDesdeRef.current.set(pilotoId, desde);
+      if (ahora - desde < DETENIDO_MS) return;
       await revertAutoYellow(pilotoId);
+    } else {
+      // Banda intermedia: ni detenido ni en movimiento. No se avanza ninguna de
+      // las dos cuentas, pero tampoco se reinician: un auto que oscila entre 11
+      // y 12 km/h no está ni arrancando ni parando.
     }
   }
 
