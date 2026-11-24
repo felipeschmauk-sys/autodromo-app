@@ -25,6 +25,14 @@ import { calcularGaps, sostenerAzul, recorridoTotal, ordenEstable, type EstadoPi
 import { prepararTrazado } from "@/lib/trazado";
 import { sectorSlice, type Coordenada } from "@/lib/gps";
 
+/**
+ * Cuánto sigue trabajando el ciclo después de que la tanda se cierra, para
+ * alcanzar a darle su bandera a cuadros a cada piloto en su vuelta de cierre.
+ * Generoso a propósito: cerrar antes de tiempo deja a alguien sin su llegada,
+ * y de más solo cuesta un mensaje por segundo en un canal que ya está abierto.
+ */
+const CIERRE_MS = 10 * 60_000;
+
 interface Props {
   fechaId: string;
   // Selección sincronizada con el Log de acciones: el panel es el dueño
@@ -155,10 +163,38 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // su posición por mejor vuelta en vez del orden de carrera, y la bandera azul
   // no llegó a evaluarse nunca. La tabla del panel sí se actualizaba, porque su
   // useMemo sí declara la tanda como dependencia.
+  // ── La tanda que el ciclo tiene que atender ──────────────────
+  // La activa, y TAMBIÉN la que acaba de cerrarse mientras los autos completan
+  // su vuelta de cierre. El ciclo moría junto con la tanda, y la bandera a
+  // cuadros de cada piloto llega justo después del cierre —cuando cruza la
+  // meta—, así que apagando el emisor en ese momento no la recibía nadie. Por
+  // eso el 24-11-2026 la cuadros salía como bandera global para todos a la
+  // vez, que es exactamente lo que no debe pasar: el que viene a mitad de
+  // circuito sigue corriendo.
+  const [tandaCicloId, setTandaCicloId] = useState<string | null>(null);
+  // El valor depende de la HORA, que no es una prop: no se puede derivar en el
+  // render sin volverlo impuro. Espejo en estado, como el resto del archivo.
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    if (tandaActivaId) { setTandaCicloId(tandaActivaId); return; }
+    // Sin tanda activa: se sigue atendiendo la última cerrada hasta que vence
+    // la ventana de cierre, y el temporizador la suelta.
+    const cerradas = tandas.filter(t => t.fin);
+    if (!cerradas.length) { setTandaCicloId(null); return; }
+    const ultima = cerradas.reduce((a, b) =>
+      new Date(a.fin!).getTime() >= new Date(b.fin!).getTime() ? a : b);
+    const resta = new Date(ultima.fin!).getTime() + CIERRE_MS - Date.now();
+    if (resta <= 0) { setTandaCicloId(null); return; }
+    setTandaCicloId(ultima.id);
+    const soltar = setTimeout(() => setTandaCicloId(null), resta);
+    return () => clearTimeout(soltar);
+  }, [tandaActivaId, tandas]);
+  /* eslint-enable react-hooks/set-state-in-effect */
+
   const tandaVivaRef = useRef<Tanda | null>(null);
   useEffect(() => {
-    tandaVivaRef.current = tandas.find(t => t.id === tandaActivaId) ?? null;
-  }, [tandas, tandaActivaId]);
+    tandaVivaRef.current = tandas.find(t => t.id === tandaCicloId) ?? null;
+  }, [tandas, tandaCicloId]);
 
   // ── Verificación de la relargada ────────────────────────────
   // Tras una roja, el verde significa que la carrera se relanza en el siguiente
@@ -250,7 +286,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     ordenRef.current = undefined;
     guardadoRef.current = null;
     setLlegadasCargadasDe(null);
-    if (!tandaActivaId) return;
+    if (!tandaCicloId) return;
 
     // La llegada vive en la base, no en esta pestaña: así el cálculo puede
     // cambiar de panel a mitad de carrera —o esta pestaña puede recargarse—
@@ -259,10 +295,10 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     let reintento: ReturnType<typeof setTimeout> | null = null;
     const cargar = async () => {
       try {
-        const previo = await leerEstadoLlegadas(tandaActivaId);
+        const previo = await leerEstadoLlegadas(tandaCicloId);
         if (!vivo) return;
         if (previo) memoriaRef.current = hidratarMemoria(previo);
-        setLlegadasCargadasDe(tandaActivaId);
+        setLlegadasCargadasDe(tandaCicloId);
       } catch {
         // Un fallo no es "nadie ha llegado": se reintenta en vez de arrancar
         // el ciclo creyendo que la carrera recién empieza
@@ -271,7 +307,7 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
     };
     cargar();
     return () => { vivo = false; if (reintento) clearTimeout(reintento); };
-  }, [tandaActivaId]);
+  }, [tandaCicloId]);
 
   // Seguir la selección compartida con el Log (cuando apunta a una tanda válida)
   useEffect(() => {
@@ -434,14 +470,14 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
   // resuelve quién va adelante y quién atrás. Estos números NO se muestran acá:
   // el admin no los necesita, van directo a la pantalla de cada piloto.
   useEffect(() => {
-    if (!fechaId || !largoCircuito || !tandaActivaId) return;
+    if (!fechaId || !largoCircuito || !tandaCicloId) return;
     // Solo calcula y emite el panel que tiene el arriendo. Los demás miran:
     // con dos emisores sobre el mismo canal el teléfono aplicaba el último
     // mensaje que llegara, y un panel recién abierto emite un estado parcial
     // que le borra la pantalla al piloto que falte en él.
     if (!soyDueno) return;
     // Y no antes de saber quién ya cruzó su meta final.
-    if (llegadasCargadasDe !== tandaActivaId) return;
+    if (llegadasCargadasDe !== tandaCicloId) return;
     const emisor = abrirEmisorEstado(fechaId);
 
     // Congelado al cruzar la meta final. La carrera termina cuando cruza el
@@ -580,8 +616,17 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
       // La regla está en lib/llegada.ts para que el replay corra exactamente
       // esto. `pilotos` sale modificado: el dato congelado pisa al vivo, que
       // el que ya terminó no debe ver números moviéndose.
+      // Una carrera termina por vueltas o por tiempo, lo que pase primero, y
+      // también cuando el director la finaliza a mano. En los tres casos la
+      // bandera ya cayó: a partir de acá cada piloto termina en su propio
+      // cruce por meta, y hasta que cruce sigue corriendo.
+      const dl = tandaViva ? deadlineTanda(tandaViva, ahora) : null;
+      const porTiempo = esCarreraTanda &&
+        (!!tandaViva?.fin || (dl != null && ahora >= dl));
+
       aplicarLlegada(memoria, pilotos, orden, {
         programadas: tandaViva?.vueltas_programadas ?? null,
+        porTiempo,
         // En hora de SERVIDOR: entre dos llegadas anotadas por paneles
         // distintos hay dos relojes, y de este instante sale el orden de los
         // que terminan en la misma vuelta
@@ -630,14 +675,21 @@ export default function Cronometraje({ fechaId, tandaSeleccionada, onSeleccionar
         }
       }
 
-      emisor.enviar({ t: ahora, pilotos, det: detenidos.length ? detenidos : undefined });
+      // `alguienTermino` viaja aparte de la cuadros de cada uno: es el aviso
+      // chico para los que siguen girando, no su bandera.
+      emisor.enviar({
+        t: ahora,
+        pilotos,
+        det: detenidos.length ? detenidos : undefined,
+        alguienTermino: memoria.liderTermino || undefined,
+      });
       // El mapa del panel muestra la MISMA diferencia que ve el piloto: si
       // saliera de otro cálculo dejaría de servir como verificación
       onEstadoRef.current?.(pilotos);
     }, 1000);
 
     return () => { clearInterval(id); emisor.cerrar(); };
-  }, [fechaId, largoCircuito, tandaActivaId, soyDueno, llegadasCargadasDe]);
+  }, [fechaId, largoCircuito, tandaCicloId, soyDueno, llegadasCargadasDe]);
 
   // ── Modo vista: los números llegan del panel que calcula ──────
   // El mapa de Dirección y la cuadrícula de Pantallas muestran la MISMA

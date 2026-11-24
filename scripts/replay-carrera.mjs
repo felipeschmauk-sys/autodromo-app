@@ -22,6 +22,9 @@
  *   --vueltas N       correr la carrera como si fuera de N vueltas. Ninguna
  *                     carrera guardada llegó a completar las suyas, así que sin
  *                     esto la lógica de llegada no se ejecuta nunca.
+ *   --por-tiempo N    terminar la carrera a los N segundos, como termina de
+ *                     verdad casi siempre. La bandera cae ahí y cada piloto
+ *                     termina en su paso por meta siguiente.
  *   --relevo-cada N   simular que el cálculo cambia de panel cada N lecturas:
  *                     la memoria de la llegada se serializa, pasa por JSON como
  *                     pasaría por la base, y se recupera en un panel nuevo que
@@ -44,6 +47,10 @@ const opcion = (nombre) => {
 };
 const VUELTAS_FORZADAS = opcion("--vueltas");
 const RELEVO_CADA      = opcion("--relevo-cada");
+// Terminar la carrera por TIEMPO a los N segundos de la primera lectura. Es
+// como termina casi toda carrera real, y hasta el 24-11-2026 ese camino no
+// congelaba a nadie: las posiciones seguían moviéndose después de la bandera.
+const POR_TIEMPO_S     = opcion("--por-tiempo");
 const [carpetaArg, tandaArg] = args.filter((a, i) =>
   !a.startsWith("--") && !(i > 0 && args[i - 1].startsWith("--")));
 if (!carpetaArg) {
@@ -106,6 +113,7 @@ for (const t of candidatas) {
   const azulesPor = new Map();
 
   let leidas = 0;
+  let tInicio = null;
   for (const r of filas) {
     leidas++;
     const t0 = new Date(r.t_dispositivo).getTime() + (r.offset_ms ?? 0);
@@ -158,7 +166,9 @@ for (const t of candidatas) {
     }
 
     // ── Llegada, con el código del panel ──────────────────────
-    if (esCarrera && PROG) {
+    if (esCarrera && (PROG || POR_TIEMPO_S)) {
+      if (tInicio == null) tInicio = t0;
+      const porTiempo = POR_TIEMPO_S != null && (t0 - tInicio) / 1000 >= POR_TIEMPO_S;
       const porPid = new Map(estados.map((e) => [e.pid, e]));
       const orden = ordenPrev
         ? ordenPrev.orden.map((pid) => porPid.get(pid)).filter(Boolean)
@@ -174,12 +184,16 @@ for (const t of candidatas) {
       }
 
       const antesLider = memoria.liderTermino;
+      const antesBandera = memoria.alTerminar.size > 0;
       const antes = new Set(memoria.llegadas.keys());
       aplicarLlegada(memoria, vivos, orden, {
-        programadas: PROG, ahoraServidor: t0, categoriaDe: (pid) => catDe.get(pid) ?? null,
+        programadas: PROG, porTiempo, ahoraServidor: t0, categoriaDe: (pid) => catDe.get(pid) ?? null,
       });
+      if (!antesBandera && memoria.alTerminar.size > 0) {
+        eventos.push(`${hora(t0)}  CAE LA BANDERA (${porTiempo ? "se acabó el tiempo" : `el líder completa las ${PROG} vueltas`}) — cada uno termina en su próximo paso por meta`);
+      }
       if (!antesLider && memoria.liderTermino) {
-        eventos.push(`${hora(t0)}  el líder (${nombre.get(orden[0].pid)}) completa las ${PROG} vueltas`);
+        eventos.push(`${hora(t0)}  🏁 el primero en cruzar es ${nombre.get([...memoria.llegadas.keys()][0])}`);
       }
       for (const [pid, ll] of memoria.llegadas) {
         if (antes.has(pid)) continue;

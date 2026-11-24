@@ -14,9 +14,11 @@ import type { EstadoLlegadas, Llegada } from './llegadas'
 // que poder traspasar de un panel a otro (ver lib/arriendo.ts).
 
 export interface MemoriaLlegada {
-  /** El líder ya cruzó su meta: para los demás, su meta es el cruce siguiente. */
+  /** Alguien ya cruzó su meta final. Es lo que enciende el aviso chico en la
+   *  pantalla de los que siguen girando: su próxima pasada es la última. */
   liderTermino: boolean
-  /** Vueltas que llevaba cada uno cuando cruzó el líder. */
+  /** Vueltas que llevaba cada uno cuando cayó la bandera —por vueltas
+   *  completadas o por tiempo cumplido—. Su meta es el cruce siguiente. */
   alTerminar: Map<string, number>
   /** Cómo llegó cada uno de los que ya terminaron. */
   llegadas: Map<string, Llegada>
@@ -60,7 +62,9 @@ export interface EnOrden { pid: string; vueltas: number }
  *
  * La carrera termina cuando cruza el primero, pero los demás siguen girando
  * hasta pasar por meta: a cada uno se le congela lo suyo en su propio cruce,
- * con la diferencia con la que terminó.
+ * con la diferencia con la que terminó. Una vez congelado no se vuelve a
+ * tocar, aunque el auto siga en pista: la vuelta de cierre no es una vuelta de
+ * carrera y no puede cambiarle el tiempo ni la posición a nadie.
  *
  * `pilotos` se modifica: el dato congelado reemplaza al vivo, porque el piloto
  * que ya terminó no debe ver números que sigan moviéndose.
@@ -71,30 +75,45 @@ export function aplicarLlegada(
   orden: EnOrden[],
   opciones: {
     programadas: number | null
+    /**
+     * Se acabó el tiempo de la tanda. Una carrera termina por vueltas o por
+     * tiempo, lo que pase primero, y hasta el 24-11-2026 acá solo existía el
+     * primer camino: con el final por tiempo —que es como terminan casi todas—
+     * no se congelaba a nadie, y las posiciones y los tiempos seguían
+     * moviéndose después de que los autos habían cruzado.
+     */
+    porTiempo?: boolean
     /** Instante en hora de SERVIDOR: de acá sale el orden entre los que
      *  terminan en la misma vuelta, y se compara entre paneles distintos. */
     ahoraServidor: number
     categoriaDe: (pid: string) => string | null
   },
 ): void {
-  const { programadas, ahoraServidor, categoriaDe } = opciones
+  const { programadas, porTiempo = false, ahoraServidor, categoriaDe } = opciones
 
-  if (programadas && orden.length) {
-    if (!m.liderTermino && orden[0].vueltas >= programadas) {
-      m.liderTermino = true
-      // Se anota en qué vuelta venía cada uno cuando cayó la bandera: su meta
-      // es el cruce SIGUIENTE
-      orden.forEach(e => m.alTerminar.set(e.pid, e.vueltas))
-    }
+  // La carrera entra en su última vuelta por cualquiera de los dos caminos: el
+  // líder completó las vueltas programadas, o se acabó el tiempo. En los dos
+  // casos la bandera NO cae sobre todos a la vez: cae sobre cada uno cuando
+  // cruza la meta, y el que viene a mitad de circuito sigue corriendo.
+  const porVueltas = programadas != null && orden.length > 0 && orden[0].vueltas >= programadas
+  const enFaseFinal = porVueltas || porTiempo
+
+  if (enFaseFinal && orden.length) {
+    // Se anota en qué vuelta venía cada uno cuando cayó la bandera: su meta es
+    // el cruce SIGUIENTE. Se hace una sola vez, la primera que se llega acá.
+    if (m.alTerminar.size === 0) orden.forEach(e => m.alTerminar.set(e.pid, e.vueltas))
 
     for (const e of orden) {
       if (m.congelados.has(e.pid)) continue
       const suyo = pilotos[e.pid]
       if (!suyo) continue
       const yaCruzoSuMeta =
-        e.vueltas >= programadas ||
-        (m.liderTermino && e.vueltas > (m.alTerminar.get(e.pid) ?? Infinity))
+        (programadas != null && e.vueltas >= programadas) ||
+        e.vueltas > (m.alTerminar.get(e.pid) ?? Infinity)
       if (!yaCruzoSuMeta) continue
+      // El primero en cruzar enciende el aviso para todos los demás: alguien
+      // ya terminó, la próxima pasada por meta es la última.
+      m.liderTermino = true
       // Se anota CÓMO llegó: con cuántas vueltas y en qué instante. La posición
       // sale de ahí y no de la distancia recorrida, porque al cruzar la meta el
       // progreso de vuelta vuelve a cero y ese es el peor momento para medir:

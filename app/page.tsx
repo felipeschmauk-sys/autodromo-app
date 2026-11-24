@@ -257,6 +257,7 @@ function PizarraLandscape({
   esPersonal,
   sinContacto,
   sectorIncierto,
+  ultimaVuelta,
   gaps,
   posicion,
   detenidos,
@@ -280,6 +281,13 @@ function PizarraLandscape({
    * una amarilla de más que una de menos.
    */
   sectorIncierto?: boolean;
+  /**
+   * Alguien ya cruzó la meta final y este piloto todavía no: su próxima pasada
+   * por meta termina su carrera. Es un aviso chico a propósito — la bandera a
+   * cuadros entera es de quien ya cruzó, y el que sigue girando sigue
+   * corriendo.
+   */
+  ultimaVuelta?: boolean;
   /** Datos de carrera: posición, vuelta y diferencias con los rivales */
   gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
   /**
@@ -618,6 +626,35 @@ function PizarraLandscape({
             {sinContacto && bandera !== "sin_contacto"
               ? "📵 SIN CONTACTO · ESTE AVISO PUEDE ESTAR VIEJO"
               : "📍 BANDERA EN PISTA · NO SE PUEDE UBICAR TU SECTOR"}
+          </span>
+        </div>
+      )}
+
+      {/* Alguien ya terminó: la próxima pasada por meta es la última. Chico y
+          en una esquina: no es la bandera de este piloto, es un aviso. */}
+      {ultimaVuelta && (
+        <div
+          className="absolute pointer-events-none"
+          style={{ top: "calc(var(--uh) * 1.2)", right: "calc(var(--uw) * 1.5)", zIndex: 4 }}
+        >
+          <span
+            style={{
+              display: "inline-flex", alignItems: "center", gap: "calc(var(--uw) * 0.8)",
+              background: "#fafafa", color: "#18181b", fontWeight: 900,
+              fontSize: "clamp(9px, calc(var(--uw) * 1.5), 16px)",
+              letterSpacing: "0.1em", borderRadius: "999px",
+              padding: "calc(var(--uh) * 0.6) calc(var(--uw) * 1.6)",
+              border: "2px solid #18181b",
+            }}
+          >
+            <span
+              style={{
+                width: "calc(var(--uw) * 2.4)", height: "calc(var(--uw) * 2.4)",
+                background: "repeating-conic-gradient(#18181b 0% 25%, #fafafa 0% 50%) 50% / 50% 50%",
+                border: "1px solid #18181b", display: "inline-block",
+              }}
+            />
+            ÚLTIMA VUELTA
           </span>
         </div>
       )}
@@ -1729,6 +1766,8 @@ export default function Home() {
   // ni siquiera se está mostrando.
   const tendRef = useRef<{ ad: number | null; at: number | null; fAd: number; fAt: number }>(
     { ad: null, at: null, fAd: 0, fAt: 0 });
+  /** Alguien ya cruzó su meta final. Ver EstadoCarreraViva.alguienTermino */
+  const [alguienTermino, setAlguienTermino] = useState(false);
   useEffect(() => {
     if (stage !== "app" || !eventoActivo?.fechaId || !pilotoData?.id) return;
     const pid = pilotoData.id;
@@ -1736,6 +1775,10 @@ export default function Home() {
       // Autos detenidos en pista, sin contarme a mí: si el detenido soy yo, ya
       // lo sé, y mi propio punto rojo ya está en pantalla
       setDetenidos((e.det ?? []).filter(d => d.pid !== pid).map(d => ({ lat: d.lat, lng: d.lng })));
+      // Antes del `return` de abajo: que alguien haya terminado no depende de
+      // que yo aparezca en el estado, y es justamente el aviso que necesita el
+      // que sigue girando.
+      setAlguienTermino(e.alguienTermino === true);
       const mio = e.pilotos[pid];
       if (!mio) { setMisGaps(null); return; }
       const r = tendRef.current;
@@ -3673,6 +3716,9 @@ export default function Home() {
               bandera={banderaMostrada}
               sinContacto={sinContacto}
               sectorIncierto={sectorIncierto}
+              /* Solo para el que sigue corriendo: el que ya cruzó tiene su
+                 propia bandera a cuadros ocupando la pantalla entera. */
+              ultimaVuelta={alguienTermino && !cuadrosPropia}
               gaps={misGaps}
               posicion={posPiloto}
               detenidos={detenidos}

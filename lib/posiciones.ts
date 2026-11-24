@@ -142,6 +142,14 @@ export interface EstadoCarreraViva {
    * el sector: basta con ver el punto para saber dónde tener cuidado.
    */
   det?: AutoDetenido[]
+  /**
+   * Alguien ya cruzó su meta final. NO es la bandera a cuadros de este piloto
+   * —esa es `fin` en su propio GapsPiloto—: es el aviso de que la carrera está
+   * terminando y de que su próxima pasada por meta es la última. Va aparte
+   * justo por eso: el que viene a mitad de circuito sigue corriendo y no puede
+   * ver la cuadros en toda la pantalla.
+   */
+  alguienTermino?: boolean
 }
 
 const canalEstado = (fechaId: string) => `estado-${fechaId}`

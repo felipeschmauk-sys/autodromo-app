@@ -609,11 +609,22 @@ export default function AdminPage() {
       cargarTandas(contexto.fechaId);
       return;
     }
-    // Bandera a cuadros automática al finalizar la tanda (misma escritura
-    // que aplicarBandera; inline por orden de declaración de callbacks)
-    setBandera("cuadros");
-    await supabase.from("estado_pista").update({ bandera: "cuadros" }).eq("activo", true);
-    await registrarLog({ fecha_id: contexto.fechaId, tipo: "bandera_global", descripcion: "Bandera global: Cuadros (fin de tanda)" });
+    // ── La cuadros no es global en carrera ─────────────────────
+    // Regla de Felipe (24-11-2026): la bandera a cuadros cae sobre el piloto
+    // que cruza la meta primero, y después sobre cada uno a medida que pasa.
+    // El que viene a mitad de circuito NO debe verla: su carrera sigue. Esa
+    // bandera la da lib/llegada.ts, piloto por piloto, en su propio cruce.
+    //
+    // En entrenamiento y clasificación sí es global: ahí nadie "cruza para
+    // terminar", se acabó la sesión y todos tienen que entrar.
+    if (tandaActiva.tipo !== "carrera") {
+      // (misma escritura que aplicarBandera; inline por orden de declaración)
+      setBandera("cuadros");
+      await supabase.from("estado_pista").update({ bandera: "cuadros" }).eq("activo", true);
+      await registrarLog({ fecha_id: contexto.fechaId, tipo: "bandera_global", descripcion: "Bandera global: Cuadros (fin de tanda)" });
+    } else {
+      await registrarLog({ fecha_id: contexto.fechaId, tipo: "bandera_global", descripcion: "🏁 Cae la bandera a cuadros — cada piloto termina en su paso por meta" });
+    }
     // El log queda etiquetado con la tanda porque setTandaActivaLog(null) va al
     // final: cerrarla en la base no cambia la etiqueta, que vive en lib/log.ts
     await registrarLog({ fecha_id: contexto.fechaId, tipo: "tanda", descripcion: `⏹ Tanda finalizada: ${tandaActiva.nombre}` });
