@@ -14,7 +14,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { esVueltaDeCarrera, deadlineTanda, transcurridoTandaS, tandaEnPausa } from "@/lib/carrera";
-import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS } from "@/lib/gps";
+import { DETENIDO_KMH, REANUDA_KMH, DETENIDO_MS, FRESCURA_POS_MS } from "@/lib/gps";
 import { registrarLog } from "@/lib/log";
 import { descargarXlsx, type Celda } from "@/lib/xlsx";
 import { suscribirPosiciones, abrirEmisorEstado, suscribirEstado, type EstadoCarreraViva } from "@/lib/posiciones";
@@ -59,10 +59,6 @@ interface VueltaRow {
 }
 interface PilotoInfo { nombre: string; numero: string | null; categoria: string | null; }
 
-// Cuánto puede tener de viejo el dato de un piloto para seguir clasificándolo.
-// Las posiciones llegan a 1 Hz, así que 10 s son diez mensajes perdidos: eso ya
-// no es un hipo de la red, es que dejamos de ver ese auto.
-const FRESCURA_POS_MS = 10_000;
 
 interface PosPiloto {
   lat: number; lng: number; ts: number; dentro: boolean | null;

@@ -46,6 +46,20 @@ Importante, porque acota el trabajo:
 
 ---
 
+## Estado
+
+| Punto | Estado |
+|---|---|
+| 1. La pizarra con edad de conocimiento | **hecho** (v0.45.0, rama `advertencias`) |
+| 2. Vencer la posición y escalar | **hecho** (v0.45.1, rama `advertencias`) |
+| 3. Tiempo sostenido en la amarilla automática | pendiente |
+| 4. Registro de errores del cliente | pendiente |
+
+Los dos primeros están sin probar en pista y sin desplegar: viven en la rama
+`advertencias`, con producción congelada en la etiqueta `estable-2026-10-30`.
+
+---
+
 ## 1. La pizarra muestra el estado Y la edad de su conocimiento
 
 Hoy la pizarra es función de `bandera`. Pasa a ser función de

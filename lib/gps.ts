@@ -41,6 +41,17 @@ export const REANUDA_KMH = 13
 /** Cuánto debe sostenerse la velocidad baja antes de marcar el punto (ms). */
 export const DETENIDO_MS = 5_000
 
+/**
+ * Cuánto puede tener de viejo un dato de posición para seguir usándolo.
+ * Las posiciones llegan a 1 Hz, así que 10 s son diez mensajes perdidos: eso ya
+ * no es un hipo de la red, es que dejamos de ver ese auto.
+ *
+ * Lo usan el panel —para no clasificar a quien no está viendo— y el teléfono
+ * del piloto, para no resolver su sector con una posición de hace minutos.
+ * Es el mismo número a propósito: una sola idea de "dato viejo".
+ */
+export const FRESCURA_POS_MS = 10_000
+
 // ── SECTORES ──────────────────────────────────────────────────
 // Un sector con punto_inicio > punto_fin "cruza la línea de meta":
 // va desde inicio hasta el final del trazado y sigue desde 0 hasta fin.

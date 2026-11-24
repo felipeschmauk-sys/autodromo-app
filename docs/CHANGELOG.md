@@ -3,6 +3,54 @@
 
 ---
 
+## [0.45.1] — 24 Noviembre 2026
+### Corregido (la bandera de sector salía de una posición que nunca vencía)
+Punto 2 de `docs/PLAN_ADVERTENCIAS.md`. **Rama `advertencias`, sin desplegar.**
+
+`posPiloto` se escribía pero no se vaciaba ni se vencía, y `detenerGPS()` no lo
+tocaba. Si el GPS se apagaba, el teléfono seguía creyéndose en el último sector
+conocido: podía mostrar la amarilla de un sector que ya dejó, o no mostrar la
+del sector donde realmente estaba.
+
+- La posición ahora lleva su instante y **vence a los 10 s**
+  (`FRESCURA_POS_MS`), el mismo umbral que ya usaba el panel para no clasificar
+  a quien dejó de verse. Se movió a `lib/gps.ts` para que sea **un solo número**
+  y una sola idea de "dato viejo"
+- El vencimiento lo lleva un reloj propio y no el render: si el GPS se apaga
+  nada vuelve a renderizar, así que la posición vieja seguiría pasando por buena
+
+### Sin saber dónde estoy, no me callo: escalo
+La bandera de sector necesita la posición del teléfono, que es justo lo que
+muere en las caídas del GPS — y **la amarilla automática ES una bandera de
+sector**. El evento que tumba el GPS era el mismo cuya advertencia el piloto
+después no podía recibir.
+
+- Con la posición vencida, y si **lo último que se supo es que estaba en
+  pista**, se muestra la bandera **más grave que haya en cualquier sector**
+  (roja > rayas > doble amarilla > amarilla)
+- El aviso dice qué está pasando: *"BANDERA EN PISTA · no se puede ubicar tu
+  sector"*, en los dos modos. El piloto no debe creer que es la de su sector
+- Si no hay ninguna bandera de sector puesta, no se inventa nada: sigue el
+  camino normal hacia la bandera global
+- A quien está en el paddock con la app abierta no se le escala: hace falta que
+  la última posición conocida dijera "en pista"
+
+Una amarilla de más cuesta una vuelta lenta. Una amarilla de menos cuesta un
+choque.
+
+### Lo que queda ruidoso, a propósito
+Un piloto que terminó su tanda y apagó el GPS con la app abierta conserva su
+última posición "en pista", así que si el director pone una amarilla para el
+grupo siguiente, ese teléfono la va a mostrar. Es ruido, y se prefiere al
+silencio: afinarlo exigiría distinguir "sin GPS" de "fuera de sesión", que es
+justamente la clase de suposición que ya costó caro.
+
+### Sin probar
+Compila y el lint queda igual en los cuatro archivos tocados. Falta la prueba:
+cortar el GPS del teléfono con una amarilla puesta en otro sector.
+
+---
+
 ## [0.45.0] — 24 Noviembre 2026
 ### Agregado (el teléfono avisa cuando no está recibiendo)
 Punto 1 de `docs/PLAN_ADVERTENCIAS.md`. **Rama `advertencias`, sin desplegar.**

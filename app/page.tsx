@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import dynamic from "next/dynamic";
-import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
+import { getTrazadoActivo, getGeocercaActiva, puntoEnGeocerca, geocercaDefinida, registrarUbicacion, registrarTrazaGps, sectorContienePunto, sectorSlice, distanciaRecorridaKm, FRESCURA_POS_MS, type Coordenada, type GeocercaCoords, type FilaTrazaGps } from "@/lib/gps";
 import { medirOffsetReloj, getOffsetReloj, aHoraServidor } from "@/lib/reloj";
 import { vueltasDeCarrera, vueltasComparables, desdeLargadaMs, deadlineTanda } from "@/lib/carrera";
 import { registrarLog } from "@/lib/log";
@@ -255,6 +255,7 @@ function PizarraLandscape({
   bandera,
   esPersonal,
   sinContacto,
+  sectorIncierto,
   gaps,
   posicion,
   detenidos,
@@ -272,6 +273,12 @@ function PizarraLandscape({
    * también cuando se está mostrando una advertencia, que no se reemplaza.
    */
   sinContacto?: boolean;
+  /**
+   * La bandera que se muestra NO es la del sector del piloto: es la más grave
+   * que hay en pista, porque su posición venció y no se puede ubicar. Más vale
+   * una amarilla de más que una de menos.
+   */
+  sectorIncierto?: boolean;
   /** Datos de carrera: posición, vuelta y diferencias con los rivales */
   gaps?: (GapsPiloto & { tendAd: number; tendAt: number }) | null;
   /**
@@ -593,7 +600,7 @@ function PizarraLandscape({
           manda y el aviso va al lado. Cuando la bandera es de las que
           tranquilizan, `bandera` ya llega como "sin_contacto" y esto no se
           dibuja: no hay dos avisos para lo mismo. */}
-      {sinContacto && bandera !== "sin_contacto" && (
+      {((sinContacto && bandera !== "sin_contacto") || sectorIncierto) && (
         <div
           className="absolute inset-x-0 flex justify-center pointer-events-none"
           style={{ top: 0, zIndex: 4 }}
@@ -607,7 +614,9 @@ function PizarraLandscape({
               borderBottomLeftRadius: "10px", borderBottomRightRadius: "10px",
             }}
           >
-            📵 SIN CONTACTO · ESTE AVISO PUEDE ESTAR VIEJO
+            {sinContacto && bandera !== "sin_contacto"
+              ? "📵 SIN CONTACTO · ESTE AVISO PUEDE ESTAR VIEJO"
+              : "📍 BANDERA EN PISTA · NO SE PUEDE UBICAR TU SECTOR"}
           </span>
         </div>
       )}
@@ -1272,7 +1281,23 @@ export default function Home() {
     dormidaRef.current = false;
     setPantallaDormida(false);
   }, []);
-  const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null } | null>(null);
+  // `t` no es decorativo: sin él la posición no vence nunca y el teléfono se
+  // cree en el último sector conocido para siempre. Ver docs/PLAN_ADVERTENCIAS.md
+  const [posPiloto, setPosPiloto] = useState<{ lat: number; lng: number; dentro: boolean | null; t: number } | null>(null);
+  // El vencimiento lo lleva un reloj propio, no el render. Dos razones: si el
+  // GPS se apaga nada vuelve a renderizar, así que la posición vieja seguiría
+  // pasando por buena; y mirar la hora durante el render haría impuro el
+  // componente.
+  const posPilotoRef = useRef<typeof posPiloto>(null);
+  useEffect(() => { posPilotoRef.current = posPiloto; }, [posPiloto]);
+  const [posicionVencida, setPosicionVencida] = useState(true);
+  useEffect(() => {
+    const id = setInterval(() => {
+      const p = posPilotoRef.current;
+      setPosicionVencida(!p || Date.now() - p.t > FRESCURA_POS_MS);
+    }, 1_000);
+    return () => clearInterval(id);
+  }, []);
 
   // ── Prueba de conocimientos POR CAMPEONATO ─────────────────────
   // Se rinde la primera vez que el piloto entra a un evento de cada
@@ -2273,7 +2298,7 @@ export default function Home() {
 
         // Task #58: posición para detectar el sector del piloto
         // (funciona también en landscape, donde SpeedCard no está montado)
-        setPosPiloto({ lat, lng, dentro: geocercaDefinida(gc) ? dentro : null });
+        setPosPiloto({ lat, lng, dentro: geocercaDefinida(gc) ? dentro : null, t: Date.now() });
 
         // ── Odómetro en vivo ──
         const velTick = ultimaPos.coords.speed != null ? Math.round(ultimaPos.coords.speed * 3.6) : 0;
@@ -2821,12 +2846,34 @@ export default function Home() {
   // ── Task #58: jerarquía de banderas ──────────────────────────
   // Prioridad: cuadros > roja > bandera personal > bandera del sector > bandera global
   const sectorActual = (() => {
+    if (posicionVencida) return null;                             // no se resuelve con un dato viejo
     if (!posPiloto || posPiloto.dentro !== true) return null;     // solo si está dentro de pista
     if (trazado.length < 2 || sectores.length === 0) return null;
     const idx = findClosestIdx(posPiloto.lat, posPiloto.lng, trazado);
     return sectores.find(s => sectorContienePunto(idx, s.punto_inicio, s.punto_fin)) || null;
   })();
-  const banderaSector = sectorActual && sectorActual.bandera !== "verde" ? sectorActual.bandera : null;
+
+  // ── Sin saber dónde estoy, no me callo: escalo ───────────────
+  // La bandera de sector necesita la posición del teléfono, que es justo lo que
+  // muere en las caídas del GPS — y la amarilla automática ES una bandera de
+  // sector. El evento que tumba el GPS era el mismo cuya advertencia el piloto
+  // después no podía recibir.
+  //
+  // Si la posición venció y la última que hubo decía "en pista", se muestra la
+  // bandera MÁS GRAVE que haya en cualquier sector. Una amarilla de más cuesta
+  // una vuelta lenta; una amarilla de menos cuesta un choque.
+  const GRAVEDAD_SECTOR = ["roja", "rayas", "amarilla_doble", "amarilla"];
+  const banderaEnAlgunSector =
+    GRAVEDAD_SECTOR.find(b => sectores.some(s => s.bandera === b)) ?? null;
+  // Solo si lo último que supimos es que estaba EN PISTA: a quien está en el
+  // paddock con la app abierta no se le inventa una bandera.
+  const sectorIncierto =
+    posicionVencida && posPiloto?.dentro === true && banderaEnAlgunSector != null;
+
+  const banderaSector =
+    sectorActual && sectorActual.bandera !== "verde" ? sectorActual.bandera
+    : sectorIncierto ? banderaEnAlgunSector
+    : null;
 
   // La bandera azul automática se ubica DEBAJO de la personal: si el director
   // pone una bandera a mano, esa manda y la automática no la pisa. Se enciende
@@ -3587,6 +3634,7 @@ export default function Home() {
               sectores={sectores}
               bandera={banderaMostrada}
               sinContacto={sinContacto}
+              sectorIncierto={sectorIncierto}
               gaps={misGaps}
               posicion={posPiloto}
               detenidos={detenidos}
@@ -3662,14 +3710,21 @@ export default function Home() {
                 {/* Sin contacto mientras se muestra una ADVERTENCIA: no se
                     reemplaza la advertencia, se avisa encima. Con una bandera
                     que tranquiliza, la tarjeta de abajo YA es "sin contacto". */}
-                {sinContacto && banderaMostrada !== "sin_contacto" && (
+                {sinContacto && banderaMostrada !== "sin_contacto" ? (
                   <div className="rounded-xl bg-gray-900 border border-amber-500 px-4 py-2.5 flex items-center gap-2">
                     <span className="text-lg">📵</span>
                     <p className="text-xs font-bold tracking-wider text-amber-400 leading-snug">
                       SIN CONTACTO · este aviso puede estar viejo
                     </p>
                   </div>
-                )}
+                ) : sectorIncierto ? (
+                  <div className="rounded-xl bg-gray-900 border border-amber-500 px-4 py-2.5 flex items-center gap-2">
+                    <span className="text-lg">📍</span>
+                    <p className="text-xs font-bold tracking-wider text-amber-400 leading-snug">
+                      BANDERA EN PISTA · no se puede ubicar tu sector
+                    </p>
+                  </div>
+                ) : null}
 
                 {/* PIZARRA DE BANDERA — panel único grande */}
                 <div className={`rounded-2xl border px-5 py-5 ${flag.bg} ${flag.border} ${flag.pulse ? "animate-pulse" : ""}`}>
@@ -3696,7 +3751,7 @@ export default function Home() {
                   activo={gpsPermiso === "granted"}
                   onGPSChange={(d, r, pos) => {
                     setGpsEnPista(d); setGpsEnRecinto(r);
-                    if (pos) setPosPiloto({ lat: pos.lat, lng: pos.lng, dentro: d }); // Task #58
+                    if (pos) setPosPiloto({ lat: pos.lat, lng: pos.lng, dentro: d, t: Date.now() }); // Task #58
                   }}
                   onGPSError={(code) => {
                     // permiso revocado en caliente → reaparece el overlay
